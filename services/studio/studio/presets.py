@@ -38,7 +38,7 @@ def resolve_settings(req: dict) -> dict:
     if seed is None:
         seed = random.SystemRandom().randint(0, 2**31 - 1)
     ref = q["reference"]
-    model_id = req.get("model") or "qwen-image-2512"
+    model_id = req.get("model") or "qwen-image-2512-lightning-8"
     entry = p["image_models"].get(model_id)
     if entry is None:
         raise ValueError(f"unknown image model {model_id!r}; available: {', '.join(p['image_models'])}")

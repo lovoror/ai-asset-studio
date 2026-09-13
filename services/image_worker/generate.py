@@ -126,6 +126,113 @@ def load_generator(model_id: str, gpu_resident_blocks: int, lightning: dict | No
     return pipe, n_blocks
 
 
+# Modules diffusers' layerwise casting leaves untouched (its default list + the QwenImage class list): stored bf16.
+FP8_SKIP_PATTERNS = ("pos_embed", "patch_embed", "norm", "^proj_in$", "^proj_out$")
+
+
+def _fp8_keep_bf16(param_name: str) -> bool:
+    import re
+
+    mod = param_name.rsplit(".", 1)[0]  # module prefix, as diffusers matches it
+    return any(re.search(pat, mod) for pat in FP8_SKIP_PATTERNS)
+
+
+def _fp8_cache_path(lightning: dict | None) -> Path:
+    cache = Path(os.environ.get("STUDIO_EXTRA_CACHE_DIR", "/models/extra-cache"))
+    tag = "qwen-image-2512.fp8" + (("." + lightning["file"].rsplit(".", 1)[0]) if lightning else "")
+    return cache / f"{tag}.safetensors"
+
+
+def _build_fp8_cache(model_id: str, lightning: dict | None, cached: Path):
+    """One-time: stream the bf16 transformer shards tensor by tensor, fuse the Lightning LoRA exactly (W + B@A in fp32,
+    alpha/rank already folded by diffusers' converter), cast linear weights to float8_e4m3fn (norms/embeddings stay bf16)
+    and save one file next to the other cached weights. Later runs load this ~20 GB file straight to the GPU. Streaming
+    keeps host RAM at ~20 GB instead of the 40 GB a full bf16 load would need."""
+    import glob
+    import torch
+    from safetensors import safe_open
+    from safetensors.torch import save_file
+
+    t0 = time.time()
+    lora = {}
+    if lightning:
+        from diffusers import QwenImagePipeline
+        from huggingface_hub import snapshot_download
+
+        d = snapshot_download(lightning["repo"], revision=lightning["revision"], allow_patterns=[lightning["file"]])
+        for k, v in QwenImagePipeline.lora_state_dict(os.path.join(d, lightning["file"])).items():
+            # "transformer.<module>.lora_A.weight" -> lora[<module>] = {"A": ..., "B": ...}
+            mod, kind = k[len("transformer."):].rsplit(".lora_", 1)
+            lora.setdefault(mod, {})[kind[0]] = v
+    shards = sorted(glob.glob(os.path.join(model_id, "transformer", "*.safetensors")))
+    sd, n8, nfused = {}, 0, 0
+    for shard in shards:
+        with safe_open(shard, "pt", device="cpu") as f:
+            for name in f.keys():
+                t = f.get_tensor(name)
+                mod = name[: -len(".weight")] if name.endswith(".weight") else None
+                if mod in lora and t.ndim == 2:
+                    A, B = lora[mod]["A"].to("cuda", torch.float32), lora[mod]["B"].to("cuda", torch.float32)
+                    t = (t.to("cuda", torch.float32) + B @ A).to("cpu")
+                    nfused += 1
+                keep = _fp8_keep_bf16(name) or t.ndim < 2
+                if keep:
+                    sd[name] = t.to(torch.bfloat16).contiguous()
+                else:
+                    sd[name] = t.to(torch.float8_e4m3fn).contiguous()
+                    n8 += 1
+    if lightning and nfused != len(lora):
+        raise RuntimeError(f"Lightning LoRA fusion matched {nfused} of {len(lora)} modules")
+    cached.parent.mkdir(parents=True, exist_ok=True)
+    tmp = cached.with_suffix(".part")
+    save_file(sd, str(tmp))
+    os.replace(tmp, cached)
+    print(f"[fp8] built {cached.name}: {n8} fp8 tensors, {len(sd) - n8} bf16, {nfused} LoRA-fused, "
+          f"{cached.stat().st_size / 1e9:.1f} GB in {time.time() - t0:.0f}s", flush=True)
+    del sd
+    gc.collect()
+    torch.cuda.empty_cache()
+
+
+def load_generator_fp8(model_id: str, lightning: dict | None = None):
+    """Whole transformer resident on the GPU as float8_e4m3fn storage with bf16 compute (diffusers layerwise casting).
+    Same weights and LoRA fusion as the bf16 path, but ~2x less VRAM and no PCIe streaming: ~7 s/image for Lightning-8
+    at 1328x1328 on an RTX 5090 instead of ~70 s with 30/60 blocks offloaded."""
+    import torch
+    from accelerate import init_empty_weights
+    from diffusers import QwenImagePipeline, QwenImageTransformer2DModel
+    from safetensors.torch import load_file
+
+    cached = _fp8_cache_path(lightning)
+    if not cached.exists():
+        print(f"[fp8] no cached fp8 transformer for {'Lightning ' + lightning['file'] if lightning else 'base'}; building it once", flush=True)
+        _build_fp8_cache(model_id, lightning, cached)
+    t0 = time.time()
+    with init_empty_weights():
+        transformer = QwenImageTransformer2DModel.from_config(QwenImageTransformer2DModel.load_config(model_id, subfolder="transformer"))
+    sd = load_file(str(cached), device="cuda")
+    missing, unexpected = transformer.load_state_dict(sd, strict=False, assign=True)
+    if missing or unexpected:
+        raise RuntimeError(f"fp8 cache {cached.name} does not match the transformer config: missing {missing[:3]} unexpected {unexpected[:3]}")
+    del sd
+    transformer.eval().requires_grad_(False)
+    transformer.enable_layerwise_casting(storage_dtype=torch.float8_e4m3fn, compute_dtype=torch.bfloat16)
+    # safety net: any fp8 parameter that did not get a casting hook (skipped module) must be bf16 for its forward
+    hooked = {n for n, m in transformer.named_modules() if getattr(m, "_diffusers_hook", None) is not None}
+    for n, prm in transformer.named_parameters():
+        if prm.dtype == torch.float8_e4m3fn and n.rsplit(".", 1)[0] not in hooked:
+            prm.data = prm.data.to(torch.bfloat16)
+    print(f"[load] fp8 transformer {cached.name} resident on GPU in {time.time() - t0:.1f}s "
+          f"({torch.cuda.memory_allocated() // 2**20} MiB allocated)", flush=True)
+    kw = {"scheduler": lightning_scheduler()} if lightning else {}
+    pipe = QwenImagePipeline.from_pretrained(model_id, transformer=transformer, text_encoder=None, tokenizer=None, torch_dtype=torch.bfloat16, **kw)
+    pipe.vae.to("cuda")
+    pipe.vae.enable_tiling()
+    pipe.set_progress_bar_config(disable=False)
+    n_blocks = len(transformer.transformer_blocks)
+    return pipe, n_blocks
+
+
 # ----------------------------------------------------------------------------------------------- candidate checks
 
 def analyze_candidate(path: Path) -> dict:
@@ -257,7 +364,10 @@ def run(req: dict):
 
     phase("transformer")
     t0 = time.time()
-    pipe, n_blocks = load_generator(model_id, int(req.get("gpu_resident_blocks", 30)), req.get("lightning_lora"))
+    if req.get("mode", "bf16_split") == "fp8_resident":
+        pipe, n_blocks = load_generator_fp8(model_id, req.get("lightning_lora"))
+    else:
+        pipe, n_blocks = load_generator(model_id, int(req.get("gpu_resident_blocks", 30)), req.get("lightning_lora"))
     timings["load_transformer_s"] = round(time.time() - t0, 2)
     vram["after_load_reserved_mib"] = int(torch.cuda.memory_reserved() // 2**20)
 
@@ -274,7 +384,9 @@ def run(req: dict):
     vram["generate_max_allocated_mib"] = int(torch.cuda.max_memory_allocated() // 2**20)
     timings["generate_s"] = round(sum(c["time_s"] for c in cands), 2)
     timings["per_candidate_s"] = [c["time_s"] for c in cands]
-    extra = {"transformer_blocks": n_blocks, "gpu_resident_blocks": int(req.get("gpu_resident_blocks", 30)),
+    fp8 = req.get("mode", "bf16_split") == "fp8_resident"
+    extra = {"transformer_blocks": n_blocks, "gpu_resident_blocks": n_blocks if fp8 else int(req.get("gpu_resident_blocks", 30)),
+             "weights": "float8_e4m3fn storage, bf16 compute (layerwise casting), fully GPU-resident" if fp8 else "bf16, block-offloaded",
              "lightning_lora": (req.get("lightning_lora") or {}).get("file")}
     finish(req, out_dir, cands, timings, vram, warnings, t_all, extra)
 

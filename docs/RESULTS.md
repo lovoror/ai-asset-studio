@@ -62,6 +62,51 @@ resolution was swept. All outputs stayed coherent (single centred object, no art
 Why 1536² and not 2048²: the 1536² crops show noticeably finer paint wear and edge detail than 1024² for ~1.5 s extra,
 while 2048² peaks at 29 GB and would collide with a concurrent Pixal3D run under the lenient GPU-sharing policy.
 
+## Qwen-Image-2512: fp8 resident vs the old bf16 offload (2026-09-13)
+
+The 20B transformer is 40 GB in bf16, so the original path kept 30 of 60 blocks on the GPU and streamed the rest over PCIe
+twice per step (CFG): ~5.8 s/step, ~290 s per 50-step image. The app now stores the transformer as float8_e4m3fn with bf16
+compute (diffusers layerwise casting), built once from the HF bf16 weights with the Lightning LoRA fused in bf16 first
+(`services/image_worker/generate.py: _build_fp8_cache`, 53 s, cached as a 20.5 GB file in the models volume).
+
+| Path | Steps | s / image (steady) | peak VRAM | note |
+|---|---|---|---|---|
+| bf16, 30/60 blocks offloaded (old default) | 50, CFG 4 | ~290 | 27-31 GB | PCIe-bound |
+| **fp8 resident + Lightning 8 (new default)** | 8, no CFG | **8.0** (11 s first image) | 20.8 GB | transformer load 5 s from cache |
+| fp8 resident + Lightning 4 | 4, no CFG | ~4 | 20.8 GB | |
+| fp8 resident, undistilled | 50, CFG 4 | ~80 | ~21 GB | option only |
+
+### Quantization / step comparison (ComfyUI test bench, same prompt and seeds, 1328²)
+
+Run with `tools/bench/comfy_bench.py` against a local ComfyUI 0.35 to compare candidate weights before touching the app.
+Warm seconds per image on the RTX 5090:
+
+| Weights | 50 steps CFG 4 | Lightning 8 | Lightning 4 | verdict |
+|---|---|---|---|---|
+| Comfy-Org fp8 e4m3fn (plain cast) | 81 | 7.1 | 4.0 | clean, matches bf16 look |
+| Hippotes NVFP4 v2 (community 4-bit) | 43 | 4.0 | 2.5 | grainy background, blotchy surfaces on one object, over-greebled with Lightning; rejected |
+| lightx2v "fp8 scaled" file | – | – | – | loads as noise in ComfyUI (scales ignored); not usable there |
+
+The 50-step CFG-4 output was rated *below* the Lightning output by eye on two objects: waxier, lower-contrast surfaces with
+less material detail (`docs/bench_grinder_crops.jpg`). Lightning's distillation bakes in higher micro-contrast, which is a
+plus for a Pixal3D reference image.
+
+### Blind test (drone landing port, 7 models × 3 seeds, user picks, `tools/bench/blind_test.py`)
+
+Scores: fav +2, ok +1, bad −2. Reveal sheet: `docs/bench_droneport_reveal.jpg`.
+
+| Model | picks | score |
+|---|---|---|
+| Qwen-2512 fp8 + Lightning 8 | fav, ok, ok | +4 |
+| Z-Image Turbo (app, 1536²) | ok, ok, ok | +3 |
+| FLUX.2 Klein 4B (app, 1536²) | ok, ok, bad | 0 |
+| Qwen-2512 NVFP4 + Lightning 8 | ok, bad, bad | −3 |
+| FLUX.2 Klein 9B (app, 1536²) | ok, bad, bad | −3 |
+| Qwen-2512 fp8 + Lightning 4 | ok, bad, bad | −3 |
+| Qwen-2512 NVFP4 + Lightning 4 | bad, –, bad | −4 |
+
+Lightning 4 vs 8 share seeds, so the compositions match and the difference is detail: 8 steps wins clearly for 3 s more.
+
 ## Reduction quality (what changed during acceptance)
 
 1. Blender's collapse decimation on the ~1 M-triangle, ~200-shell Pixal3D masters produced spiky, holed low-polys and the

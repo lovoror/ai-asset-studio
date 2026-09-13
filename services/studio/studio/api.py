@@ -112,7 +112,7 @@ def create_job(req: JobRequest):
     """One-shot: prompt -> auto-selected reference -> 3D asset (the original agent path)."""
     data = req.model_dump()
     if not data.get("model"):
-        data["model"] = store().get_settings().get("default_image_model", "qwen-image-2512")
+        data["model"] = store().get_settings().get("default_image_model", "qwen-image-2512-lightning-8")
     try:
         settings = resolve_settings(data)
     except ValueError as e:
@@ -127,7 +127,7 @@ def create_image_job(req: ImageJobRequest):
     data = req.model_dump()
     data["quality"] = "balanced"
     if not data.get("model"):
-        data["model"] = store().get_settings().get("default_image_model", "qwen-image-2512")
+        data["model"] = store().get_settings().get("default_image_model", "qwen-image-2512-lightning-8")
     try:
         settings = resolve_settings(data)
     except ValueError as e:

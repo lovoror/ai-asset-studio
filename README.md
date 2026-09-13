@@ -106,14 +106,18 @@ through ComfyUI itself. Times are per image on the RTX 5090 after the model is l
 
 | Model | Settings | Per image | Notes |
 |---|---|---|---|
-| **FLUX.2 Klein 9B** | 1536², 4 steps, guidance 1.0 | ~5 s | Best of the fast models. FLUX non-commercial licence; gated text encoder downloaded from Hugging Face once. |
-| FLUX.2 Klein 4B | 1536², 4 steps, guidance 1.0 | ~2.5 s | Apache-2.0, fully GPU-resident, fastest. |
-| Z-Image Turbo | 1536², 9 steps, guidance 0 | ~9 s | Official Turbo settings. Strong material detail. |
-| Qwen-Image-2512 Lightning | 1328², 4 or 8 steps, no CFG | ~1 min | Official distillation LoRA on the full model. |
-| Qwen-Image-2512 | 1328², 50 steps, true CFG 4.0 | ~5 min | Full quality, best prompt adherence. |
+| **Qwen-Image-2512 Lightning 8** (default) | 1328², 8 steps, no CFG | ~8 s | Won the blind test: best prompt adherence and clean surfaces. fp8 weights fully on the GPU, official Lightning LoRA fused in. Apache-2.0. |
+| Qwen-Image-2512 Lightning 4 | 1328², 4 steps, no CFG | ~4 s | Same compositions, thinner detail. Rough iteration. |
+| Z-Image Turbo | 1536², 9 steps, guidance 0 | ~9 s | Chunkiest, cleanest silhouettes; second in the blind test. Apache-2.0. |
+| FLUX.2 Klein 4B | 1536², 4 steps, guidance 1.0 | ~2.5 s | Fastest. Apache-2.0. |
+| FLUX.2 Klein 9B | 1536², 4 steps, guidance 1.0 | ~5 s | FLUX non-commercial licence; gated text encoder downloaded once. |
+| Qwen-Image-2512 (50 steps) | 1328², 50 steps, CFG 4 | ~80 s | Undistilled sampling, kept as an option. Rated below Lightning by eye (waxier surfaces). |
 
-The distilled FLUX models are step- and guidance-distilled, so 4 steps / guidance 1.0 are fixed by the vendor; the
-resolution is the quality lever, and 1536² was chosen after a sweep (2048² works but needs 29 GB of VRAM).
+The Qwen transformer is built once into an fp8 cache (53 s, 20 GB in the models volume) from the bf16 weights, so the
+20B model runs resident on a 32 GB card instead of streaming half of it over PCIe every step (that path took ~5 min per
+image). The distilled FLUX models are step- and guidance-distilled, so 4 steps / guidance 1.0 are fixed by the vendor;
+resolution is their quality lever, and 1536² was chosen after a sweep. Blind-test details and per-model timings are in
+[`docs/RESULTS.md`](docs/RESULTS.md); the benchmark and blind-test scripts are in [`tools/bench/`](tools/bench/).
 
 ## Command line
 
