@@ -424,7 +424,8 @@ def main(argv=None):
     c = sub.add_parser("cancel")
     c.add_argument("job_id")
     c.set_defaults(fn=cmd_cancel)
-    rt = sub.add_parser("retry", help="requeue a failed/cancelled job, or reprocess a completed one from a stage with new budgets")
+    rt = sub.add_parser("retry", help="requeue a failed/cancelled job, or reprocess a completed one from a stage (--from-stage). "
+                                      "Running/queued/held jobs are rejected (HTTP 409): cancel first or wait.")
     rt.add_argument("job_id")
     rt.add_argument("--from-stage", dest="from_stage", choices=["reference", "pixal3d", "blender"])
     rt.add_argument("--triangles", dest="target_triangles", type=int)

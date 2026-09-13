@@ -22,6 +22,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("STUDIO_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("STUDIO_PRESETS_DIR", str(ROOT / "presets"))
     monkeypatch.setenv("STUDIO_MANIFESTS_DIR", str(tmp_path / "manifests"))
+    monkeypatch.setenv("STUDIO_WEB_DIST", str(tmp_path / "nodist"))
     monkeypatch.setenv("STUDIO_IMAGE_RUNNER", "http://127.0.0.1:1")
     monkeypatch.setenv("STUDIO_PIXAL3D_RUNNER", "http://127.0.0.1:1")
     monkeypatch.setenv("STUDIO_BLENDER_RUNNER", "http://127.0.0.1:1")
@@ -81,14 +82,28 @@ def test_retry_requeues_failed_job(env):
     from studio.db import JobStore
 
     job = client.post("/v1/jobs", json={"prompt": "a stylized cargo crate"}).json()["job_id"]
-    assert client.post(f"/v1/jobs/{job}/retry").json()["result"] == "queued"  # queued jobs are left alone
+    assert client.post(f"/v1/jobs/{job}/retry").status_code == 409  # queued: nothing to retry
     store = JobStore()
-    store.claim_next("w")
+    store.claim_next("w")  # running
+    r = client.post(f"/v1/jobs/{job}/retry", json={"from_stage": "blender"})
+    assert r.status_code == 409 and "running" in r.json()["detail"]
+    d = Path(os.environ["STUDIO_JOBS_DIR"]) / job / "stages" / "blender"
+    d.mkdir(parents=True)
+    (d / "result.json").write_text('{"status": "ok"}')
+    client.post(f"/v1/jobs/{job}/retry", json={"from_stage": "blender"})
+    assert (d / "result.json").exists()  # a running job's stage results are never touched
     store.update(job, status="failed", stage="validate", error={"stage": "validate", "message": "x"})
     r = client.post(f"/v1/jobs/{job}/retry").json()
-    assert r["result"] == "queued"
+    assert r["result"] == "queued" and r["attempt"] == 2
     j = client.get(f"/v1/jobs/{job}").json()
     assert j["status"] == "queued" and j["error"] in ({}, None)
+    store.claim_next("w")
+    store.update(job, status="completed", stage="done")
+    assert client.post(f"/v1/jobs/{job}/retry").status_code == 409  # completed needs from_stage
+    r = client.post(f"/v1/jobs/{job}/retry", json={"optimize": {"target_triangles": 5000}}).json()
+    assert r["result"] == "queued" and r["from_stage"] == "blender"
+    assert not (d / "result.json").exists()  # reprocess from blender discards that stage's result
+    assert client.get(f"/v1/jobs/{job}").json()["settings"]["optimize"]["target_triangles"] == 5000
 
 
 def test_artifact_path_confinement(env):

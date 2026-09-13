@@ -437,18 +437,23 @@ class RetryRequest(BaseModel):
 
 @app.post("/v1/jobs/{job_id}/retry", dependencies=[Depends(auth)])
 def retry_job(job_id: str, body: RetryRequest | None = None):
-    """Requeue a failed or cancelled job (stages that completed earlier are reused). With `from_stage` a completed job is
-    reprocessed from that stage, e.g. `{"from_stage": "blender", "optimize": {"target_triangles": 20000}}` re-optimises
-    the same master with a new budget without regenerating the image or the 3D model."""
+    """Requeue a job. Lifecycle contract (explicit for agent callers):
+      * failed / cancelled  -> requeued; stages that completed earlier are reused (resume). Returns 200 {"result": "queued"}.
+      * completed           -> only with `from_stage` (and/or `optimize`, which implies from_stage=blender): that stage and the
+                               later ones are discarded and re-run. Without it, 409: nothing to retry.
+      * running / queued / held -> 409, nothing is changed (cancel first, or wait). A retry never restarts a job in place and
+                               never creates a second attempt of a job that is still alive.
+    Example: {"from_stage": "blender", "optimize": {"target_triangles": 20000}} re-optimises the same master."""
     j = _get_job(job_id)
     body = body or RetryRequest()
+    if j["status"] in ("running", "queued", "held"):
+        raise HTTPException(409, f"job is {j['status']}; cancel it first or wait for it to finish (retry only applies to "
+                                 "failed, cancelled or completed jobs)")
+    if body.optimize and not body.from_stage:
+        body.from_stage = "blender"
+    if j["status"] == "completed" and not body.from_stage:
+        raise HTTPException(409, "job already completed; pass from_stage (reference|pixal3d|blender) to reprocess it")
     settings = None
-    if body.from_stage:
-        order = ["reference", "pixal3d", "blender"]
-        for st in order[order.index(body.from_stage):]:
-            rp = config.JOBS_DIR / job_id / "stages" / st / "result.json"
-            if rp.exists():
-                rp.unlink()
     if body.optimize:
         allowed = {"target_triangles", "texture_size", "lod_fractions", "generate_lods", "generate_collision", "collision_triangles",
                    "height_m", "width_m", "depth_m", "render_previews", "preview_size"}
@@ -457,13 +462,14 @@ def retry_job(job_id: str, body: RetryRequest | None = None):
             raise HTTPException(422, f"unknown optimize keys: {sorted(bad)}")
         settings = dict(j["settings"])
         settings["optimize"] = {**settings["optimize"], **body.optimize}
-        if not body.from_stage:
-            body.from_stage = "blender"
-            rp = config.JOBS_DIR / job_id / "stages" / "blender" / "result.json"
+    if body.from_stage:
+        order = ["reference", "pixal3d", "blender"]
+        for st in order[order.index(body.from_stage):]:
+            rp = config.JOBS_DIR / job_id / "stages" / st / "result.json"
             if rp.exists():
                 rp.unlink()
     r = store().retry(job_id, allow_completed=bool(body.from_stage), settings=settings)
-    return {"job_id": job_id, "result": r, "from_stage": body.from_stage}
+    return {"job_id": job_id, "result": r, "from_stage": body.from_stage, "attempt": (j.get("attempt") or 0) + 1}
 
 
 # ----------------------------------------------------------------------------------------------- queue / library / settings
@@ -549,8 +555,9 @@ async def _unhandled(request: Request, exc: Exception):
 
 # ----------------------------------------------------------------------------------------------- web portal (SPA)
 
-if WEB_DIST.exists():
-    app.mount("/assets", StaticFiles(directory=str(WEB_DIST / "assets")), name="web-assets")
+if (WEB_DIST / "index.html").exists():
+    if (WEB_DIST / "static").is_dir():
+        app.mount("/static", StaticFiles(directory=str(WEB_DIST / "static")), name="web-static")
 
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa(full_path: str):

@@ -173,3 +173,27 @@ def test_spa_not_mounted_without_dist(env):
     client, api, _ = env
     assert client.get("/").status_code == 404
     assert client.get("/health").status_code == 200
+
+
+def test_spa_serves_asset_routes(tmp_path, monkeypatch):
+    """A direct hit on /assets/<id> must serve the SPA (the bundle lives under /static, not /assets)."""
+    dist = tmp_path / "dist"
+    (dist / "static").mkdir(parents=True)
+    (dist / "index.html").write_text("<html>spa</html>")
+    (dist / "static" / "app.js").write_text("1")
+    monkeypatch.setenv("STUDIO_WEB_DIST", str(dist))
+    monkeypatch.setenv("STUDIO_JOBS_DIR", str(tmp_path / "jobs"))
+    monkeypatch.setenv("STUDIO_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("STUDIO_PRESETS_DIR", str(ROOT / "presets"))
+    for m in list(sys.modules):
+        if m.startswith("studio"):
+            del sys.modules[m]
+    import studio.api as api
+    from fastapi.testclient import TestClient
+
+    api._store = None
+    client = TestClient(api.app)
+    assert client.get("/assets/20260101-000000-deadbeef").text == "<html>spa</html>"
+    assert client.get("/sessions/x").text == "<html>spa</html>"
+    assert client.get("/static/app.js").text == "1"
+    assert client.get("/v1/jobs/nope").status_code == 404

@@ -101,7 +101,8 @@ def cancel(job_id: str) -> dict:
 @mcp.tool()
 def retry(job_id: str, from_stage: str | None = None, optimize: dict | None = None) -> dict:
     """Requeue a failed/cancelled job (completed stages reused), or reprocess a finished job from a stage
-    (from_stage='blender' with optimize={'target_triangles': 20000, ...} re-optimises the same master)."""
+    (from_stage='blender' with optimize={'target_triangles': 20000, ...} re-optimises the same master).
+    Jobs that are running, queued or held are rejected with HTTP 409 and left untouched: cancel them first or wait."""
     body = {}
     if from_stage:
         body["from_stage"] = from_stage

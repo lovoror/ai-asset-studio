@@ -11,6 +11,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "gltf-validator": "^2.0.0-dev.3.10"
+    "gltf-validator": "^2.0.0-dev.3.10",
+    "playwright": "^1.63.0"
   }
 }
