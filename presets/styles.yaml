@@ -1,0 +1,61 @@
+# Style presets for the reference-image prompt builder.
+# Each preset contributes: a descriptive style clause, material/palette defaults, background colour,
+# extra negatives, and optimisation defaults. Application-level only: nothing here is forwarded verbatim to a backend.
+mobile_factory:
+  label: "Stylized mobile factory game"
+  description: >
+    Chunky readable forms for a mobile factory-building game: strong silhouettes, controlled detail,
+    coherent limited palette, minimal tiny protrusions, painted-metal materials, slight bevels.
+  style_clause: >
+    stylized game asset for a mobile factory-building game, chunky simplified forms with a strong readable
+    silhouette, controlled detail level, slightly exaggerated proportions, soft bevelled edges, clean
+    hand-painted PBR look with subtle edge wear, coherent limited colour palette, no tiny protrusions,
+    no thin wires or cables
+  default_materials: "painted metal, brushed copper accents, matte concrete"
+  default_palette: ["teal", "copper", "warm grey"]
+  background: "plain flat light grey studio background"
+  negative_extra: "photorealistic grime, tangled cables, tiny greebles, thin antennae, cluttered details, painted lettering, warning text"
+  optimize_defaults:
+    target_triangles: 20000
+    texture_size: 2048
+    lod_fractions: [0.5, 0.25]
+    collision_triangles: 200
+stylized_generic:
+  label: "Stylized (generic)"
+  style_clause: >
+    stylized 3D game asset, clean readable shapes, hand-painted PBR materials, appealing proportions,
+    moderate detail, coherent palette
+  default_materials: ""
+  default_palette: []
+  background: "plain flat light grey studio background"
+  negative_extra: "clutter, tiny greebles"
+  optimize_defaults: {target_triangles: 30000, texture_size: 2048, lod_fractions: [0.5, 0.25], collision_triangles: 256}
+realistic:
+  label: "Realistic prop"
+  style_clause: >
+    realistic 3D prop, physically plausible materials and proportions, moderate surface wear, product-shot clarity
+  default_materials: ""
+  default_palette: []
+  background: "plain flat neutral grey studio background"
+  negative_extra: "cartoon, toy-like, exaggerated proportions"
+  optimize_defaults: {target_triangles: 40000, texture_size: 2048, lod_fractions: [0.5, 0.25], collision_triangles: 256}
+lowpoly:
+  label: "Low-poly flat-shaded"
+  style_clause: >
+    low-poly 3D game asset, flat-shaded faceted surfaces, simple geometric forms, solid flat colours,
+    minimal texture detail, strong silhouette
+  default_materials: "flat matte plastic-like surfaces"
+  default_palette: []
+  background: "plain flat light grey studio background"
+  negative_extra: "fine texture detail, realistic grime, smooth organic curves"
+  optimize_defaults: {target_triangles: 6000, texture_size: 1024, lod_fractions: [0.5], collision_triangles: 128}
+clean_product:
+  label: "Clean product visualisation"
+  style_clause: >
+    clean product-visualisation render of a single manufactured object, precise smooth surfaces,
+    accurate materials, catalogue clarity
+  default_materials: ""
+  default_palette: []
+  background: "plain flat white studio background"
+  negative_extra: "wear, dirt, scratches, stylization"
+  optimize_defaults: {target_triangles: 30000, texture_size: 2048, lod_fractions: [0.5, 0.25], collision_triangles: 256}

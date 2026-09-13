@@ -1,0 +1,382 @@
+{
+  "generated": "2026-09-12 20:04:34",
+  "host": "RTX 5090 32 GB, Docker Desktop WSL2 VM 46 GiB RAM",
+  "jobs": [
+    {
+      "name": "crate",
+      "job_id": "20260912-224921-e6af094a",
+      "prompt": "Stylized wooden cargo crate with riveted metal corner brackets and a stencilled hazard stripe, for a mobile factory game",
+      "quality": "balanced",
+      "stage_timings_s": {
+        "reference": 338.57,
+        "pixal3d": 248.44,
+        "blender": 78.1,
+        "validate": 0.12,
+        "package": 0.05,
+        "total": 4331.21
+      },
+      "reference": {
+        "candidates": 1,
+        "per_candidate_s": [
+          284.96
+        ],
+        "torch_max_reserved_mib": 31476,
+        "nvidia_smi_peak_mib": 32044,
+        "peak_rss_mb": 21555,
+        "settings": {
+          "width": 1328,
+          "height": 1328,
+          "steps": 50,
+          "true_cfg_scale": 4.0,
+          "mode": "bf16_split",
+          "gpu_resident_blocks": 36,
+          "seeds": [
+            7
+          ]
+        }
+      },
+      "pixal3d": {
+        "resolution": 1024,
+        "grid_resolution": 1024,
+        "timings_s": {
+          "load_s": 52.38,
+          "preprocess_s": 15.34,
+          "camera_s": 5.44,
+          "generate_s": 112.28,
+          "export_s": 56.48,
+          "total_s": 243.51
+        },
+        "torch_max_reserved_mib": {
+          "load": 0,
+          "preprocess_camera": 3634,
+          "generate": 15316,
+          "export": 12368
+        },
+        "nvidia_smi_peak_mib": 19181,
+        "peak_rss_mb": 27303,
+        "mesh_stats": {
+          "raw_vertices": 8555965,
+          "raw_faces": 17196486,
+          "grid_resolution": 1024,
+          "requested_resolution": 1024,
+          "master_vertices": 712285,
+          "master_faces": 954901,
+          "master_bounds": [
+            [
+              -0.44969362020492554,
+              -0.4110250473022461,
+              -0.48951929807662964
+            ],
+            [
+              0.45144033432006836,
+              0.48510798811912537,
+              0.487230122089386
+            ]
+          ]
+        }
+      },
+      "blender": {
+        "timings_s": {
+          "import_s": 0.75,
+          "normalise_cleanup_s": 4.48,
+          "optimize_s": 28.39,
+          "lods_s": 37.8,
+          "collision_s": 0.01,
+          "previews_s": 3.55,
+          "total_s": 75.69
+        },
+        "method": "voxel_proxy_decimate_rebake",
+        "triangles": 7998,
+        "reduction": {
+          "triangles": 7998,
+          "result_error_relative": 0.0143512524664402,
+          "target_error_relative": 0.03,
+          "reached": true,
+          "simplifier": "meshoptimizer.simplifyWithAttributes(normals w=0.7, PRUNE)"
+        },
+        "proxy": {
+          "voxel_size_m": 0.008048845767974853,
+          "proxy_triangles": 154524
+        },
+        "maps": {
+          "base_color": "baked",
+          "metallic": "baked",
+          "roughness": "baked",
+          "alpha": "opaque",
+          "normal": "baked_from_master"
+        },
+        "lods": [
+          [
+            "stylized_wooden_cargo_crate_with_LOD1.glb",
+            3997
+          ],
+          [
+            "stylized_wooden_cargo_crate_with_LOD2.glb",
+            1996
+          ]
+        ],
+        "collision_triangles": 200,
+        "peak_rss_mb": 3152
+      },
+      "validation": {
+        "master": true,
+        "asset": true,
+        "lod1": true,
+        "lod2": true,
+        "collision": true
+      },
+      "warnings": [
+        "reduction to 0.84% of the master exceeded a 5% error bound (thin/many shells): optimized mesh built from a single-shell voxel proxy (voxel 8.0 mm); openings smaller than that are closed in the low-poly, detail comes from the baked normal/colour maps"
+      ],
+      "fallbacks_applied": []
+    },
+    {
+      "name": "mug",
+      "job_id": "20260912-231658-f8dcb166",
+      "prompt": "Ceramic coffee mug with a wide open handle, glossy teal glaze with a cream interior, simple clean shape",
+      "quality": "balanced",
+      "stage_timings_s": {
+        "reference": 346.53,
+        "pixal3d": 250.37,
+        "blender": 74.1,
+        "validate": 0.09,
+        "package": 0.04,
+        "total": 1409.34
+      },
+      "reference": {
+        "candidates": 1,
+        "per_candidate_s": [
+          305.84
+        ],
+        "torch_max_reserved_mib": 31276,
+        "nvidia_smi_peak_mib": 31842,
+        "peak_rss_mb": 22210,
+        "settings": {
+          "width": 1328,
+          "height": 1328,
+          "steps": 50,
+          "true_cfg_scale": 4.0,
+          "mode": "bf16_split",
+          "gpu_resident_blocks": 36,
+          "seeds": [
+            3
+          ]
+        }
+      },
+      "pixal3d": {
+        "resolution": 1024,
+        "grid_resolution": 1024,
+        "timings_s": {
+          "load_s": 48.08,
+          "preprocess_s": 15.11,
+          "camera_s": 4.58,
+          "generate_s": 52.51,
+          "export_s": 124.63,
+          "total_s": 246.5
+        },
+        "torch_max_reserved_mib": {
+          "load": 0,
+          "preprocess_camera": 3634,
+          "generate": 15316,
+          "export": 8744
+        },
+        "nvidia_smi_peak_mib": 16841,
+        "peak_rss_mb": 27372,
+        "mesh_stats": {
+          "raw_vertices": 4980239,
+          "raw_faces": 9983488,
+          "grid_resolution": 1024,
+          "requested_resolution": 1024,
+          "master_vertices": 652340,
+          "master_faces": 969785,
+          "master_bounds": [
+            [
+              -0.43365806341171265,
+              -0.4310894012451172,
+              -0.3814451992511749
+            ],
+            [
+              0.4352959394454956,
+              0.4705195426940918,
+              0.45953208208084106
+            ]
+          ]
+        }
+      },
+      "blender": {
+        "timings_s": {
+          "import_s": 0.69,
+          "normalise_cleanup_s": 2.57,
+          "optimize_s": 25.18,
+          "lods_s": 39.06,
+          "collision_s": 0.01,
+          "previews_s": 3.82,
+          "total_s": 71.98
+        },
+        "method": "decimate_rebake",
+        "triangles": 6000,
+        "reduction": {
+          "triangles": 6000,
+          "result_error_relative": 0.01434299536049366,
+          "target_error_relative": 0.03,
+          "reached": true,
+          "simplifier": "meshoptimizer.simplifyWithAttributes(normals w=0.7, PRUNE)"
+        },
+        "proxy": null,
+        "maps": {
+          "base_color": "baked",
+          "metallic": "baked",
+          "roughness": "baked",
+          "alpha": "opaque",
+          "normal": "baked_from_master"
+        },
+        "lods": [
+          [
+            "ceramic_coffee_mug_with_a_LOD1.glb",
+            3088
+          ],
+          [
+            "ceramic_coffee_mug_with_a_LOD2.glb",
+            1500
+          ]
+        ],
+        "collision_triangles": 254,
+        "peak_rss_mb": 3191
+      },
+      "validation": {
+        "master": true,
+        "asset": true,
+        "lod1": true,
+        "lod2": true,
+        "collision": true
+      },
+      "warnings": [],
+      "fallbacks_applied": []
+    },
+    {
+      "name": "pump",
+      "job_id": "20260912-231658-6581cb96",
+      "prompt": "Stylized industrial water pump station for a mobile factory-building game, chunky readable silhouette, painted teal metal, copper pipes, small concrete foundation, no labels, no text or lettering anywhere",
+      "quality": "quality",
+      "stage_timings_s": {
+        "reference": 630.86,
+        "pixal3d": 226.36,
+        "blender": 80.13,
+        "validate": 0.13,
+        "package": 0.06,
+        "total": 2754.77
+      },
+      "reference": {
+        "candidates": 2,
+        "per_candidate_s": [
+          296.94,
+          287.72
+        ],
+        "torch_max_reserved_mib": 31276,
+        "nvidia_smi_peak_mib": 31884,
+        "peak_rss_mb": 22301,
+        "settings": {
+          "width": 1328,
+          "height": 1328,
+          "steps": 50,
+          "true_cfg_scale": 4.0,
+          "mode": "bf16_split",
+          "gpu_resident_blocks": 36,
+          "seeds": [
+            12345,
+            12346
+          ]
+        }
+      },
+      "pixal3d": {
+        "resolution": 1536,
+        "grid_resolution": 1536,
+        "timings_s": {
+          "load_s": 53.51,
+          "preprocess_s": 2.15,
+          "camera_s": 4.38,
+          "generate_s": 84.63,
+          "export_s": 76.6,
+          "total_s": 222.29
+        },
+        "torch_max_reserved_mib": {
+          "load": 0,
+          "preprocess_camera": 3634,
+          "generate": 24910,
+          "export": 14786
+        },
+        "nvidia_smi_peak_mib": 27378,
+        "peak_rss_mb": 27577,
+        "mesh_stats": {
+          "raw_vertices": 10159252,
+          "raw_faces": 20524752,
+          "grid_resolution": 1536,
+          "requested_resolution": 1536,
+          "master_vertices": 672300,
+          "master_faces": 997520,
+          "master_bounds": [
+            [
+              -0.36518752574920654,
+              -0.38881832361221313,
+              -0.35839763283729553
+            ],
+            [
+              0.34875279664993286,
+              0.45700469613075256,
+              0.3639417886734009
+            ]
+          ]
+        }
+      },
+      "blender": {
+        "timings_s": {
+          "import_s": 0.75,
+          "normalise_cleanup_s": 4.67,
+          "optimize_s": 40.44,
+          "lods_s": 27.46,
+          "collision_s": 0.02,
+          "previews_s": 4.11,
+          "total_s": 78.21
+        },
+        "method": "decimate_rebake",
+        "triangles": 19803,
+        "reduction": {
+          "triangles": 19803,
+          "result_error_relative": 0.023436961695551872,
+          "target_error_relative": 0.03,
+          "reached": true,
+          "simplifier": "meshoptimizer.simplifyWithAttributes(normals w=0.7, PRUNE)"
+        },
+        "proxy": null,
+        "maps": {
+          "base_color": "baked",
+          "metallic": "baked",
+          "roughness": "baked",
+          "alpha": "opaque",
+          "normal": "baked_from_master"
+        },
+        "lods": [
+          [
+            "stylized_industrial_water_pump_station_LOD1.glb",
+            9813
+          ],
+          [
+            "stylized_industrial_water_pump_station_LOD2.glb",
+            5227
+          ]
+        ],
+        "collision_triangles": 200,
+        "peak_rss_mb": 3505
+      },
+      "validation": {
+        "master": true,
+        "asset": true,
+        "lod1": true,
+        "lod2": true,
+        "collision": true
+      },
+      "warnings": [],
+      "fallbacks_applied": []
+    }
+  ]
+}

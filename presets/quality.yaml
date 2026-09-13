@@ -1,0 +1,52 @@
+# Quality presets map the application-level `quality` field to real backend capabilities.
+# reference.*  -> Qwen-Image-2512 (diffusers). Documented full-quality sampling: 50 steps, true_cfg_scale 4.0, 1328x1328.
+# pixal3d.*    -> Pixal3D pipeline_type '<resolution>_cascade' and low-VRAM on-demand loading (both exist upstream).
+# master.*     -> arguments passed to o_voxel.postprocess.to_glb by our export adapter (upstream hardcodes 1000000/4096/WebP).
+balanced:
+  reference:
+    candidates: 1
+    steps: 50
+    true_cfg_scale: 4.0
+    width: 1328
+    height: 1328
+    mode: bf16_split          # BF16 weights; transformer split GPU-resident / CPU-offloaded blocks
+    gpu_resident_blocks: 30
+  pixal3d:
+    resolution: 1024
+    low_vram: true
+    max_num_tokens: 49152
+    attn_backend: flash_attn
+  master:
+    decimation_target: 1000000
+    texture_size: 4096
+    remesh: true
+    remesh_band: 1
+    remesh_project: 0
+  fallback:                    # applied in order on CUDA OOM; entries marked quality_loss need allow_quality_fallback
+    - {stage: reference, set: {gpu_resident_blocks: 16}, quality_loss: false}
+    - {stage: pixal3d, set: {max_num_tokens: 32768}, quality_loss: true}
+    - {stage: master, set: {texture_size: 2048}, quality_loss: true}
+quality:
+  reference:
+    candidates: 2
+    steps: 50
+    true_cfg_scale: 4.0
+    width: 1328
+    height: 1328
+    mode: bf16_split
+    gpu_resident_blocks: 30
+  pixal3d:
+    resolution: 1536
+    low_vram: true
+    max_num_tokens: 49152
+    attn_backend: flash_attn
+  master:
+    decimation_target: 1000000
+    texture_size: 4096
+    remesh: true
+    remesh_band: 1
+    remesh_project: 0
+  fallback:
+    - {stage: reference, set: {gpu_resident_blocks: 16}, quality_loss: false}
+    - {stage: pixal3d, set: {resolution: 1024}, quality_loss: true}
+    - {stage: master, set: {texture_size: 2048}, quality_loss: true}

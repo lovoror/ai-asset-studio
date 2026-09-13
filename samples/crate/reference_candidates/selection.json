@@ -1,0 +1,58 @@
+{
+  "selection": {
+    "selected": "candidates/cand_00.png",
+    "method": "technical_checks",
+    "ranking": [
+      {
+        "file": "candidates/cand_00.png",
+        "score": 0.15863598331370174,
+        "reasons": [
+          "object touches the image border (clipped)",
+          "small margin 0.00",
+          "off-centre (0.09)",
+          "background not plain (std 0.045)"
+        ]
+      }
+    ]
+  },
+  "candidates": [
+    {
+      "file": "candidates/cand_00.png",
+      "seed": 7,
+      "time_s": 284.96,
+      "metrics": {
+        "bg_color": [
+          0.7647058963775635,
+          0.772549033164978,
+          0.7607843279838562
+        ],
+        "bg_std": 0.04462189972400665,
+        "fg_fraction": 0.3954169464000581,
+        "fg_components": 2,
+        "bbox": [
+          3,
+          254,
+          1324,
+          1324
+        ],
+        "margins": {
+          "left": 0.002259036144578313,
+          "right": 0.002259036144578313,
+          "top": 0.19126506024096385,
+          "bottom": 0.002259036144578313
+        },
+        "clipped": true,
+        "center_offset": 0.0941272590331325,
+        "bbox_fill": 0.492527520337434,
+        "sharpness": 0.001708589494228363,
+        "score": 0.15863598331370174,
+        "reasons": [
+          "object touches the image border (clipped)",
+          "small margin 0.00",
+          "off-centre (0.09)",
+          "background not plain (std 0.045)"
+        ]
+      }
+    }
+  ]
+}

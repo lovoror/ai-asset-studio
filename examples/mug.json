@@ -1,0 +1,9 @@
+{
+  "prompt": "Ceramic coffee mug with a wide open handle, glossy teal glaze with a cream interior, simple clean shape",
+  "style": "clean_product",
+  "quality": "balanced",
+  "seed": 3,
+  "height_m": 0.1,
+  "target_triangles": 8000,
+  "texture_size": 1024
+}

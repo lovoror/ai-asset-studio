@@ -1,0 +1,52 @@
+{
+  "selection": {
+    "selected": "candidates/cand_00.png",
+    "method": "technical_checks",
+    "ranking": [
+      {
+        "file": "candidates/cand_00.png",
+        "score": 0.9703304493911822,
+        "reasons": [
+          "off-centre (0.07)"
+        ]
+      }
+    ]
+  },
+  "candidates": [
+    {
+      "file": "candidates/cand_00.png",
+      "seed": 3,
+      "time_s": 305.84,
+      "metrics": {
+        "bg_color": [
+          0.9137254953384399,
+          0.9137254953384399,
+          0.9058823585510254
+        ],
+        "bg_std": 0.007559308782219887,
+        "fg_fraction": 0.2487723862316737,
+        "fg_components": 1,
+        "bbox": [
+          381,
+          317,
+          1138,
+          1066
+        ],
+        "margins": {
+          "left": 0.2868975903614458,
+          "right": 0.14231927710843373,
+          "top": 0.23870481927710843,
+          "bottom": 0.19653614457831325
+        },
+        "clipped": false,
+        "center_offset": 0.07483477530440888,
+        "bbox_fill": 0.7717343887423043,
+        "sharpness": 0.0006740409298799932,
+        "score": 0.9703304493911822,
+        "reasons": [
+          "off-centre (0.07)"
+        ]
+      }
+    }
+  ]
+}

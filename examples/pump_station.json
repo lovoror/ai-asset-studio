@@ -1,0 +1,12 @@
+{
+  "prompt": "Stylized industrial water pump station for a mobile factory-building game, chunky readable silhouette, painted teal metal, copper pipes, small concrete foundation, no labels, no text or lettering anywhere",
+  "style": "mobile_factory",
+  "quality": "quality",
+  "seed": 12345,
+  "height_m": 2.0,
+  "target_triangles": 20000,
+  "texture_size": 2048,
+  "generate_lods": true,
+  "generate_collision": true,
+  "allow_quality_fallback": false
+}

@@ -1,0 +1,112 @@
+name: asset-studio
+
+x-jobs-volume: &jobs
+  - studio-jobs:/jobs
+x-gpu: &gpu
+  driver: nvidia
+  device_ids: ["${STUDIO_GPU_UUID}"]
+  capabilities: [gpu]
+
+services:
+  api:
+    build: { context: ., dockerfile: docker/studio.Dockerfile }
+    image: asset-studio/studio:local
+    container_name: studio-api
+    command: ["python", "-m", "studio.api"]
+    environment:
+      STUDIO_IN_CONTAINER: "1"
+      STUDIO_BIND: ${STUDIO_BIND:-127.0.0.1}
+      STUDIO_API_PORT: "8090"
+      STUDIO_API_TOKEN: ${STUDIO_API_TOKEN:-}
+      STUDIO_GPU_UUID: ${STUDIO_GPU_UUID}
+    ports:
+      - "${STUDIO_BIND:-127.0.0.1}:${STUDIO_API_PORT:-8090}:8090"
+    volumes:
+      - studio-jobs:/jobs
+      - studio-data:/data
+      - studio-models:/models:ro
+      - ./presets:/app/presets:ro
+      - ./manifests:/app/manifests:ro
+      - ./services/studio/studio:/app/studio:ro   # live code (no rebuild needed for edits)
+    restart: unless-stopped
+
+  worker:
+    image: asset-studio/studio:local
+    container_name: studio-worker
+    command: ["python", "-m", "studio.worker"]
+    environment:
+      STUDIO_GPU_UUID: ${STUDIO_GPU_UUID}
+      STUDIO_GPU_BUSY_THRESHOLD_MIB_IMAGE: ${STUDIO_GPU_BUSY_THRESHOLD_MIB_IMAGE:-24576}
+      STUDIO_GPU_BUSY_THRESHOLD_MIB_PIXAL3D: ${STUDIO_GPU_BUSY_THRESHOLD_MIB_PIXAL3D:-26624}
+      STUDIO_GPU_RETRY_THRESHOLD_MIB_IMAGE: ${STUDIO_GPU_RETRY_THRESHOLD_MIB_IMAGE:-6144}
+      STUDIO_GPU_RETRY_THRESHOLD_MIB_PIXAL3D: ${STUDIO_GPU_RETRY_THRESHOLD_MIB_PIXAL3D:-14336}
+      STUDIO_GPU_BUSY_WAIT_S: ${STUDIO_GPU_BUSY_WAIT_S:-1800}
+      STUDIO_REMBG_MODEL: ${STUDIO_REMBG_MODEL:-ZhengPeng7/BiRefNet}
+      STUDIO_VISION_EVALUATOR_URL: ${STUDIO_VISION_EVALUATOR_URL:-}
+    depends_on: [api, image-worker, pixal3d-worker, blender]
+    volumes:
+      - studio-jobs:/jobs
+      - studio-data:/data
+      - ./presets:/app/presets:ro
+      - ./manifests:/app/manifests:ro
+      - ./services/studio/studio:/app/studio:ro
+    restart: unless-stopped
+
+  image-worker:
+    build: { context: ., dockerfile: docker/image-worker.Dockerfile }
+    image: asset-studio/image-worker:local
+    container_name: studio-image-worker
+    environment:
+      HF_HOME: /models/hf
+      HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-1}
+      TRANSFORMERS_OFFLINE: ${HF_HUB_OFFLINE:-1}
+    volumes:
+      - studio-jobs:/jobs
+      - studio-models:/models
+      - ./services/image_worker:/app/image_worker:ro
+      - ./services/runner:/app/runner:ro
+    deploy:
+      resources:
+        reservations:
+          devices: [*gpu]
+    shm_size: 4gb
+    restart: unless-stopped
+
+  pixal3d-worker:
+    build: { context: ., dockerfile: docker/pixal3d-worker.Dockerfile }
+    image: asset-studio/pixal3d-worker:local
+    container_name: studio-pixal3d-worker
+    environment:
+      HF_HOME: /models/hf
+      TORCH_HOME: /models/torch
+      HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-1}
+      TRANSFORMERS_OFFLINE: ${HF_HUB_OFFLINE:-1}
+    volumes:
+      - studio-jobs:/jobs
+      - studio-models:/models
+      - ./services/pixal3d_worker:/app/pixal3d_worker:ro
+      - ./services/runner:/app/runner:ro
+    deploy:
+      resources:
+        reservations:
+          devices: [*gpu]
+    shm_size: 8gb
+    restart: unless-stopped
+
+  blender:
+    build: { context: ., dockerfile: docker/blender.Dockerfile }
+    image: asset-studio/blender:local
+    container_name: studio-blender
+    volumes:
+      - studio-jobs:/jobs
+      - ./services/blender:/app/blender:ro
+      - ./services/runner:/app/runner:ro
+    restart: unless-stopped
+
+volumes:
+  studio-jobs:
+    external: true
+  studio-data:
+    external: true
+  studio-models:
+    external: true

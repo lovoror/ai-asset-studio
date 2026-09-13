@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.pyc
+samples/_*
+.pytest_cache/
+tools/node_modules/
+tools/godot/
+tools/package-lock.json
+samples/*/master.glb

@@ -1,0 +1,1631 @@
+{
+  "job_id": "20260912-224921-e6af094a",
+  "version": "0.1.0",
+  "created_at": 1789253362.0011106,
+  "finished_at": 1789257693.93147,
+  "request": {
+    "prompt": "Stylized wooden cargo crate with riveted metal corner brackets and a stencilled hazard stripe, for a mobile factory game",
+    "style": "mobile_factory",
+    "quality": "balanced",
+    "seed": 7,
+    "height_m": 1.0,
+    "width_m": null,
+    "depth_m": null,
+    "target_triangles": 3000,
+    "texture_size": 1024,
+    "generate_lods": true,
+    "lod_fractions": null,
+    "generate_collision": true,
+    "collision_triangles": null,
+    "allow_quality_fallback": true,
+    "materials": null,
+    "palette": null,
+    "negative_extra": null,
+    "reference_candidates": null,
+    "render_previews": true,
+    "preview_size": 512,
+    "master_texture_size": null,
+    "master_triangles": null
+  },
+  "input_mode": "text",
+  "settings_effective": {
+    "seed": 7,
+    "style": "mobile_factory",
+    "quality": "balanced",
+    "reference": {
+      "candidates": 1,
+      "steps": 50,
+      "true_cfg_scale": 4.0,
+      "width": 1328,
+      "height": 1328,
+      "mode": "bf16_split",
+      "gpu_resident_blocks": 36
+    },
+    "pixal3d": {
+      "resolution": 1024,
+      "low_vram": true,
+      "max_num_tokens": 49152,
+      "attn_backend": "flash_attn"
+    },
+    "master": {
+      "decimation_target": 1000000,
+      "texture_size": 4096,
+      "remesh": true,
+      "remesh_band": 1,
+      "remesh_project": 0
+    },
+    "optimize": {
+      "target_triangles": 8000,
+      "texture_size": 1024,
+      "generate_lods": true,
+      "lod_fractions": [
+        0.5,
+        0.25
+      ],
+      "generate_collision": true,
+      "collision_triangles": 200,
+      "height_m": 1.0,
+      "width_m": null,
+      "depth_m": null,
+      "render_previews": true,
+      "preview_size": 512
+    },
+    "fallback": [
+      {
+        "stage": "reference",
+        "set": {
+          "gpu_resident_blocks": 16
+        },
+        "quality_loss": false
+      },
+      {
+        "stage": "pixal3d",
+        "set": {
+          "max_num_tokens": 32768
+        },
+        "quality_loss": true
+      },
+      {
+        "stage": "master",
+        "set": {
+          "texture_size": 2048
+        },
+        "quality_loss": true
+      }
+    ],
+    "allow_quality_fallback": true,
+    "input_mode": "text"
+  },
+  "settings_requested_overrides": {},
+  "fallbacks_applied": [],
+  "warnings": [
+    "reduction to 0.84% of the master exceeded a 5% error bound (thin/many shells): optimized mesh built from a single-shell voxel proxy (voxel 8.0 mm); openings smaller than that are closed in the low-poly, detail comes from the baked normal/colour maps"
+  ],
+  "timings_s": {
+    "reference": 338.57,
+    "pixal3d": 248.44,
+    "blender": 78.1,
+    "validate": 0.12,
+    "package": 0.05,
+    "total": 4331.21
+  },
+  "stages": {
+    "reference": {
+      "selected": "candidates/cand_00.png",
+      "selection": {
+        "selected": "candidates/cand_00.png",
+        "method": "technical_checks",
+        "ranking": [
+          {
+            "file": "candidates/cand_00.png",
+            "score": 0.15863598331370174,
+            "reasons": [
+              "object touches the image border (clipped)",
+              "small margin 0.00",
+              "off-centre (0.09)",
+              "background not plain (std 0.045)"
+            ]
+          }
+        ]
+      },
+      "stats": {
+        "timings_s": {
+          "load_text_encoder_s": 9.69,
+          "encode_s": 15.11,
+          "load_transformer_s": 11.68,
+          "generate_s": 284.96,
+          "per_candidate_s": [
+            284.96
+          ],
+          "total_s": 334.64
+        },
+        "vram": {
+          "text_encoder_max_reserved_mib": 16002,
+          "after_load_reserved_mib": 23682,
+          "generate_max_reserved_mib": 31476,
+          "generate_max_allocated_mib": 30791
+        },
+        "peak_rss_mb": 21558,
+        "transformer_blocks": 60,
+        "gpu_resident_blocks": 36
+      },
+      "prompt": "Stylized wooden cargo crate with riveted metal corner brackets and a stencilled hazard stripe, for a mobile factory game. stylized game asset for a mobile factory-building game, chunky simplified forms with a strong readable silhouette, controlled detail level, slightly exaggerated proportions, soft bevelled edges, clean hand-painted PBR look with subtle edge wear, coherent limited colour palette, no tiny protrusions, no thin wires or cables. Materials: painted metal, brushed copper accents, matte concrete. Colour palette: teal, copper, warm grey. Real-world scale: height about 1 m; proportions consistent with that scale. Background: plain flat light grey studio background, uniform, no horizon line, no floor texture. Composition: exactly one object, the entire object fully visible and centred with generous empty margin on all sides, three-quarter front view from slightly above, mild perspective with a moderate focal length, no fisheye distortion, soft even neutral studio illumination, no dramatic cast shadows, no depth of field, no motion blur, sharp focus over the whole object, clear silhouette with visible separation between the major components, no ground clutter, no scenery, no props, no people. Rendered as a clean 3D asset presentation image, high detail, physically based materials.",
+      "negative_prompt": "text, letters, numbers, labels, logo, watermark, signature, border, frame, vignette, multiple objects, duplicate objects, cropped, cut off, out of frame, partially visible, busy background, scenery, landscape, interior, floor grid, table, hands, people, depth of field, bokeh, motion blur, blurry, lens flare, fisheye, wide-angle distortion, harsh shadows, dramatic lighting, rim light, glow, reflections on the floor, low quality, deformed, disfigured, low resolution, jpeg artifacts, oversaturated, photorealistic grime, tangled cables, tiny greebles, thin antennae, cluttered details",
+      "effective": {
+        "width": 1328,
+        "height": 1328,
+        "steps": 50,
+        "true_cfg_scale": 4.0,
+        "mode": "bf16_split",
+        "gpu_resident_blocks": 36,
+        "seeds": [
+          7
+        ]
+      },
+      "source": null,
+      "num_views": null
+    },
+    "pixal3d": {
+      "camera_params": {
+        "camera_angle_x": 0.2829346743527406,
+        "distance": 3.510775327682495,
+        "mesh_scale": 1.0
+      },
+      "mesh_stats": {
+        "raw_vertices": 8555965,
+        "raw_faces": 17196486,
+        "grid_resolution": 1024,
+        "requested_resolution": 1024,
+        "master_vertices": 712285,
+        "master_faces": 954901,
+        "master_bounds": [
+          [
+            -0.44969362020492554,
+            -0.4110250473022461,
+            -0.48951929807662964
+          ],
+          [
+            0.45144033432006836,
+            0.48510798811912537,
+            0.487230122089386
+          ]
+        ]
+      },
+      "stats": {
+        "timings_s": {
+          "load_s": 52.38,
+          "preprocess_s": 15.34,
+          "camera_s": 5.44,
+          "generate_s": 112.28,
+          "export_s": 56.48,
+          "total_s": 243.51
+        },
+        "vram": {
+          "load": {
+            "max_allocated_mib": 0,
+            "max_reserved_mib": 0
+          },
+          "preprocess_camera": {
+            "max_allocated_mib": 3189,
+            "max_reserved_mib": 3634
+          },
+          "generate": {
+            "max_allocated_mib": 14572,
+            "max_reserved_mib": 15316
+          },
+          "export": {
+            "max_allocated_mib": 11917,
+            "max_reserved_mib": 12368
+          }
+        },
+        "peak_rss_mb": 27303
+      },
+      "effective": {
+        "resolution": 1024,
+        "grid_resolution": 1024,
+        "low_vram": true,
+        "max_num_tokens": 49152,
+        "attn_backend": "flash_attn",
+        "seed": 7,
+        "sampler_overrides": {},
+        "export": {
+          "decimation_target": 1000000,
+          "texture_size": 4096,
+          "remesh": true,
+          "remesh_band": 1,
+          "remesh_project": 0
+        },
+        "rembg_model": "ZhengPeng7/BiRefNet",
+        "pipeline_dir": "/models/pixal3d-local"
+      }
+    },
+    "blender": {
+      "stats": {
+        "master_imported": {
+          "vertices": 712285,
+          "triangles": 954899,
+          "has_uv": true,
+          "bounds_min": [
+            -0.44969362020492554,
+            -0.487230122089386,
+            -0.4110250473022461
+          ],
+          "bounds_max": [
+            0.45144033432006836,
+            0.48951929807662964,
+            0.48510798811912537
+          ],
+          "dimensions_m": [
+            0.9011339545249939,
+            0.9767494201660156,
+            0.8961330652236938
+          ]
+        },
+        "normalise": {
+          "scale_factor": 1.1159057050867538,
+          "scale_basis": "height_m",
+          "dimensions_m": {
+            "x": 1.0055805444717407,
+            "y": 1.0899603366851807,
+            "z": 1.0
+          },
+          "origin": "bottom_center"
+        },
+        "cleanup": {
+          "vertices_before": 712285,
+          "faces_before": 954899,
+          "loose_or_degenerate_faces_removed": 7,
+          "loose_vertices_removed": 7,
+          "components": 181,
+          "debris_components_removed": 84,
+          "vertices_after": 710418,
+          "faces_after": 953726,
+          "note": "disconnected parts preserved (only tiny debris removed)"
+        },
+        "master_material": {
+          "alpha_mode": "OPAQUE",
+          "double_sided": false,
+          "alpha_cutoff": 0.5
+        },
+        "master_maps": {
+          "base_color": "4096x4096",
+          "metallic": "4096x4096",
+          "roughness": "4096x4096",
+          "alpha": null,
+          "normal": null
+        },
+        "asset": {
+          "method": "voxel_proxy_decimate_rebake",
+          "master_triangles": 953726,
+          "target_triangles": 8000,
+          "triangles": 7998,
+          "proxy": {
+            "voxel_size_m": 0.008048845767974853,
+            "proxy_triangles": 154524
+          },
+          "reduction": {
+            "triangles": 7998,
+            "result_error_relative": 0.0143512524664402,
+            "target_error_relative": 0.03,
+            "reached": true,
+            "simplifier": "meshoptimizer.simplifyWithAttributes(normals w=0.7, PRUNE)"
+          },
+          "bake_base_color_s": 1.41,
+          "bake_roughness_s": 1.13,
+          "bake_metallic_s": 1.08,
+          "bake_missed_texels": 537074,
+          "bake_normal_s": 0.71,
+          "maps": {
+            "base_color": "baked",
+            "metallic": "baked",
+            "roughness": "baked",
+            "alpha": "opaque",
+            "normal": "baked_from_master"
+          },
+          "uv": "smart_uv_project (new)",
+          "vertices": 4006,
+          "has_uv": true,
+          "bounds_min": [
+            -0.5015339255332947,
+            -0.5440754890441895,
+            0.0
+          ],
+          "bounds_max": [
+            0.5015339255332947,
+            0.5440754890441895,
+            1.0
+          ],
+          "dimensions_m": [
+            1.0030678510665894,
+            1.088150978088379,
+            1.0
+          ]
+        },
+        "collision": {
+          "type": "convex_hull_decimated",
+          "target_triangles": 200,
+          "vertices": 102,
+          "triangles": 200,
+          "has_uv": true,
+          "bounds_min": [
+            -0.5014658570289612,
+            -0.5440053939819336,
+            -2.2653313862974755e-05
+          ],
+          "bounds_max": [
+            0.5016975998878479,
+            0.5440754890441895,
+            1.0
+          ],
+          "dimensions_m": [
+            1.003163456916809,
+            1.088080883026123,
+            1.0000226497650146
+          ]
+        },
+        "timings_s": {
+          "import_s": 0.75,
+          "normalise_cleanup_s": 4.48,
+          "optimize_s": 28.39,
+          "lods_s": 37.8,
+          "collision_s": 0.01,
+          "previews_s": 3.55,
+          "total_s": 75.69
+        },
+        "asset_kind": "optimized static asset (automatic decimation); not animation-ready topology, no rig"
+      },
+      "outputs": {
+        "asset_glb": "stylized_wooden_cargo_crate_with.glb",
+        "lods": [
+          {
+            "file": "stylized_wooden_cargo_crate_with_LOD1.glb",
+            "fraction": 0.5,
+            "target_triangles": 3999,
+            "maps": {
+              "base_color": "baked",
+              "metallic": "baked",
+              "roughness": "baked",
+              "alpha": "opaque",
+              "normal": "baked_from_master",
+              "texture_size": 512
+            },
+            "reduction": {
+              "triangles": 3997,
+              "result_error_relative": 0.01380657497793436,
+              "target_error_relative": 0.03,
+              "reached": true,
+              "simplifier": "meshoptimizer.simplifyWithAttributes(normals w=0.7, PRUNE)"
+            },
+            "vertices": 2005,
+            "triangles": 3997,
+            "has_uv": true,
+            "bounds_min": [
+              -0.5010751485824585,
+              -0.5440754890441895,
+              0.0
+            ],
+            "bounds_max": [
+              0.5010751485824585,
+              0.5440754890441895,
+              1.0
+            ],
+            "dimensions_m": [
+              1.002150297164917,
+              1.088150978088379,
+              1.0
+            ]
+          },
+          {
+            "file": "stylized_wooden_cargo_crate_with_LOD2.glb",
+            "fraction": 0.25,
+            "target_triangles": 1999,
+            "maps": {
+              "base_color": "baked",
+              "metallic": "baked",
+              "roughness": "baked",
+              "alpha": "opaque",
+              "normal": "baked_from_master",
+              "texture_size": 256
+            },
+            "reduction": {
+              "triangles": 1996,
+              "result_error_relative": 0.029190635308623314,
+              "target_error_relative": 0.03,
+              "reached": true,
+              "simplifier": "meshoptimizer.simplifyWithAttributes(normals w=0.7, PRUNE)"
+            },
+            "vertices": 1003,
+            "triangles": 1996,
+            "has_uv": true,
+            "bounds_min": [
+              -0.502465546131134,
+              -0.5422907471656799,
+              0.0
+            ],
+            "bounds_max": [
+              0.502465546131134,
+              0.5422907471656799,
+              1.0
+            ],
+            "dimensions_m": [
+              1.004931092262268,
+              1.0845814943313599,
+              1.0
+            ]
+          }
+        ],
+        "collision_glb": "stylized_wooden_cargo_crate_with_collision.glb",
+        "previews": [
+          "previews/asset_front_left.png",
+          "previews/asset_front_right.png",
+          "previews/asset_back.png",
+          "previews/asset_top.png",
+          "previews/master_front_left.png",
+          "previews/contact_sheet.png"
+        ],
+        "textures": [
+          "textures/asset_baseColor.png",
+          "textures/asset_metallicRoughness.png",
+          "textures/asset_normal.png",
+          "textures/lod1_baseColor.png",
+          "textures/lod1_metallicRoughness.png",
+          "textures/lod1_normal.png",
+          "textures/lod2_baseColor.png",
+          "textures/lod2_metallicRoughness.png",
+          "textures/lod2_normal.png"
+        ]
+      }
+    },
+    "validation": {
+      "master": {
+        "file": "master.glb",
+        "bytes": 65458200,
+        "errors": [],
+        "warnings": [],
+        "ok": true,
+        "extensions_required": [],
+        "extensions_used": [],
+        "images": [
+          {
+            "index": 0,
+            "mimeType": "image/png",
+            "name": null,
+            "bytes": 24137888,
+            "size": [
+              4096,
+              4096
+            ]
+          },
+          {
+            "index": 1,
+            "mimeType": "image/png",
+            "name": null,
+            "bytes": 7066676,
+            "size": [
+              4096,
+              4096
+            ]
+          }
+        ],
+        "materials": [
+          {
+            "index": 0,
+            "name": null,
+            "alphaMode": "OPAQUE",
+            "doubleSided": false,
+            "baseColorTexture": 0,
+            "metallicRoughnessTexture": 1,
+            "normalTexture": null,
+            "metallicFactor": 1.0,
+            "roughnessFactor": 1.0
+          }
+        ],
+        "meshes": [
+          {
+            "mesh": 0,
+            "name": "geometry_0",
+            "primitive": 0,
+            "vertices": 712285,
+            "triangles": 954901,
+            "mode": 4,
+            "has_uv": true,
+            "has_normals": true,
+            "has_tangents": false,
+            "material": 0
+          }
+        ],
+        "triangles": 954901,
+        "vertices": 712285,
+        "mesh_count": 1,
+        "node_count": 2,
+        "bounds_min": [
+          -0.44969362020492554,
+          -0.4110250473022461,
+          -0.48951929807662964
+        ],
+        "bounds_max": [
+          0.45144033432006836,
+          0.48510798811912537,
+          0.487230122089386
+        ],
+        "dimensions_xyz": [
+          0.9011339545249939,
+          0.8961330652236938,
+          0.9767494201660156
+        ],
+        "height_y": 0.8961330652236938,
+        "origin": {
+          "bottom_center": false
+        }
+      },
+      "asset": {
+        "file": "stylized_wooden_cargo_crate_with.glb",
+        "bytes": 4088836,
+        "errors": [],
+        "warnings": [],
+        "ok": true,
+        "extensions_required": [],
+        "extensions_used": [],
+        "images": [
+          {
+            "index": 0,
+            "mimeType": "image/png",
+            "name": "asset_normal",
+            "bytes": 1679237,
+            "size": [
+              1024,
+              1024
+            ]
+          },
+          {
+            "index": 1,
+            "mimeType": "image/png",
+            "name": "asset_baseColor",
+            "bytes": 1606206,
+            "size": [
+              1024,
+              1024
+            ]
+          },
+          {
+            "index": 2,
+            "mimeType": "image/png",
+            "name": "asset_metallicRoughness",
+            "bytes": 478625,
+            "size": [
+              1024,
+              1024
+            ]
+          }
+        ],
+        "materials": [
+          {
+            "index": 0,
+            "name": "asset_material",
+            "alphaMode": "OPAQUE",
+            "doubleSided": true,
+            "baseColorTexture": 1,
+            "metallicRoughnessTexture": 2,
+            "normalTexture": 0,
+            "metallicFactor": 1.0,
+            "roughnessFactor": 1.0
+          }
+        ],
+        "meshes": [
+          {
+            "mesh": 0,
+            "name": "asset_dec.001",
+            "primitive": 0,
+            "vertices": 8595,
+            "triangles": 7998,
+            "mode": 4,
+            "has_uv": true,
+            "has_normals": true,
+            "has_tangents": false,
+            "material": 0
+          }
+        ],
+        "triangles": 7998,
+        "vertices": 8595,
+        "mesh_count": 1,
+        "node_count": 1,
+        "bounds_min": [
+          -0.5015339255332947,
+          0.0,
+          -0.5440754890441895
+        ],
+        "bounds_max": [
+          0.5015339255332947,
+          1.0,
+          0.5440754890441895
+        ],
+        "dimensions_xyz": [
+          1.0030678510665894,
+          1.0,
+          1.088150978088379
+        ],
+        "height_y": 1.0,
+        "origin": {
+          "bottom_center": true
+        }
+      },
+      "lod1": {
+        "file": "stylized_wooden_cargo_crate_with_LOD1.glb",
+        "bytes": 1365604,
+        "errors": [],
+        "warnings": [],
+        "ok": true,
+        "extensions_required": [],
+        "extensions_used": [],
+        "images": [
+          {
+            "index": 0,
+            "mimeType": "image/png",
+            "name": "lod1_normal",
+            "bytes": 528700,
+            "size": [
+              512,
+              512
+            ]
+          },
+          {
+            "index": 1,
+            "mimeType": "image/png",
+            "name": "lod1_baseColor",
+            "bytes": 494351,
+            "size": [
+              512,
+              512
+            ]
+          },
+          {
+            "index": 2,
+            "mimeType": "image/png",
+            "name": "lod1_metallicRoughness",
+            "bytes": 160748,
+            "size": [
+              512,
+              512
+            ]
+          }
+        ],
+        "materials": [
+          {
+            "index": 0,
+            "name": "lod1_material",
+            "alphaMode": "OPAQUE",
+            "doubleSided": true,
+            "baseColorTexture": 1,
+            "metallicRoughnessTexture": 2,
+            "normalTexture": 0,
+            "metallicFactor": 1.0,
+            "roughnessFactor": 1.0
+          }
+        ],
+        "meshes": [
+          {
+            "mesh": 0,
+            "name": "stylized_wooden_cargo_crate_with_LOD1_dec",
+            "primitive": 0,
+            "vertices": 4877,
+            "triangles": 3997,
+            "mode": 4,
+            "has_uv": true,
+            "has_normals": true,
+            "has_tangents": false,
+            "material": 0
+          }
+        ],
+        "triangles": 3997,
+        "vertices": 4877,
+        "mesh_count": 1,
+        "node_count": 1,
+        "bounds_min": [
+          -0.5010751485824585,
+          0.0,
+          -0.5440754890441895
+        ],
+        "bounds_max": [
+          0.5010751485824585,
+          1.0,
+          0.5440754890441895
+        ],
+        "dimensions_xyz": [
+          1.002150297164917,
+          1.0,
+          1.088150978088379
+        ],
+        "height_y": 1.0,
+        "origin": {
+          "bottom_center": true
+        }
+      },
+      "lod2": {
+        "file": "stylized_wooden_cargo_crate_with_LOD2.glb",
+        "bytes": 430888,
+        "errors": [],
+        "warnings": [],
+        "ok": true,
+        "extensions_required": [],
+        "extensions_used": [],
+        "images": [
+          {
+            "index": 0,
+            "mimeType": "image/png",
+            "name": "lod2_normal",
+            "bytes": 148682,
+            "size": [
+              256,
+              256
+            ]
+          },
+          {
+            "index": 1,
+            "mimeType": "image/png",
+            "name": "lod2_baseColor",
+            "bytes": 140432,
+            "size": [
+              256,
+              256
+            ]
+          },
+          {
+            "index": 2,
+            "mimeType": "image/png",
+            "name": "lod2_metallicRoughness",
+            "bytes": 48079,
+            "size": [
+              256,
+              256
+            ]
+          }
+        ],
+        "materials": [
+          {
+            "index": 0,
+            "name": "lod2_material",
+            "alphaMode": "OPAQUE",
+            "doubleSided": true,
+            "baseColorTexture": 1,
+            "metallicRoughnessTexture": 2,
+            "normalTexture": 0,
+            "metallicFactor": 1.0,
+            "roughnessFactor": 1.0
+          }
+        ],
+        "meshes": [
+          {
+            "mesh": 0,
+            "name": "stylized_wooden_cargo_crate_with_LOD2_dec",
+            "primitive": 0,
+            "vertices": 2499,
+            "triangles": 1996,
+            "mode": 4,
+            "has_uv": true,
+            "has_normals": true,
+            "has_tangents": false,
+            "material": 0
+          }
+        ],
+        "triangles": 1996,
+        "vertices": 2499,
+        "mesh_count": 1,
+        "node_count": 1,
+        "bounds_min": [
+          -0.502465546131134,
+          0.0,
+          -0.5422907471656799
+        ],
+        "bounds_max": [
+          0.502465546131134,
+          1.0,
+          0.5422907471656799
+        ],
+        "dimensions_xyz": [
+          1.004931092262268,
+          1.0,
+          1.0845814943313599
+        ],
+        "height_y": 1.0,
+        "origin": {
+          "bottom_center": true
+        }
+      },
+      "collision": {
+        "file": "stylized_wooden_cargo_crate_with_collision.glb",
+        "bytes": 21472,
+        "errors": [],
+        "warnings": [],
+        "ok": true,
+        "extensions_required": [],
+        "extensions_used": [],
+        "images": [],
+        "materials": [],
+        "meshes": [
+          {
+            "mesh": 0,
+            "name": "stylized_wooden_cargo_crate_with_collision",
+            "primitive": 0,
+            "vertices": 600,
+            "triangles": 200,
+            "mode": 4,
+            "has_uv": true,
+            "has_normals": true,
+            "has_tangents": false,
+            "material": null
+          }
+        ],
+        "triangles": 200,
+        "vertices": 600,
+        "mesh_count": 1,
+        "node_count": 1,
+        "bounds_min": [
+          -0.5014658570289612,
+          -2.2653313862974755e-05,
+          -0.5440754890441895
+        ],
+        "bounds_max": [
+          0.5016975998878479,
+          1.0,
+          0.5440053939819336
+        ],
+        "dimensions_xyz": [
+          1.003163456916809,
+          1.0000226497650146,
+          1.088080883026123
+        ],
+        "height_y": 1.0000226497650146,
+        "origin": {
+          "bottom_center": true
+        }
+      }
+    }
+  },
+  "resources": {
+    "reference": {
+      "run_id": "e84b387dd445",
+      "state": "exited",
+      "pid": 16,
+      "returncode": 0,
+      "started": 1789253362.8403032,
+      "ended": 1789253701.2752051,
+      "peak_rss_mb": 21555,
+      "peak_gpu_used_mib": 32044,
+      "cancelled": false
+    },
+    "pixal3d": {
+      "run_id": "b4d6e9c3d96e",
+      "state": "exited",
+      "pid": 39,
+      "returncode": 0,
+      "started": 1789253701.48034,
+      "ended": 1789253948.4484823,
+      "peak_rss_mb": 27303,
+      "peak_gpu_used_mib": 19181,
+      "cancelled": false
+    },
+    "blender": {
+      "run_id": "be86ac3e3670",
+      "state": "exited",
+      "pid": 1086,
+      "returncode": 0,
+      "started": 1789257615.666197,
+      "ended": 1789257692.734095,
+      "peak_rss_mb": 3152,
+      "peak_gpu_used_mib": 0,
+      "cancelled": false
+    }
+  },
+  "asset": {
+    "kind": "optimized static asset (decimated); not animation-ready topology, no rig",
+    "master": "master.glb (untouched Pixal3D export, PNG textures)",
+    "optimized": "stylized_wooden_cargo_crate_with.glb",
+    "lods": [
+      {
+        "file": "stylized_wooden_cargo_crate_with_LOD1.glb",
+        "fraction": 0.5,
+        "target_triangles": 3999,
+        "maps": {
+          "base_color": "baked",
+          "metallic": "baked",
+          "roughness": "baked",
+          "alpha": "opaque",
+          "normal": "baked_from_master",
+          "texture_size": 512
+        },
+        "reduction": {
+          "triangles": 3997,
+          "result_error_relative": 0.01380657497793436,
+          "target_error_relative": 0.03,
+          "reached": true,
+          "simplifier": "meshoptimizer.simplifyWithAttributes(normals w=0.7, PRUNE)"
+        },
+        "vertices": 2005,
+        "triangles": 3997,
+        "has_uv": true,
+        "bounds_min": [
+          -0.5010751485824585,
+          -0.5440754890441895,
+          0.0
+        ],
+        "bounds_max": [
+          0.5010751485824585,
+          0.5440754890441895,
+          1.0
+        ],
+        "dimensions_m": [
+          1.002150297164917,
+          1.088150978088379,
+          1.0
+        ]
+      },
+      {
+        "file": "stylized_wooden_cargo_crate_with_LOD2.glb",
+        "fraction": 0.25,
+        "target_triangles": 1999,
+        "maps": {
+          "base_color": "baked",
+          "metallic": "baked",
+          "roughness": "baked",
+          "alpha": "opaque",
+          "normal": "baked_from_master",
+          "texture_size": 256
+        },
+        "reduction": {
+          "triangles": 1996,
+          "result_error_relative": 0.029190635308623314,
+          "target_error_relative": 0.03,
+          "reached": true,
+          "simplifier": "meshoptimizer.simplifyWithAttributes(normals w=0.7, PRUNE)"
+        },
+        "vertices": 1003,
+        "triangles": 1996,
+        "has_uv": true,
+        "bounds_min": [
+          -0.502465546131134,
+          -0.5422907471656799,
+          0.0
+        ],
+        "bounds_max": [
+          0.502465546131134,
+          0.5422907471656799,
+          1.0
+        ],
+        "dimensions_m": [
+          1.004931092262268,
+          1.0845814943313599,
+          1.0
+        ]
+      }
+    ],
+    "collision": "stylized_wooden_cargo_crate_with_collision.glb",
+    "previews": [
+      "previews/asset_front_left.png",
+      "previews/asset_front_right.png",
+      "previews/asset_back.png",
+      "previews/asset_top.png",
+      "previews/master_front_left.png",
+      "previews/contact_sheet.png"
+    ],
+    "units": "metres, glTF Y-up, origin at bottom centre"
+  },
+  "dependencies": {
+    "generated_at": "2026-09-12 19:56:25",
+    "sources": {
+      "TencentARC/Pixal3D": {
+        "url": "https://github.com/TencentARC/Pixal3D",
+        "branch": "master (default; NOT `paper`)",
+        "commit": "f7cf38429b0bd264f1995f0f8743a88b1c728b94",
+        "date": "2026-09-01"
+      },
+      "microsoft/TRELLIS.2": {
+        "url": "https://github.com/microsoft/TRELLIS.2",
+        "branch": "main",
+        "commit": "75fbf0183001ed9876c8dbb35de6b68552ee08bd",
+        "note": "base image trellis2:rtx5090 built from C:/Users/Zorro/TRELLIS.2/Dockerfile"
+      },
+      "microsoft/MoGe": {
+        "commit": "74fbce054ebed49800de42d0ad0e83495065719a",
+        "installed": "--no-deps (keeps base FlexGEMM build)"
+      },
+      "EasternJournalist/utils3d-moge": {
+        "commit": "62f09d58509485564e24d5d9f6aac9ee9ebc0c37"
+      },
+      "EasternJournalist/pipeline": {
+        "commit": "1c511390d90226c00c101f34b84df26a0f8789b4"
+      },
+      "valeoai/NAF": {
+        "commit": "37f2dfc180f2de53d98bd601109c0da0dd6b0f43",
+        "weights": "https://github.com/valeoai/NAF/releases/download/model/naf_release.pth",
+        "note": "torch.hub cache pinned to this commit under /models/torch/hub/valeoai_NAF_main"
+      },
+      "utils3d (Pixal3D-specified wheel)": {
+        "url": "https://github.com/LDYang694/Storages/releases/download/20260430/utils3d-0.0.2-py3-none-any.whl"
+      },
+      "NATTEN": {
+        "version": "0.21.0 (Pixal3D requirement)",
+        "build": "from sdist, NATTEN_CUDA_ARCH=12.0 (RTX 5090 sm_120), libnatten cutlass-fna verified"
+      }
+    },
+    "models": {
+      "Qwen/Qwen-Image-2512": {
+        "revision": "25468b98e3276ca6700de15c6628e51b7de54a26",
+        "size_gb": 57.7,
+        "role": "reference image (BF16)"
+      },
+      "TencentARC/Pixal3D": {
+        "revision": "b0cb2e1b794cab9aa0ac38a95d794a4d9337437f",
+        "size_gb": 29.0,
+        "role": "single-view ckpts (+17 GB *_mv optional)"
+      },
+      "Ruicheng/moge-2-vitl": {
+        "revision": "39c4d5e957afe587e04eec59dc2bcc3be5ecd968",
+        "size_gb": 1.3,
+        "role": "camera estimation"
+      },
+      "camenduru/dinov3-vitl16-pretrain-lvd1689m": {
+        "revision": "3c276edd87d6f6e569ff0c4400e086807d0f3881",
+        "size_gb": 1.2,
+        "role": "image features (ungated mirror used by upstream inference.py)"
+      },
+      "ZhengPeng7/BiRefNet": {
+        "revision": "e2bf8e4460fc8fa32bba5ea4d94b3233d367b0e4",
+        "size_gb": 0.4,
+        "role": "background matting; replaces gated briaai/RMBG-2.0 (STUDIO_REMBG_MODEL to switch)"
+      }
+    },
+    "host": {
+      "os": "Windows 11 Pro 26200",
+      "gpu": "NVIDIA GeForce RTX 5090 32 GB, GPU-52b50765-57a3-0ed4-78c9-4fa54276f65d",
+      "driver": "616.92",
+      "docker": "Docker Desktop (WSL2 backend), nvidia runtime",
+      "docker_vm_ram_gib": 46
+    },
+    "images": {
+      "studio": {
+        "image": "asset-studio/studio:local",
+        "id": "sha256:3f7dfdce7dca667eee616a8042beeb2ae1b262ca3bdf3593c9e121103b07d843",
+        "key_packages": {
+          "trimesh": "4.10.1",
+          "pillow": "12.3.0",
+          "fastapi": "0.141.1",
+          "uvicorn": "0.52.4",
+          "pydantic": "2.13.5",
+          "pygltflib": "1.16.5",
+          "numpy": "2.5.3"
+        },
+        "all_packages": {
+          "annotated_doc": "0.0.5",
+          "annotated_types": "0.8.0",
+          "anyio": "4.15.1",
+          "certifi": "2026.7.22",
+          "click": "8.5.0",
+          "dataclasses_json": "0.6.7",
+          "deprecated": "1.3.1",
+          "fastapi": "0.141.1",
+          "h11": "0.16.0",
+          "httpcore": "1.0.9",
+          "httptools": "0.8.0",
+          "httpx": "0.28.1",
+          "idna": "3.19",
+          "iniconfig": "2.3.0",
+          "marshmallow": "3.26.2",
+          "mypy_extensions": "1.1.0",
+          "numpy": "2.5.3",
+          "packaging": "26.3",
+          "pillow": "12.3.0",
+          "pluggy": "1.6.0",
+          "pydantic": "2.13.5",
+          "pydantic_core": "2.46.5",
+          "pygltflib": "1.16.5",
+          "pygments": "2.21.0",
+          "pytest": "9.1.1",
+          "python_dotenv": "1.2.3",
+          "pyyaml": "6.0.3",
+          "starlette": "1.6.0",
+          "trimesh": "4.10.1",
+          "typing_inspect": "0.9.0",
+          "typing_inspection": "0.4.4",
+          "typing_extensions": "4.16.0",
+          "uvicorn": "0.52.4",
+          "uvloop": "0.22.1",
+          "watchfiles": "1.2.0",
+          "websockets": "17.1",
+          "wrapt": "2.4.1"
+        }
+      },
+      "image-worker": {
+        "image": "asset-studio/image-worker:local",
+        "id": "sha256:eecae9d1cf1798b507a9bc13e92500ce2b7684067b44dfea74b4432bec248dda",
+        "key_packages": {
+          "torch": "2.11.0+cu128",
+          "torchvision": "0.26.0+cu128",
+          "triton": "3.6.0",
+          "diffusers": "0.40.0",
+          "transformers": "5.17.0",
+          "accelerate": "1.15.0",
+          "huggingface_hub": "1.31.0",
+          "safetensors": "0.8.0",
+          "pillow": "12.0.0",
+          "numpy": "2.4.6"
+        },
+        "all_packages": {
+          "accelerate": "1.15.0",
+          "annotated_doc": "0.0.5",
+          "anyio": "4.15.1",
+          "certifi": "2026.7.22",
+          "charset_normalizer": "3.5.1",
+          "click": "8.5.0",
+          "cuda_bindings": "12.9.7",
+          "cuda_pathfinder": "1.6.0",
+          "cuda_toolkit": "12.8.1",
+          "diffusers": "0.40.0",
+          "filelock": "3.32.3",
+          "fsspec": "2026.7.0",
+          "h11": "0.16.0",
+          "hf_xet": "1.6.0",
+          "httpcore": "1.0.9",
+          "httpx": "0.28.1",
+          "huggingface_hub": "1.31.0",
+          "idna": "3.19",
+          "importlib_metadata": "9.0.1",
+          "jinja2": "3.1.6",
+          "markdown_it_py": "4.2.0",
+          "markupsafe": "3.0.3",
+          "mdurl": "0.1.2",
+          "mpmath": "1.3.0",
+          "networkx": "3.6.1",
+          "numpy": "2.4.6",
+          "nvidia_cublas_cu12": "12.8.4.1",
+          "nvidia_cuda_cupti_cu12": "12.8.90",
+          "nvidia_cuda_nvrtc_cu12": "12.8.93",
+          "nvidia_cuda_runtime_cu12": "12.8.90",
+          "nvidia_cudnn_cu12": "9.19.0.56",
+          "nvidia_cufft_cu12": "11.3.3.83",
+          "nvidia_cufile_cu12": "1.13.1.3",
+          "nvidia_curand_cu12": "10.3.9.90",
+          "nvidia_cusolver_cu12": "11.7.3.90",
+          "nvidia_cusparse_cu12": "12.5.8.93",
+          "nvidia_cusparselt_cu12": "0.7.1",
+          "nvidia_nccl_cu12": "2.28.9",
+          "nvidia_nvjitlink_cu12": "12.8.93",
+          "nvidia_nvshmem_cu12": "3.4.5",
+          "nvidia_nvtx_cu12": "12.8.90",
+          "packaging": "26.3",
+          "pillow": "12.0.0",
+          "protobuf": "7.36.1",
+          "psutil": "7.2.2",
+          "pygments": "2.21.0",
+          "pyyaml": "6.0.3",
+          "regex": "2026.9.10",
+          "requests": "2.34.2",
+          "rich": "15.0.0",
+          "safetensors": "0.8.0",
+          "scipy": "1.17.1",
+          "sentencepiece": "0.2.2",
+          "shellingham": "1.5.4",
+          "sympy": "1.14.0",
+          "tokenizers": "0.23.2",
+          "torch": "2.11.0+cu128",
+          "torchvision": "0.26.0+cu128",
+          "tqdm": "4.70.1",
+          "transformers": "5.17.0",
+          "triton": "3.6.0",
+          "typer": "0.27.2",
+          "typing_extensions": "4.16.0",
+          "urllib3": "2.7.0",
+          "zipp": "4.1.0"
+        }
+      },
+      "pixal3d-worker": {
+        "image": "asset-studio/pixal3d-worker:local",
+        "id": "sha256:41cb6f7a3ae365c0170c1e74eb77194089a79a3bbd18afdc7ce3434ccd44521f",
+        "key_packages": {
+          "torch": "2.11.0+cu128",
+          "torchvision": "0.26.0+cu128",
+          "triton": "3.6.0",
+          "diffusers": "0.37.1",
+          "transformers": "4.57.3",
+          "accelerate": "1.13.0",
+          "huggingface_hub": "0.36.2",
+          "safetensors": "0.8.0",
+          "natten": "0.21.0",
+          "flash_attn": "2.8.3",
+          "nvdiffrast": "file:///tmp/nvdiffrast",
+          "o_voxel": "file:///workspace/o-voxel",
+          "cumesh": "file:///tmp/cumesh",
+          "flex_gemm": "file:///tmp/flexgemm",
+          "utils3d": "git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8",
+          "utils3d_moge": "git+https://github.com/EasternJournalist/utils3d-moge.git@62f09d58509485564e24d5d9f6aac9ee9ebc0c37",
+          "moge": "git+https://github.com/microsoft/MoGe.git@74fbce054ebed49800de42d0ad0e83495065719a",
+          "kornia": "0.8.2",
+          "timm": "1.0.22",
+          "trimesh": "4.10.1",
+          "pillow": "12.0.0",
+          "opencv-python-headless": "4.12.0.88",
+          "fastapi": "0.141.1",
+          "uvicorn": "0.52.4",
+          "pydantic": "2.12.4",
+          "numpy": "2.2.6",
+          "einops": "0.8.2"
+        },
+        "all_packages": {
+          "absl_py": "2.5.0",
+          "accelerate": "1.13.0",
+          "aiofiles": "24.1.0",
+          "annotated_doc": "0.0.5",
+          "annotated_types": "0.8.0",
+          "anyio": "4.15.1",
+          "brotli": "1.2.0",
+          "certifi": "2026.7.22",
+          "charset_normalizer": "3.5.1",
+          "click": "8.5.0",
+          "cmake": "4.1.0",
+          "contourpy": "1.3.3",
+          "cuda_bindings": "12.9.7",
+          "cuda_pathfinder": "1.6.0",
+          "cuda_toolkit": "12.8.1",
+          "cumesh": "file:///tmp/cumesh",
+          "cycler": "0.12.1",
+          "diffusers": "0.37.1",
+          "easydict": "1.13",
+          "einops": "0.8.2",
+          "fastapi": "0.141.1",
+          "ffmpy": "1.0.0",
+          "filelock": "3.32.3",
+          "flash_attn": "2.8.3",
+          "flex_gemm": "file:///tmp/flexgemm",
+          "fonttools": "4.65.0",
+          "fsspec": "2026.7.0",
+          "glcontext": "3.0.0",
+          "gradio": "6.0.1",
+          "gradio_client": "2.0.0",
+          "groovy": "0.1.2",
+          "grpcio": "1.83.1",
+          "h11": "0.16.0",
+          "hf_xet": "1.6.0",
+          "httpcore": "1.0.9",
+          "httpx": "0.28.1",
+          "huggingface_hub": "0.36.2",
+          "idna": "3.19",
+          "imageio": "2.37.2",
+          "imageio_ffmpeg": "0.6.0",
+          "importlib_metadata": "9.0.1",
+          "jinja2": "3.1.6",
+          "kiwisolver": "1.5.1",
+          "kornia": "0.8.2",
+          "kornia_rs": "0.1.14",
+          "lpips": "0.1.4",
+          "markdown": "3.10.3",
+          "markdown_it_py": "4.2.0",
+          "markupsafe": "3.0.3",
+          "matplotlib": "3.11.2",
+          "mdurl": "0.1.2",
+          "moderngl": "5.12.0",
+          "moge": "git+https://github.com/microsoft/MoGe.git@74fbce054ebed49800de42d0ad0e83495065719a",
+          "mpmath": "1.3.0",
+          "natten": "0.21.0",
+          "networkx": "3.6.1",
+          "ninja": "1.13.2",
+          "numpy": "2.2.6",
+          "nvdiffrast": "file:///tmp/nvdiffrast",
+          "nvdiffrec_render": "file:///tmp/nvdiffrec",
+          "nvidia_cublas_cu12": "12.8.4.1",
+          "nvidia_cuda_cupti_cu12": "12.8.90",
+          "nvidia_cuda_nvrtc_cu12": "12.8.93",
+          "nvidia_cuda_runtime_cu12": "12.8.90",
+          "nvidia_cudnn_cu12": "9.19.0.56",
+          "nvidia_cufft_cu12": "11.3.3.83",
+          "nvidia_cufile_cu12": "1.13.1.3",
+          "nvidia_curand_cu12": "10.3.9.90",
+          "nvidia_cusolver_cu12": "11.7.3.90",
+          "nvidia_cusparse_cu12": "12.5.8.93",
+          "nvidia_cusparselt_cu12": "0.7.1",
+          "nvidia_nccl_cu12": "2.28.9",
+          "nvidia_nvjitlink_cu12": "12.8.93",
+          "nvidia_nvshmem_cu12": "3.4.5",
+          "nvidia_nvtx_cu12": "12.8.90",
+          "o_voxel": "file:///workspace/o-voxel",
+          "opencv_python_headless": "4.12.0.88",
+          "orjson": "3.12.0",
+          "packaging": "26.3",
+          "pandas": "2.3.3",
+          "pillow": "12.0.0",
+          "pipeline": "git+https://github.com/EasternJournalist/pipeline.git@1c511390d90226c00c101f34b84df26a0f8789b4",
+          "plyfile": "1.1.3",
+          "protobuf": "7.36.1",
+          "psutil": "7.2.2",
+          "pydantic": "2.12.4",
+          "pydantic_core": "2.41.5",
+          "pydub": "0.25.1",
+          "pygments": "2.21.0",
+          "pyparsing": "3.3.2",
+          "python_dateutil": "2.9.0.post0",
+          "python_multipart": "0.0.32",
+          "pytz": "2026.3.post1",
+          "pyyaml": "6.0.3",
+          "regex": "2026.9.10",
+          "requests": "2.34.2",
+          "rich": "15.0.0",
+          "safehttpx": "0.1.7",
+          "safetensors": "0.8.0",
+          "scipy": "1.17.1",
+          "semantic_version": "2.10.0",
+          "shellingham": "1.5.4",
+          "six": "1.17.0",
+          "starlette": "0.52.1",
+          "sympy": "1.14.0",
+          "tensorboard": "2.21.0",
+          "tensorboard_data_server": "0.7.2",
+          "timm": "1.0.22",
+          "tokenizers": "0.22.2",
+          "tomlkit": "0.13.3",
+          "torch": "2.11.0+cu128",
+          "torchvision": "0.26.0+cu128",
+          "tqdm": "4.67.1",
+          "transformers": "4.57.3",
+          "trimesh": "4.10.1",
+          "triton": "3.6.0",
+          "typer": "0.27.2",
+          "typing_inspection": "0.4.4",
+          "typing_extensions": "4.16.0",
+          "tzdata": "2026.4",
+          "urllib3": "2.7.0",
+          "utils3d": "git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8",
+          "utils3d_moge": "git+https://github.com/EasternJournalist/utils3d-moge.git@62f09d58509485564e24d5d9f6aac9ee9ebc0c37",
+          "uvicorn": "0.52.4",
+          "werkzeug": "3.1.8",
+          "zipp": "4.1.0",
+          "zstandard": "0.25.0"
+        }
+      },
+      "blender": {
+        "image": "asset-studio/blender:local",
+        "id": "sha256:72618240b1055f7a2b114fba1c34b8c5c386fb736fbc1cfdd1d03f62e55a9b79",
+        "key_packages": {
+          "trimesh": "4.10.1",
+          "pillow": "12.3.0",
+          "bpy": "4.5.13",
+          "pygltflib": "1.16.5",
+          "numpy": "1.26.4"
+        },
+        "all_packages": {
+          "bpy": "4.5.13",
+          "certifi": "2026.7.22",
+          "charset_normalizer": "3.5.1",
+          "cython": "3.3.0",
+          "dataclasses_json": "0.6.7",
+          "deprecated": "1.3.1",
+          "fast_simplification": "0.2.0",
+          "idna": "3.19",
+          "marshmallow": "3.26.2",
+          "meshoptimizer": "0.2.30a0",
+          "mypy_extensions": "1.1.0",
+          "numpy": "1.26.4",
+          "packaging": "26.3",
+          "pillow": "12.3.0",
+          "psutil": "7.2.2",
+          "pygltflib": "1.16.5",
+          "requests": "2.34.2",
+          "trimesh": "4.10.1",
+          "typing_inspect": "0.9.0",
+          "typing_extensions": "4.16.0",
+          "urllib3": "2.7.0",
+          "wrapt": "2.4.1",
+          "zstandard": "0.25.0"
+        }
+      }
+    },
+    "summary": {
+      "studio": {
+        "trimesh": "4.10.1",
+        "pillow": "12.3.0",
+        "fastapi": "0.141.1",
+        "uvicorn": "0.52.4",
+        "pydantic": "2.13.5",
+        "pygltflib": "1.16.5",
+        "numpy": "2.5.3"
+      },
+      "image-worker": {
+        "torch": "2.11.0+cu128",
+        "torchvision": "0.26.0+cu128",
+        "triton": "3.6.0",
+        "diffusers": "0.40.0",
+        "transformers": "5.17.0",
+        "accelerate": "1.15.0",
+        "huggingface_hub": "1.31.0",
+        "safetensors": "0.8.0",
+        "pillow": "12.0.0",
+        "numpy": "2.4.6"
+      },
+      "pixal3d-worker": {
+        "torch": "2.11.0+cu128",
+        "torchvision": "0.26.0+cu128",
+        "triton": "3.6.0",
+        "diffusers": "0.37.1",
+        "transformers": "4.57.3",
+        "accelerate": "1.13.0",
+        "huggingface_hub": "0.36.2",
+        "safetensors": "0.8.0",
+        "natten": "0.21.0",
+        "flash_attn": "2.8.3",
+        "nvdiffrast": "file:///tmp/nvdiffrast",
+        "o_voxel": "file:///workspace/o-voxel",
+        "cumesh": "file:///tmp/cumesh",
+        "flex_gemm": "file:///tmp/flexgemm",
+        "utils3d": "git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8",
+        "utils3d_moge": "git+https://github.com/EasternJournalist/utils3d-moge.git@62f09d58509485564e24d5d9f6aac9ee9ebc0c37",
+        "moge": "git+https://github.com/microsoft/MoGe.git@74fbce054ebed49800de42d0ad0e83495065719a",
+        "kornia": "0.8.2",
+        "timm": "1.0.22",
+        "trimesh": "4.10.1",
+        "pillow": "12.0.0",
+        "opencv-python-headless": "4.12.0.88",
+        "fastapi": "0.141.1",
+        "uvicorn": "0.52.4",
+        "pydantic": "2.12.4",
+        "numpy": "2.2.6",
+        "einops": "0.8.2"
+      },
+      "blender": {
+        "trimesh": "4.10.1",
+        "pillow": "12.3.0",
+        "bpy": "4.5.13",
+        "pygltflib": "1.16.5",
+        "numpy": "1.26.4"
+      }
+    }
+  },
+  "artifacts": [
+    {
+      "name": "manifest.json",
+      "bytes": 52151,
+      "sha256": "3c7f424654ec4a87410c2691d464450e8d4d8fc7e5698f937b9e2e93f9983a85",
+      "url": "/v1/jobs/20260912-224921-e6af094a/artifacts/manifest.json"
+    },
+    {
+      "name": "master.glb",
+      "bytes": 65458200,
+      "sha256": "244b34ca31d233ec916f70fa365db9f7ebadc2c840d421998dab85593019dd42",
+      "url": "/v1/jobs/20260912-224921-e6af094a/artifacts/master.glb"
+    },
+    {
+      "name": "previews/asset_back.png",
+      "bytes": 322900,
+      "sha256": "a2d624e4d43098ca0ccc06b938f5e31949fd50d5f7a5718172857b9f6d9f7a6a",
+      "url": "/v1/jobs/20260912-224921-e6af094a/artifacts/previews/asset_back.png"
+    },
+    {
+      "name": "previews/asset_front_left.png",
+      "bytes": 306559,
+      "sha256": "a35f9a382363635e1107e6f3dce96d059fce4deeb4a1e13500f33b2fe88470c4",
+      "url": "/v1/jobs/20260912-224921-e6af094a/artifacts/previews/asset_front_left.png"
+    },
+    {
+      "name": "previews/asset_front_right.png",
+      "bytes": 306057,
+      "sha256": "7d2a55b32ed8e22c48f80069a3a1a305337317233336398515940e6140c8d816",
+      "url": "/v1/jobs/20260912-224921-e6af094a/artifacts/previews/asset_front_right.png"
+    },
+    {
+      "name": "previews/asset_top.png",
+      "bytes": 307754,
+      "sha256": "f0d319cd84567e5f7ffe815fc48d272c7a16510957b701b2b04bddc7237e489b",
+      "url": "/v1/jobs/20260912-224921-e6af094a/artifacts/previews/asset_top.png"
+    },
+    {
+      "name": "previews/contact_sheet.png",
+      "bytes": 1027076,
+      "sha256": "d2b2ccbfb69d74b8e03dcc97a9c1dd27e15dd3982e89e2e3309fd94d2a6b88a5",
+      "url": "/v1/jobs/20260912-224921-e6af094a/artifacts/previews/contact_sheet.png"
+    },
+    {
+      "name": "previews/master_front_left.png",
+      "bytes": 306737,
+      "sha256": "020d4b5b80e27286de6c418e654e5109fcc3616ae921d49a9a749956efb0bdd1",
+      "url": "/v1/jobs/20260912-224921-e6af094a/artifacts/previews/master_front_left.png"
+    },
+    {
+      "name": "reference.png",
+      "bytes": 1614642,
+      "sha256": "71a92fdbf3475585d513d2eff9cd05c7f14a62b5061121186fbfdb7bccda18e4",
+      "url": "/v1/jobs/20260912-224921-e6af094a/artifacts/reference.png"
+    },
+    {
+      "name": "reference_candidates/cand_00.png",
+      "bytes": 1614642,
+      "sha256": "71a92fdbf3475585d513d2eff9cd05c7f14a62b5061121186fbfdb7bccda18e4",
+      "url": "/v1/jobs/20260912-224921-e6af094a/artifacts/reference_candidates/cand_00.png"
+    },
+    {
+      "name": "reference_candidates/selection.json",
+      "bytes": 1450,
+      "sha256": "e55c74955345a8ba6dde463d0396d57a2c1d82ce293ab48d2de7a06ec129804f",
+      "url": "/v1/jobs/20260912-224921-e6af094a/artifacts/reference_candidates/selection.json"
+    },
+    {
+      "name": "reference_preprocessed.png",
+      "bytes": 519303,
+      "sha256": "ece68929c52c8df601159a167dcc588234b581dca79d8e1f402f98b0b9f38be6",
+      "url": "/v1/jobs/20260912-224921-e6af094a/artifacts/reference_preprocessed.png"
+    },
+    {
+      "name": "stylized_wooden_cargo_crate_with.glb",
+      "bytes": 4088836,
+      "sha256": "ed9c26abde984d4dfb9fc0893438b83d1e16a48576edc444fee2550a626c2c44",
+      "url": "/v1/jobs/20260912-224921-e6af094a/artifacts/stylized_wooden_cargo_crate_with.glb"
+    },
+    {
+      "name": "stylized_wooden_cargo_crate_with_LOD1.glb",
+      "bytes": 1365604,
+      "sha256": "bf8f49b6f8566f131cb40cef37ac370630f92ffbfcbf7c29c8a2d91f33cbbe12",
+      "url": "/v1/jobs/20260912-224921-e6af094a/artifacts/stylized_wooden_cargo_crate_with_LOD1.glb"
+    },
+    {
+      "name": "stylized_wooden_cargo_crate_with_LOD2.glb",
+      "bytes": 430888,
+      "sha256": "46db000045cf1b7af3377a85553a3dd82c918f131e26f9046908ab0d388cce9a",
+      "url": "/v1/jobs/20260912-224921-e6af094a/artifacts/stylized_wooden_cargo_crate_with_LOD2.glb"
+    },
+    {
+      "name": "stylized_wooden_cargo_crate_with_collision.glb",
+      "bytes": 21472,
+      "sha256": "0163163f8961f9b74c5022c86e6d72f3d2c8f6dffb44b022dc7f4fda174bac38",
+      "url": "/v1/jobs/20260912-224921-e6af094a/artifacts/stylized_wooden_cargo_crate_with_collision.glb"
+    },
+    {
+      "name": "textures/asset_baseColor.png",
+      "bytes": 1606206,
+      "sha256": "4037493584cb14b1a92fe9b1d18338a8991e5925ae7abb63cfbedcf9054120ac",
+      "url": "/v1/jobs/20260912-224921-e6af094a/artifacts/textures/asset_baseColor.png"
+    },
+    {
+      "name": "textures/asset_metallicRoughness.png",
+      "bytes": 478625,
+      "sha256": "89a95db4f5f660e7d9d323626a0cac05b996c90faf5d6ba5830723efad8c2cb9",
+      "url": "/v1/jobs/20260912-224921-e6af094a/artifacts/textures/asset_metallicRoughness.png"
+    },
+    {
+      "name": "textures/asset_normal.png",
+      "bytes": 1679237,
+      "sha256": "0259f00d9ac90185c5c18f028688dbfe375c05b47b122319bad766a1082c9675",
+      "url": "/v1/jobs/20260912-224921-e6af094a/artifacts/textures/asset_normal.png"
+    },
+    {
+      "name": "textures/lod1_baseColor.png",
+      "bytes": 494351,
+      "sha256": "b74e0bea765f863f71b9e3b9d1730bee5c3fb0d0f97e47916864a18e9e992313",
+      "url": "/v1/jobs/20260912-224921-e6af094a/artifacts/textures/lod1_baseColor.png"
+    },
+    {
+      "name": "textures/lod1_metallicRoughness.png",
+      "bytes": 160748,
+      "sha256": "70fcdd49ac4cd5242cc764989d6a2ad6b15334ac43ced3c79d0ab94024b740e2",
+      "url": "/v1/jobs/20260912-224921-e6af094a/artifacts/textures/lod1_metallicRoughness.png"
+    },
+    {
+      "name": "textures/lod1_normal.png",
+      "bytes": 528700,
+      "sha256": "560effb5da0885ac006242725ea871d03b9b077446bdc89f385e1f04899bc7ba",
+      "url": "/v1/jobs/20260912-224921-e6af094a/artifacts/textures/lod1_normal.png"
+    },
+    {
+      "name": "textures/lod2_baseColor.png",
+      "bytes": 140432,
+      "sha256": "70687c09c1b129642ed86a9d80b65d14f9b211dab13cd537eda305766ff6799c",
+      "url": "/v1/jobs/20260912-224921-e6af094a/artifacts/textures/lod2_baseColor.png"
+    },
+    {
+      "name": "textures/lod2_metallicRoughness.png",
+      "bytes": 48079,
+      "sha256": "abe309201a69340571faf7366830879cdd23a21a4757d2f5580001cc210850ef",
+      "url": "/v1/jobs/20260912-224921-e6af094a/artifacts/textures/lod2_metallicRoughness.png"
+    },
+    {
+      "name": "textures/lod2_normal.png",
+      "bytes": 148682,
+      "sha256": "bd3be82b2e86d3643554d16096e3dcbd378a8061de8b961d2da67b764c86005e",
+      "url": "/v1/jobs/20260912-224921-e6af094a/artifacts/textures/lod2_normal.png"
+    }
+  ]
+}

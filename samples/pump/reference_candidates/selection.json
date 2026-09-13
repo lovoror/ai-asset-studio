@@ -1,0 +1,86 @@
+{
+  "selection": {
+    "selected": "candidates/cand_00.png",
+    "method": "technical_checks",
+    "ranking": [
+      {
+        "file": "candidates/cand_00.png",
+        "score": 1.0,
+        "reasons": null
+      },
+      {
+        "file": "candidates/cand_01.png",
+        "score": 1.0,
+        "reasons": null
+      }
+    ]
+  },
+  "candidates": [
+    {
+      "file": "candidates/cand_00.png",
+      "seed": 12345,
+      "time_s": 296.94,
+      "metrics": {
+        "bg_color": [
+          0.7372549176216125,
+          0.7490196228027344,
+          0.7215686440467834
+        ],
+        "bg_std": 0.006495160516351461,
+        "fg_fraction": 0.27061994211786905,
+        "fg_components": 1,
+        "bbox": [
+          278,
+          200,
+          1055,
+          1191
+        ],
+        "margins": {
+          "left": 0.20933734939759036,
+          "right": 0.20481927710843373,
+          "top": 0.15060240963855423,
+          "bottom": 0.10240963855421686
+        },
+        "clipped": false,
+        "center_offset": 0.02379446582729664,
+        "bbox_fill": 0.6183931607098433,
+        "sharpness": 0.004814323037862778,
+        "score": 1.0,
+        "reasons": []
+      }
+    },
+    {
+      "file": "candidates/cand_01.png",
+      "seed": 12346,
+      "time_s": 287.72,
+      "metrics": {
+        "bg_color": [
+          0.7411764860153198,
+          0.7490196228027344,
+          0.729411780834198
+        ],
+        "bg_std": 0.006804425735026598,
+        "fg_fraction": 0.29682566863840903,
+        "fg_components": 1,
+        "bbox": [
+          271,
+          151,
+          1031,
+          1218
+        ],
+        "margins": {
+          "left": 0.20406626506024098,
+          "right": 0.22289156626506024,
+          "top": 0.11370481927710843,
+          "bottom": 0.08207831325301204
+        },
+        "clipped": false,
+        "center_offset": 0.018278970020991527,
+        "bbox_fill": 0.6440827907297219,
+        "sharpness": 0.004679875448346138,
+        "score": 1.0,
+        "reasons": []
+      }
+    }
+  ]
+}

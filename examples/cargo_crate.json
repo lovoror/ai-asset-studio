@@ -1,0 +1,9 @@
+{
+  "prompt": "Stylized wooden cargo crate with riveted metal corner brackets and a plain diagonal hazard stripe, no lettering, for a mobile factory game",
+  "style": "mobile_factory",
+  "quality": "balanced",
+  "seed": 7,
+  "height_m": 1.0,
+  "target_triangles": 8000,
+  "texture_size": 1024
+}

@@ -1,0 +1,1623 @@
+{
+  "job_id": "20260912-231658-f8dcb166",
+  "version": "0.1.0",
+  "created_at": 1789255018.7029784,
+  "finished_at": 1789257848.5462804,
+  "request": {
+    "prompt": "Ceramic coffee mug with a wide open handle, glossy teal glaze with a cream interior, simple clean shape",
+    "style": "clean_product",
+    "quality": "balanced",
+    "seed": 3,
+    "height_m": 0.1,
+    "width_m": null,
+    "depth_m": null,
+    "target_triangles": 6000,
+    "texture_size": 1024,
+    "generate_lods": true,
+    "lod_fractions": null,
+    "generate_collision": true,
+    "collision_triangles": null,
+    "allow_quality_fallback": true,
+    "materials": null,
+    "palette": null,
+    "negative_extra": null,
+    "reference_candidates": null,
+    "render_previews": true,
+    "preview_size": 512,
+    "master_texture_size": null,
+    "master_triangles": null
+  },
+  "input_mode": "text",
+  "settings_effective": {
+    "seed": 3,
+    "style": "clean_product",
+    "quality": "balanced",
+    "reference": {
+      "candidates": 1,
+      "steps": 50,
+      "true_cfg_scale": 4.0,
+      "width": 1328,
+      "height": 1328,
+      "mode": "bf16_split",
+      "gpu_resident_blocks": 36
+    },
+    "pixal3d": {
+      "resolution": 1024,
+      "low_vram": true,
+      "max_num_tokens": 49152,
+      "attn_backend": "flash_attn"
+    },
+    "master": {
+      "decimation_target": 1000000,
+      "texture_size": 4096,
+      "remesh": true,
+      "remesh_band": 1,
+      "remesh_project": 0
+    },
+    "optimize": {
+      "target_triangles": 6000,
+      "texture_size": 1024,
+      "generate_lods": true,
+      "lod_fractions": [
+        0.5,
+        0.25
+      ],
+      "generate_collision": true,
+      "collision_triangles": 256,
+      "height_m": 0.1,
+      "width_m": null,
+      "depth_m": null,
+      "render_previews": true,
+      "preview_size": 512
+    },
+    "fallback": [
+      {
+        "stage": "reference",
+        "set": {
+          "gpu_resident_blocks": 16
+        },
+        "quality_loss": false
+      },
+      {
+        "stage": "pixal3d",
+        "set": {
+          "max_num_tokens": 32768
+        },
+        "quality_loss": true
+      },
+      {
+        "stage": "master",
+        "set": {
+          "texture_size": 2048
+        },
+        "quality_loss": true
+      }
+    ],
+    "allow_quality_fallback": true,
+    "input_mode": "text"
+  },
+  "settings_requested_overrides": {},
+  "fallbacks_applied": [],
+  "warnings": [],
+  "timings_s": {
+    "reference": 346.53,
+    "pixal3d": 250.37,
+    "blender": 74.1,
+    "validate": 0.09,
+    "package": 0.04,
+    "total": 1409.34
+  },
+  "stages": {
+    "reference": {
+      "selected": "candidates/cand_00.png",
+      "selection": {
+        "selected": "candidates/cand_00.png",
+        "method": "technical_checks",
+        "ranking": [
+          {
+            "file": "candidates/cand_00.png",
+            "score": 0.9703304493911822,
+            "reasons": [
+              "off-centre (0.07)"
+            ]
+          }
+        ]
+      },
+      "stats": {
+        "timings_s": {
+          "load_text_encoder_s": 11.78,
+          "encode_s": 1.3,
+          "load_transformer_s": 10.98,
+          "generate_s": 305.84,
+          "per_candidate_s": [
+            305.84
+          ],
+          "total_s": 340.39
+        },
+        "vram": {
+          "text_encoder_max_reserved_mib": 15980,
+          "after_load_reserved_mib": 23682,
+          "generate_max_reserved_mib": 31276,
+          "generate_max_allocated_mib": 30790
+        },
+        "peak_rss_mb": 22210,
+        "transformer_blocks": 60,
+        "gpu_resident_blocks": 36
+      },
+      "prompt": "Ceramic coffee mug with a wide open handle, glossy teal glaze with a cream interior, simple clean shape. clean product-visualisation render of a single manufactured object, precise smooth surfaces, accurate materials, catalogue clarity. Real-world scale: height about 0.1 m; proportions consistent with that scale. Background: plain flat white studio background, uniform, no horizon line, no floor texture. Composition: exactly one object, the entire object fully visible and centred with generous empty margin on all sides, three-quarter front view from slightly above, mild perspective with a moderate focal length, no fisheye distortion, soft even neutral studio illumination, no dramatic cast shadows, no depth of field, no motion blur, sharp focus over the whole object, clear silhouette with visible separation between the major components, no ground clutter, no scenery, no props, no people, absolutely no text, lettering, numbers, logos, stencilled markings, decals, signage or labels anywhere on the object. Rendered as a clean 3D asset presentation image, high detail, physically based materials.",
+      "negative_prompt": "text, letters, lettering, words, numbers, typography, labels, stencil text, decals with text, signage, logo, watermark, signature, border, frame, vignette, multiple objects, duplicate objects, cropped, cut off, out of frame, partially visible, busy background, scenery, landscape, interior, floor grid, table, hands, people, depth of field, bokeh, motion blur, blurry, lens flare, fisheye, wide-angle distortion, harsh shadows, dramatic lighting, rim light, glow, reflections on the floor, low quality, deformed, disfigured, low resolution, jpeg artifacts, oversaturated, wear, dirt, scratches, stylization",
+      "effective": {
+        "width": 1328,
+        "height": 1328,
+        "steps": 50,
+        "true_cfg_scale": 4.0,
+        "mode": "bf16_split",
+        "gpu_resident_blocks": 36,
+        "seeds": [
+          3
+        ]
+      },
+      "source": null,
+      "num_views": null
+    },
+    "pixal3d": {
+      "camera_params": {
+        "camera_angle_x": 0.3727665755200471,
+        "distance": 2.651507616043091,
+        "mesh_scale": 1.0
+      },
+      "mesh_stats": {
+        "raw_vertices": 4980239,
+        "raw_faces": 9983488,
+        "grid_resolution": 1024,
+        "requested_resolution": 1024,
+        "master_vertices": 652340,
+        "master_faces": 969785,
+        "master_bounds": [
+          [
+            -0.43365806341171265,
+            -0.4310894012451172,
+            -0.3814451992511749
+          ],
+          [
+            0.4352959394454956,
+            0.4705195426940918,
+            0.45953208208084106
+          ]
+        ]
+      },
+      "stats": {
+        "timings_s": {
+          "load_s": 48.08,
+          "preprocess_s": 15.11,
+          "camera_s": 4.58,
+          "generate_s": 52.51,
+          "export_s": 124.63,
+          "total_s": 246.5
+        },
+        "vram": {
+          "load": {
+            "max_allocated_mib": 0,
+            "max_reserved_mib": 0
+          },
+          "preprocess_camera": {
+            "max_allocated_mib": 3189,
+            "max_reserved_mib": 3634
+          },
+          "generate": {
+            "max_allocated_mib": 14567,
+            "max_reserved_mib": 15316
+          },
+          "export": {
+            "max_allocated_mib": 7174,
+            "max_reserved_mib": 8744
+          }
+        },
+        "peak_rss_mb": 27372
+      },
+      "effective": {
+        "resolution": 1024,
+        "grid_resolution": 1024,
+        "low_vram": true,
+        "max_num_tokens": 49152,
+        "attn_backend": "flash_attn",
+        "seed": 3,
+        "sampler_overrides": {},
+        "export": {
+          "decimation_target": 1000000,
+          "texture_size": 4096,
+          "remesh": true,
+          "remesh_band": 1,
+          "remesh_project": 0
+        },
+        "rembg_model": "ZhengPeng7/BiRefNet",
+        "pipeline_dir": "/models/pixal3d-local"
+      }
+    },
+    "blender": {
+      "stats": {
+        "master_imported": {
+          "vertices": 652340,
+          "triangles": 969783,
+          "has_uv": true,
+          "bounds_min": [
+            -0.43365806341171265,
+            -0.45953208208084106,
+            -0.4310894012451172
+          ],
+          "bounds_max": [
+            0.4352959394454956,
+            0.3814451992511749,
+            0.4705195426940918
+          ],
+          "dimensions_m": [
+            0.8689540028572083,
+            0.8409773111343384,
+            0.901608943939209
+          ]
+        },
+        "normalise": {
+          "scale_factor": 0.11091283052616048,
+          "scale_basis": "height_m",
+          "dimensions_m": {
+            "x": 0.0963781476020813,
+            "y": 0.09327517449855804,
+            "z": 0.10000000149011612
+          },
+          "origin": "bottom_center"
+        },
+        "cleanup": {
+          "vertices_before": 652340,
+          "faces_before": 969783,
+          "loose_or_degenerate_faces_removed": 243,
+          "loose_vertices_removed": 0,
+          "components": 2,
+          "debris_components_removed": 0,
+          "vertices_after": 652340,
+          "faces_after": 969540,
+          "note": "disconnected parts preserved (only tiny debris removed)"
+        },
+        "master_material": {
+          "alpha_mode": "OPAQUE",
+          "double_sided": false,
+          "alpha_cutoff": 0.5
+        },
+        "master_maps": {
+          "base_color": "4096x4096",
+          "metallic": "4096x4096",
+          "roughness": "4096x4096",
+          "alpha": null,
+          "normal": null
+        },
+        "asset": {
+          "method": "decimate_rebake",
+          "master_triangles": 969540,
+          "target_triangles": 6000,
+          "triangles": 6000,
+          "proxy": null,
+          "reduction": {
+            "triangles": 6000,
+            "result_error_relative": 0.01434299536049366,
+            "target_error_relative": 0.03,
+            "reached": true,
+            "simplifier": "meshoptimizer.simplifyWithAttributes(normals w=0.7, PRUNE)"
+          },
+          "bake_base_color_s": 1.49,
+          "bake_roughness_s": 1.09,
+          "bake_metallic_s": 1.09,
+          "bake_missed_texels": 400800,
+          "bake_normal_s": 0.73,
+          "maps": {
+            "base_color": "baked",
+            "metallic": "baked",
+            "roughness": "baked",
+            "alpha": "opaque",
+            "normal": "baked_from_master"
+          },
+          "uv": "smart_uv_project (new)",
+          "vertices": 3000,
+          "has_uv": true,
+          "bounds_min": [
+            -0.0481417141854763,
+            -0.046579353511333466,
+            0.0
+          ],
+          "bounds_max": [
+            0.0481417141854763,
+            0.046579353511333466,
+            0.09999999403953552
+          ],
+          "dimensions_m": [
+            0.0962834283709526,
+            0.09315870702266693,
+            0.09999999403953552
+          ]
+        },
+        "collision": {
+          "type": "convex_hull_decimated",
+          "target_triangles": 256,
+          "vertices": 129,
+          "triangles": 254,
+          "has_uv": true,
+          "bounds_min": [
+            -0.04827940836548805,
+            -0.04651420935988426,
+            -3.358833055244759e-05
+          ],
+          "bounds_max": [
+            0.048095788806676865,
+            0.046578548848629,
+            0.09995788335800171
+          ],
+          "dimensions_m": [
+            0.09637519717216492,
+            0.09309275448322296,
+            0.09999147057533264
+          ]
+        },
+        "timings_s": {
+          "import_s": 0.69,
+          "normalise_cleanup_s": 2.57,
+          "optimize_s": 25.18,
+          "lods_s": 39.06,
+          "collision_s": 0.01,
+          "previews_s": 3.82,
+          "total_s": 71.98
+        },
+        "asset_kind": "optimized static asset (automatic decimation); not animation-ready topology, no rig"
+      },
+      "outputs": {
+        "asset_glb": "ceramic_coffee_mug_with_a.glb",
+        "lods": [
+          {
+            "file": "ceramic_coffee_mug_with_a_LOD1.glb",
+            "fraction": 0.5,
+            "target_triangles": 3000,
+            "maps": {
+              "base_color": "baked",
+              "metallic": "baked",
+              "roughness": "baked",
+              "alpha": "opaque",
+              "normal": "baked_from_master",
+              "texture_size": 512
+            },
+            "reduction": {
+              "triangles": 3088,
+              "result_error_relative": 0.009953862056136131,
+              "target_error_relative": 0.01,
+              "reached": true,
+              "simplifier": "meshoptimizer.simplifyWithAttributes(normals w=0.7, PRUNE)"
+            },
+            "vertices": 1544,
+            "triangles": 3088,
+            "has_uv": true,
+            "bounds_min": [
+              -0.048086926341056824,
+              -0.0465114451944828,
+              0.0
+            ],
+            "bounds_max": [
+              0.048086926341056824,
+              0.0465114451944828,
+              0.10000000894069672
+            ],
+            "dimensions_m": [
+              0.09617385268211365,
+              0.0930228903889656,
+              0.10000000894069672
+            ]
+          },
+          {
+            "file": "ceramic_coffee_mug_with_a_LOD2.glb",
+            "fraction": 0.25,
+            "target_triangles": 1500,
+            "maps": {
+              "base_color": "baked",
+              "metallic": "baked",
+              "roughness": "baked",
+              "alpha": "opaque",
+              "normal": "baked_from_master",
+              "texture_size": 256
+            },
+            "reduction": {
+              "triangles": 1500,
+              "result_error_relative": 0.02585315704345703,
+              "target_error_relative": 0.03,
+              "reached": true,
+              "simplifier": "meshoptimizer.simplifyWithAttributes(normals w=0.7, PRUNE)"
+            },
+            "vertices": 750,
+            "triangles": 1500,
+            "has_uv": true,
+            "bounds_min": [
+              -0.047648876905441284,
+              -0.0465114451944828,
+              0.0
+            ],
+            "bounds_max": [
+              0.047648876905441284,
+              0.0465114451944828,
+              0.10000000894069672
+            ],
+            "dimensions_m": [
+              0.09529775381088257,
+              0.0930228903889656,
+              0.10000000894069672
+            ]
+          }
+        ],
+        "collision_glb": "ceramic_coffee_mug_with_a_collision.glb",
+        "previews": [
+          "previews/asset_front_left.png",
+          "previews/asset_front_right.png",
+          "previews/asset_back.png",
+          "previews/asset_top.png",
+          "previews/master_front_left.png",
+          "previews/contact_sheet.png"
+        ],
+        "textures": [
+          "textures/asset_baseColor.png",
+          "textures/asset_metallicRoughness.png",
+          "textures/asset_normal.png",
+          "textures/lod1_baseColor.png",
+          "textures/lod1_metallicRoughness.png",
+          "textures/lod1_normal.png",
+          "textures/lod2_baseColor.png",
+          "textures/lod2_metallicRoughness.png",
+          "textures/lod2_normal.png"
+        ]
+      }
+    },
+    "validation": {
+      "master": {
+        "file": "master.glb",
+        "bytes": 59606820,
+        "errors": [],
+        "warnings": [],
+        "ok": true,
+        "extensions_required": [],
+        "extensions_used": [],
+        "images": [
+          {
+            "index": 0,
+            "mimeType": "image/png",
+            "name": null,
+            "bytes": 22366020,
+            "size": [
+              4096,
+              4096
+            ]
+          },
+          {
+            "index": 1,
+            "mimeType": "image/png",
+            "name": null,
+            "bytes": 4726724,
+            "size": [
+              4096,
+              4096
+            ]
+          }
+        ],
+        "materials": [
+          {
+            "index": 0,
+            "name": null,
+            "alphaMode": "OPAQUE",
+            "doubleSided": false,
+            "baseColorTexture": 0,
+            "metallicRoughnessTexture": 1,
+            "normalTexture": null,
+            "metallicFactor": 1.0,
+            "roughnessFactor": 1.0
+          }
+        ],
+        "meshes": [
+          {
+            "mesh": 0,
+            "name": "geometry_0",
+            "primitive": 0,
+            "vertices": 652340,
+            "triangles": 969785,
+            "mode": 4,
+            "has_uv": true,
+            "has_normals": true,
+            "has_tangents": false,
+            "material": 0
+          }
+        ],
+        "triangles": 969785,
+        "vertices": 652340,
+        "mesh_count": 1,
+        "node_count": 2,
+        "bounds_min": [
+          -0.43365806341171265,
+          -0.4310894012451172,
+          -0.3814451992511749
+        ],
+        "bounds_max": [
+          0.4352959394454956,
+          0.4705195426940918,
+          0.45953208208084106
+        ],
+        "dimensions_xyz": [
+          0.8689540028572083,
+          0.901608943939209,
+          0.8409773111343384
+        ],
+        "height_y": 0.901608943939209,
+        "origin": {
+          "bottom_center": false
+        }
+      },
+      "asset": {
+        "file": "ceramic_coffee_mug_with_a.glb",
+        "bytes": 2540296,
+        "errors": [],
+        "warnings": [],
+        "ok": true,
+        "extensions_required": [],
+        "extensions_used": [],
+        "images": [
+          {
+            "index": 0,
+            "mimeType": "image/png",
+            "name": "asset_normal",
+            "bytes": 961002,
+            "size": [
+              1024,
+              1024
+            ]
+          },
+          {
+            "index": 1,
+            "mimeType": "image/png",
+            "name": "asset_baseColor",
+            "bytes": 1095651,
+            "size": [
+              1024,
+              1024
+            ]
+          },
+          {
+            "index": 2,
+            "mimeType": "image/png",
+            "name": "asset_metallicRoughness",
+            "bytes": 305004,
+            "size": [
+              1024,
+              1024
+            ]
+          }
+        ],
+        "materials": [
+          {
+            "index": 0,
+            "name": "asset_material",
+            "alphaMode": "OPAQUE",
+            "doubleSided": true,
+            "baseColorTexture": 1,
+            "metallicRoughnessTexture": 2,
+            "normalTexture": 0,
+            "metallicFactor": 1.0,
+            "roughnessFactor": 1.0
+          }
+        ],
+        "meshes": [
+          {
+            "mesh": 0,
+            "name": "asset_dec",
+            "primitive": 0,
+            "vertices": 4403,
+            "triangles": 6000,
+            "mode": 4,
+            "has_uv": true,
+            "has_normals": true,
+            "has_tangents": false,
+            "material": 0
+          }
+        ],
+        "triangles": 6000,
+        "vertices": 4403,
+        "mesh_count": 1,
+        "node_count": 1,
+        "bounds_min": [
+          -0.0481417141854763,
+          0.0,
+          -0.046579353511333466
+        ],
+        "bounds_max": [
+          0.0481417141854763,
+          0.09999999403953552,
+          0.046579353511333466
+        ],
+        "dimensions_xyz": [
+          0.0962834283709526,
+          0.09999999403953552,
+          0.09315870702266693
+        ],
+        "height_y": 0.09999999403953552,
+        "origin": {
+          "bottom_center": true
+        }
+      },
+      "lod1": {
+        "file": "ceramic_coffee_mug_with_a_LOD1.glb",
+        "bytes": 845844,
+        "errors": [],
+        "warnings": [],
+        "ok": true,
+        "extensions_required": [],
+        "extensions_used": [],
+        "images": [
+          {
+            "index": 0,
+            "mimeType": "image/png",
+            "name": "lod1_normal",
+            "bytes": 327063,
+            "size": [
+              512,
+              512
+            ]
+          },
+          {
+            "index": 1,
+            "mimeType": "image/png",
+            "name": "lod1_baseColor",
+            "bytes": 313302,
+            "size": [
+              512,
+              512
+            ]
+          },
+          {
+            "index": 2,
+            "mimeType": "image/png",
+            "name": "lod1_metallicRoughness",
+            "bytes": 99432,
+            "size": [
+              512,
+              512
+            ]
+          }
+        ],
+        "materials": [
+          {
+            "index": 0,
+            "name": "lod1_material",
+            "alphaMode": "OPAQUE",
+            "doubleSided": true,
+            "baseColorTexture": 1,
+            "metallicRoughnessTexture": 2,
+            "normalTexture": 0,
+            "metallicFactor": 1.0,
+            "roughnessFactor": 1.0
+          }
+        ],
+        "meshes": [
+          {
+            "mesh": 0,
+            "name": "ceramic_coffee_mug_with_a_LOD1_dec",
+            "primitive": 0,
+            "vertices": 2680,
+            "triangles": 3088,
+            "mode": 4,
+            "has_uv": true,
+            "has_normals": true,
+            "has_tangents": false,
+            "material": 0
+          }
+        ],
+        "triangles": 3088,
+        "vertices": 2680,
+        "mesh_count": 1,
+        "node_count": 1,
+        "bounds_min": [
+          -0.048086926341056824,
+          0.0,
+          -0.0465114451944828
+        ],
+        "bounds_max": [
+          0.048086926341056824,
+          0.10000000894069672,
+          0.0465114451944828
+        ],
+        "dimensions_xyz": [
+          0.09617385268211365,
+          0.10000000894069672,
+          0.0930228903889656
+        ],
+        "height_y": 0.10000000894069672,
+        "origin": {
+          "bottom_center": true
+        }
+      },
+      "lod2": {
+        "file": "ceramic_coffee_mug_with_a_LOD2.glb",
+        "bytes": 303944,
+        "errors": [],
+        "warnings": [],
+        "ok": true,
+        "extensions_required": [],
+        "extensions_used": [],
+        "images": [
+          {
+            "index": 0,
+            "mimeType": "image/png",
+            "name": "lod2_normal",
+            "bytes": 113311,
+            "size": [
+              256,
+              256
+            ]
+          },
+          {
+            "index": 1,
+            "mimeType": "image/png",
+            "name": "lod2_baseColor",
+            "bytes": 95780,
+            "size": [
+              256,
+              256
+            ]
+          },
+          {
+            "index": 2,
+            "mimeType": "image/png",
+            "name": "lod2_metallicRoughness",
+            "bytes": 31741,
+            "size": [
+              256,
+              256
+            ]
+          }
+        ],
+        "materials": [
+          {
+            "index": 0,
+            "name": "lod2_material",
+            "alphaMode": "OPAQUE",
+            "doubleSided": true,
+            "baseColorTexture": 1,
+            "metallicRoughnessTexture": 2,
+            "normalTexture": 0,
+            "metallicFactor": 1.0,
+            "roughnessFactor": 1.0
+          }
+        ],
+        "meshes": [
+          {
+            "mesh": 0,
+            "name": "ceramic_coffee_mug_with_a_LOD2_dec",
+            "primitive": 0,
+            "vertices": 1636,
+            "triangles": 1500,
+            "mode": 4,
+            "has_uv": true,
+            "has_normals": true,
+            "has_tangents": false,
+            "material": 0
+          }
+        ],
+        "triangles": 1500,
+        "vertices": 1636,
+        "mesh_count": 1,
+        "node_count": 1,
+        "bounds_min": [
+          -0.047648876905441284,
+          0.0,
+          -0.0465114451944828
+        ],
+        "bounds_max": [
+          0.047648876905441284,
+          0.10000000894069672,
+          0.0465114451944828
+        ],
+        "dimensions_xyz": [
+          0.09529775381088257,
+          0.10000000894069672,
+          0.0930228903889656
+        ],
+        "height_y": 0.10000000894069672,
+        "origin": {
+          "bottom_center": true
+        }
+      },
+      "collision": {
+        "file": "ceramic_coffee_mug_with_a_collision.glb",
+        "bytes": 26984,
+        "errors": [],
+        "warnings": [],
+        "ok": true,
+        "extensions_required": [],
+        "extensions_used": [],
+        "images": [],
+        "materials": [],
+        "meshes": [
+          {
+            "mesh": 0,
+            "name": "ceramic_coffee_mug_with_a_collision",
+            "primitive": 0,
+            "vertices": 762,
+            "triangles": 254,
+            "mode": 4,
+            "has_uv": true,
+            "has_normals": true,
+            "has_tangents": false,
+            "material": null
+          }
+        ],
+        "triangles": 254,
+        "vertices": 762,
+        "mesh_count": 1,
+        "node_count": 1,
+        "bounds_min": [
+          -0.04827940836548805,
+          -3.358833055244759e-05,
+          -0.046578548848629
+        ],
+        "bounds_max": [
+          0.048095788806676865,
+          0.09995788335800171,
+          0.04651420935988426
+        ],
+        "dimensions_xyz": [
+          0.09637519717216492,
+          0.09999147057533264,
+          0.09309275448322296
+        ],
+        "height_y": 0.09999147057533264,
+        "origin": {
+          "bottom_center": true
+        }
+      }
+    }
+  },
+  "resources": {
+    "reference": {
+      "run_id": "7a9e52b600f0",
+      "state": "exited",
+      "pid": 15,
+      "returncode": 0,
+      "started": 1789256439.3318403,
+      "ended": 1789256784.135378,
+      "peak_rss_mb": 22210,
+      "peak_gpu_used_mib": 31842,
+      "cancelled": false
+    },
+    "pixal3d": {
+      "run_id": "0f921f441629",
+      "state": "exited",
+      "pid": 1116,
+      "returncode": 0,
+      "started": 1789256785.8621752,
+      "ended": 1789257036.0026112,
+      "peak_rss_mb": 27372,
+      "peak_gpu_used_mib": 16841,
+      "cancelled": false
+    },
+    "blender": {
+      "run_id": "239f328a5c78",
+      "state": "exited",
+      "pid": 1635,
+      "returncode": 0,
+      "started": 1789257774.3234105,
+      "ended": 1789257847.3848066,
+      "peak_rss_mb": 3191,
+      "peak_gpu_used_mib": 0,
+      "cancelled": false
+    }
+  },
+  "asset": {
+    "kind": "optimized static asset (decimated); not animation-ready topology, no rig",
+    "master": "master.glb (untouched Pixal3D export, PNG textures)",
+    "optimized": "ceramic_coffee_mug_with_a.glb",
+    "lods": [
+      {
+        "file": "ceramic_coffee_mug_with_a_LOD1.glb",
+        "fraction": 0.5,
+        "target_triangles": 3000,
+        "maps": {
+          "base_color": "baked",
+          "metallic": "baked",
+          "roughness": "baked",
+          "alpha": "opaque",
+          "normal": "baked_from_master",
+          "texture_size": 512
+        },
+        "reduction": {
+          "triangles": 3088,
+          "result_error_relative": 0.009953862056136131,
+          "target_error_relative": 0.01,
+          "reached": true,
+          "simplifier": "meshoptimizer.simplifyWithAttributes(normals w=0.7, PRUNE)"
+        },
+        "vertices": 1544,
+        "triangles": 3088,
+        "has_uv": true,
+        "bounds_min": [
+          -0.048086926341056824,
+          -0.0465114451944828,
+          0.0
+        ],
+        "bounds_max": [
+          0.048086926341056824,
+          0.0465114451944828,
+          0.10000000894069672
+        ],
+        "dimensions_m": [
+          0.09617385268211365,
+          0.0930228903889656,
+          0.10000000894069672
+        ]
+      },
+      {
+        "file": "ceramic_coffee_mug_with_a_LOD2.glb",
+        "fraction": 0.25,
+        "target_triangles": 1500,
+        "maps": {
+          "base_color": "baked",
+          "metallic": "baked",
+          "roughness": "baked",
+          "alpha": "opaque",
+          "normal": "baked_from_master",
+          "texture_size": 256
+        },
+        "reduction": {
+          "triangles": 1500,
+          "result_error_relative": 0.02585315704345703,
+          "target_error_relative": 0.03,
+          "reached": true,
+          "simplifier": "meshoptimizer.simplifyWithAttributes(normals w=0.7, PRUNE)"
+        },
+        "vertices": 750,
+        "triangles": 1500,
+        "has_uv": true,
+        "bounds_min": [
+          -0.047648876905441284,
+          -0.0465114451944828,
+          0.0
+        ],
+        "bounds_max": [
+          0.047648876905441284,
+          0.0465114451944828,
+          0.10000000894069672
+        ],
+        "dimensions_m": [
+          0.09529775381088257,
+          0.0930228903889656,
+          0.10000000894069672
+        ]
+      }
+    ],
+    "collision": "ceramic_coffee_mug_with_a_collision.glb",
+    "previews": [
+      "previews/asset_front_left.png",
+      "previews/asset_front_right.png",
+      "previews/asset_back.png",
+      "previews/asset_top.png",
+      "previews/master_front_left.png",
+      "previews/contact_sheet.png"
+    ],
+    "units": "metres, glTF Y-up, origin at bottom centre"
+  },
+  "dependencies": {
+    "generated_at": "2026-09-12 19:56:25",
+    "sources": {
+      "TencentARC/Pixal3D": {
+        "url": "https://github.com/TencentARC/Pixal3D",
+        "branch": "master (default; NOT `paper`)",
+        "commit": "f7cf38429b0bd264f1995f0f8743a88b1c728b94",
+        "date": "2026-09-01"
+      },
+      "microsoft/TRELLIS.2": {
+        "url": "https://github.com/microsoft/TRELLIS.2",
+        "branch": "main",
+        "commit": "75fbf0183001ed9876c8dbb35de6b68552ee08bd",
+        "note": "base image trellis2:rtx5090 built from C:/Users/Zorro/TRELLIS.2/Dockerfile"
+      },
+      "microsoft/MoGe": {
+        "commit": "74fbce054ebed49800de42d0ad0e83495065719a",
+        "installed": "--no-deps (keeps base FlexGEMM build)"
+      },
+      "EasternJournalist/utils3d-moge": {
+        "commit": "62f09d58509485564e24d5d9f6aac9ee9ebc0c37"
+      },
+      "EasternJournalist/pipeline": {
+        "commit": "1c511390d90226c00c101f34b84df26a0f8789b4"
+      },
+      "valeoai/NAF": {
+        "commit": "37f2dfc180f2de53d98bd601109c0da0dd6b0f43",
+        "weights": "https://github.com/valeoai/NAF/releases/download/model/naf_release.pth",
+        "note": "torch.hub cache pinned to this commit under /models/torch/hub/valeoai_NAF_main"
+      },
+      "utils3d (Pixal3D-specified wheel)": {
+        "url": "https://github.com/LDYang694/Storages/releases/download/20260430/utils3d-0.0.2-py3-none-any.whl"
+      },
+      "NATTEN": {
+        "version": "0.21.0 (Pixal3D requirement)",
+        "build": "from sdist, NATTEN_CUDA_ARCH=12.0 (RTX 5090 sm_120), libnatten cutlass-fna verified"
+      }
+    },
+    "models": {
+      "Qwen/Qwen-Image-2512": {
+        "revision": "25468b98e3276ca6700de15c6628e51b7de54a26",
+        "size_gb": 57.7,
+        "role": "reference image (BF16)"
+      },
+      "TencentARC/Pixal3D": {
+        "revision": "b0cb2e1b794cab9aa0ac38a95d794a4d9337437f",
+        "size_gb": 29.0,
+        "role": "single-view ckpts (+17 GB *_mv optional)"
+      },
+      "Ruicheng/moge-2-vitl": {
+        "revision": "39c4d5e957afe587e04eec59dc2bcc3be5ecd968",
+        "size_gb": 1.3,
+        "role": "camera estimation"
+      },
+      "camenduru/dinov3-vitl16-pretrain-lvd1689m": {
+        "revision": "3c276edd87d6f6e569ff0c4400e086807d0f3881",
+        "size_gb": 1.2,
+        "role": "image features (ungated mirror used by upstream inference.py)"
+      },
+      "ZhengPeng7/BiRefNet": {
+        "revision": "e2bf8e4460fc8fa32bba5ea4d94b3233d367b0e4",
+        "size_gb": 0.4,
+        "role": "background matting; replaces gated briaai/RMBG-2.0 (STUDIO_REMBG_MODEL to switch)"
+      }
+    },
+    "host": {
+      "os": "Windows 11 Pro 26200",
+      "gpu": "NVIDIA GeForce RTX 5090 32 GB, GPU-52b50765-57a3-0ed4-78c9-4fa54276f65d",
+      "driver": "616.92",
+      "docker": "Docker Desktop (WSL2 backend), nvidia runtime",
+      "docker_vm_ram_gib": 46
+    },
+    "images": {
+      "studio": {
+        "image": "asset-studio/studio:local",
+        "id": "sha256:3f7dfdce7dca667eee616a8042beeb2ae1b262ca3bdf3593c9e121103b07d843",
+        "key_packages": {
+          "trimesh": "4.10.1",
+          "pillow": "12.3.0",
+          "fastapi": "0.141.1",
+          "uvicorn": "0.52.4",
+          "pydantic": "2.13.5",
+          "pygltflib": "1.16.5",
+          "numpy": "2.5.3"
+        },
+        "all_packages": {
+          "annotated_doc": "0.0.5",
+          "annotated_types": "0.8.0",
+          "anyio": "4.15.1",
+          "certifi": "2026.7.22",
+          "click": "8.5.0",
+          "dataclasses_json": "0.6.7",
+          "deprecated": "1.3.1",
+          "fastapi": "0.141.1",
+          "h11": "0.16.0",
+          "httpcore": "1.0.9",
+          "httptools": "0.8.0",
+          "httpx": "0.28.1",
+          "idna": "3.19",
+          "iniconfig": "2.3.0",
+          "marshmallow": "3.26.2",
+          "mypy_extensions": "1.1.0",
+          "numpy": "2.5.3",
+          "packaging": "26.3",
+          "pillow": "12.3.0",
+          "pluggy": "1.6.0",
+          "pydantic": "2.13.5",
+          "pydantic_core": "2.46.5",
+          "pygltflib": "1.16.5",
+          "pygments": "2.21.0",
+          "pytest": "9.1.1",
+          "python_dotenv": "1.2.3",
+          "pyyaml": "6.0.3",
+          "starlette": "1.6.0",
+          "trimesh": "4.10.1",
+          "typing_inspect": "0.9.0",
+          "typing_inspection": "0.4.4",
+          "typing_extensions": "4.16.0",
+          "uvicorn": "0.52.4",
+          "uvloop": "0.22.1",
+          "watchfiles": "1.2.0",
+          "websockets": "17.1",
+          "wrapt": "2.4.1"
+        }
+      },
+      "image-worker": {
+        "image": "asset-studio/image-worker:local",
+        "id": "sha256:eecae9d1cf1798b507a9bc13e92500ce2b7684067b44dfea74b4432bec248dda",
+        "key_packages": {
+          "torch": "2.11.0+cu128",
+          "torchvision": "0.26.0+cu128",
+          "triton": "3.6.0",
+          "diffusers": "0.40.0",
+          "transformers": "5.17.0",
+          "accelerate": "1.15.0",
+          "huggingface_hub": "1.31.0",
+          "safetensors": "0.8.0",
+          "pillow": "12.0.0",
+          "numpy": "2.4.6"
+        },
+        "all_packages": {
+          "accelerate": "1.15.0",
+          "annotated_doc": "0.0.5",
+          "anyio": "4.15.1",
+          "certifi": "2026.7.22",
+          "charset_normalizer": "3.5.1",
+          "click": "8.5.0",
+          "cuda_bindings": "12.9.7",
+          "cuda_pathfinder": "1.6.0",
+          "cuda_toolkit": "12.8.1",
+          "diffusers": "0.40.0",
+          "filelock": "3.32.3",
+          "fsspec": "2026.7.0",
+          "h11": "0.16.0",
+          "hf_xet": "1.6.0",
+          "httpcore": "1.0.9",
+          "httpx": "0.28.1",
+          "huggingface_hub": "1.31.0",
+          "idna": "3.19",
+          "importlib_metadata": "9.0.1",
+          "jinja2": "3.1.6",
+          "markdown_it_py": "4.2.0",
+          "markupsafe": "3.0.3",
+          "mdurl": "0.1.2",
+          "mpmath": "1.3.0",
+          "networkx": "3.6.1",
+          "numpy": "2.4.6",
+          "nvidia_cublas_cu12": "12.8.4.1",
+          "nvidia_cuda_cupti_cu12": "12.8.90",
+          "nvidia_cuda_nvrtc_cu12": "12.8.93",
+          "nvidia_cuda_runtime_cu12": "12.8.90",
+          "nvidia_cudnn_cu12": "9.19.0.56",
+          "nvidia_cufft_cu12": "11.3.3.83",
+          "nvidia_cufile_cu12": "1.13.1.3",
+          "nvidia_curand_cu12": "10.3.9.90",
+          "nvidia_cusolver_cu12": "11.7.3.90",
+          "nvidia_cusparse_cu12": "12.5.8.93",
+          "nvidia_cusparselt_cu12": "0.7.1",
+          "nvidia_nccl_cu12": "2.28.9",
+          "nvidia_nvjitlink_cu12": "12.8.93",
+          "nvidia_nvshmem_cu12": "3.4.5",
+          "nvidia_nvtx_cu12": "12.8.90",
+          "packaging": "26.3",
+          "pillow": "12.0.0",
+          "protobuf": "7.36.1",
+          "psutil": "7.2.2",
+          "pygments": "2.21.0",
+          "pyyaml": "6.0.3",
+          "regex": "2026.9.10",
+          "requests": "2.34.2",
+          "rich": "15.0.0",
+          "safetensors": "0.8.0",
+          "scipy": "1.17.1",
+          "sentencepiece": "0.2.2",
+          "shellingham": "1.5.4",
+          "sympy": "1.14.0",
+          "tokenizers": "0.23.2",
+          "torch": "2.11.0+cu128",
+          "torchvision": "0.26.0+cu128",
+          "tqdm": "4.70.1",
+          "transformers": "5.17.0",
+          "triton": "3.6.0",
+          "typer": "0.27.2",
+          "typing_extensions": "4.16.0",
+          "urllib3": "2.7.0",
+          "zipp": "4.1.0"
+        }
+      },
+      "pixal3d-worker": {
+        "image": "asset-studio/pixal3d-worker:local",
+        "id": "sha256:41cb6f7a3ae365c0170c1e74eb77194089a79a3bbd18afdc7ce3434ccd44521f",
+        "key_packages": {
+          "torch": "2.11.0+cu128",
+          "torchvision": "0.26.0+cu128",
+          "triton": "3.6.0",
+          "diffusers": "0.37.1",
+          "transformers": "4.57.3",
+          "accelerate": "1.13.0",
+          "huggingface_hub": "0.36.2",
+          "safetensors": "0.8.0",
+          "natten": "0.21.0",
+          "flash_attn": "2.8.3",
+          "nvdiffrast": "file:///tmp/nvdiffrast",
+          "o_voxel": "file:///workspace/o-voxel",
+          "cumesh": "file:///tmp/cumesh",
+          "flex_gemm": "file:///tmp/flexgemm",
+          "utils3d": "git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8",
+          "utils3d_moge": "git+https://github.com/EasternJournalist/utils3d-moge.git@62f09d58509485564e24d5d9f6aac9ee9ebc0c37",
+          "moge": "git+https://github.com/microsoft/MoGe.git@74fbce054ebed49800de42d0ad0e83495065719a",
+          "kornia": "0.8.2",
+          "timm": "1.0.22",
+          "trimesh": "4.10.1",
+          "pillow": "12.0.0",
+          "opencv-python-headless": "4.12.0.88",
+          "fastapi": "0.141.1",
+          "uvicorn": "0.52.4",
+          "pydantic": "2.12.4",
+          "numpy": "2.2.6",
+          "einops": "0.8.2"
+        },
+        "all_packages": {
+          "absl_py": "2.5.0",
+          "accelerate": "1.13.0",
+          "aiofiles": "24.1.0",
+          "annotated_doc": "0.0.5",
+          "annotated_types": "0.8.0",
+          "anyio": "4.15.1",
+          "brotli": "1.2.0",
+          "certifi": "2026.7.22",
+          "charset_normalizer": "3.5.1",
+          "click": "8.5.0",
+          "cmake": "4.1.0",
+          "contourpy": "1.3.3",
+          "cuda_bindings": "12.9.7",
+          "cuda_pathfinder": "1.6.0",
+          "cuda_toolkit": "12.8.1",
+          "cumesh": "file:///tmp/cumesh",
+          "cycler": "0.12.1",
+          "diffusers": "0.37.1",
+          "easydict": "1.13",
+          "einops": "0.8.2",
+          "fastapi": "0.141.1",
+          "ffmpy": "1.0.0",
+          "filelock": "3.32.3",
+          "flash_attn": "2.8.3",
+          "flex_gemm": "file:///tmp/flexgemm",
+          "fonttools": "4.65.0",
+          "fsspec": "2026.7.0",
+          "glcontext": "3.0.0",
+          "gradio": "6.0.1",
+          "gradio_client": "2.0.0",
+          "groovy": "0.1.2",
+          "grpcio": "1.83.1",
+          "h11": "0.16.0",
+          "hf_xet": "1.6.0",
+          "httpcore": "1.0.9",
+          "httpx": "0.28.1",
+          "huggingface_hub": "0.36.2",
+          "idna": "3.19",
+          "imageio": "2.37.2",
+          "imageio_ffmpeg": "0.6.0",
+          "importlib_metadata": "9.0.1",
+          "jinja2": "3.1.6",
+          "kiwisolver": "1.5.1",
+          "kornia": "0.8.2",
+          "kornia_rs": "0.1.14",
+          "lpips": "0.1.4",
+          "markdown": "3.10.3",
+          "markdown_it_py": "4.2.0",
+          "markupsafe": "3.0.3",
+          "matplotlib": "3.11.2",
+          "mdurl": "0.1.2",
+          "moderngl": "5.12.0",
+          "moge": "git+https://github.com/microsoft/MoGe.git@74fbce054ebed49800de42d0ad0e83495065719a",
+          "mpmath": "1.3.0",
+          "natten": "0.21.0",
+          "networkx": "3.6.1",
+          "ninja": "1.13.2",
+          "numpy": "2.2.6",
+          "nvdiffrast": "file:///tmp/nvdiffrast",
+          "nvdiffrec_render": "file:///tmp/nvdiffrec",
+          "nvidia_cublas_cu12": "12.8.4.1",
+          "nvidia_cuda_cupti_cu12": "12.8.90",
+          "nvidia_cuda_nvrtc_cu12": "12.8.93",
+          "nvidia_cuda_runtime_cu12": "12.8.90",
+          "nvidia_cudnn_cu12": "9.19.0.56",
+          "nvidia_cufft_cu12": "11.3.3.83",
+          "nvidia_cufile_cu12": "1.13.1.3",
+          "nvidia_curand_cu12": "10.3.9.90",
+          "nvidia_cusolver_cu12": "11.7.3.90",
+          "nvidia_cusparse_cu12": "12.5.8.93",
+          "nvidia_cusparselt_cu12": "0.7.1",
+          "nvidia_nccl_cu12": "2.28.9",
+          "nvidia_nvjitlink_cu12": "12.8.93",
+          "nvidia_nvshmem_cu12": "3.4.5",
+          "nvidia_nvtx_cu12": "12.8.90",
+          "o_voxel": "file:///workspace/o-voxel",
+          "opencv_python_headless": "4.12.0.88",
+          "orjson": "3.12.0",
+          "packaging": "26.3",
+          "pandas": "2.3.3",
+          "pillow": "12.0.0",
+          "pipeline": "git+https://github.com/EasternJournalist/pipeline.git@1c511390d90226c00c101f34b84df26a0f8789b4",
+          "plyfile": "1.1.3",
+          "protobuf": "7.36.1",
+          "psutil": "7.2.2",
+          "pydantic": "2.12.4",
+          "pydantic_core": "2.41.5",
+          "pydub": "0.25.1",
+          "pygments": "2.21.0",
+          "pyparsing": "3.3.2",
+          "python_dateutil": "2.9.0.post0",
+          "python_multipart": "0.0.32",
+          "pytz": "2026.3.post1",
+          "pyyaml": "6.0.3",
+          "regex": "2026.9.10",
+          "requests": "2.34.2",
+          "rich": "15.0.0",
+          "safehttpx": "0.1.7",
+          "safetensors": "0.8.0",
+          "scipy": "1.17.1",
+          "semantic_version": "2.10.0",
+          "shellingham": "1.5.4",
+          "six": "1.17.0",
+          "starlette": "0.52.1",
+          "sympy": "1.14.0",
+          "tensorboard": "2.21.0",
+          "tensorboard_data_server": "0.7.2",
+          "timm": "1.0.22",
+          "tokenizers": "0.22.2",
+          "tomlkit": "0.13.3",
+          "torch": "2.11.0+cu128",
+          "torchvision": "0.26.0+cu128",
+          "tqdm": "4.67.1",
+          "transformers": "4.57.3",
+          "trimesh": "4.10.1",
+          "triton": "3.6.0",
+          "typer": "0.27.2",
+          "typing_inspection": "0.4.4",
+          "typing_extensions": "4.16.0",
+          "tzdata": "2026.4",
+          "urllib3": "2.7.0",
+          "utils3d": "git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8",
+          "utils3d_moge": "git+https://github.com/EasternJournalist/utils3d-moge.git@62f09d58509485564e24d5d9f6aac9ee9ebc0c37",
+          "uvicorn": "0.52.4",
+          "werkzeug": "3.1.8",
+          "zipp": "4.1.0",
+          "zstandard": "0.25.0"
+        }
+      },
+      "blender": {
+        "image": "asset-studio/blender:local",
+        "id": "sha256:72618240b1055f7a2b114fba1c34b8c5c386fb736fbc1cfdd1d03f62e55a9b79",
+        "key_packages": {
+          "trimesh": "4.10.1",
+          "pillow": "12.3.0",
+          "bpy": "4.5.13",
+          "pygltflib": "1.16.5",
+          "numpy": "1.26.4"
+        },
+        "all_packages": {
+          "bpy": "4.5.13",
+          "certifi": "2026.7.22",
+          "charset_normalizer": "3.5.1",
+          "cython": "3.3.0",
+          "dataclasses_json": "0.6.7",
+          "deprecated": "1.3.1",
+          "fast_simplification": "0.2.0",
+          "idna": "3.19",
+          "marshmallow": "3.26.2",
+          "meshoptimizer": "0.2.30a0",
+          "mypy_extensions": "1.1.0",
+          "numpy": "1.26.4",
+          "packaging": "26.3",
+          "pillow": "12.3.0",
+          "psutil": "7.2.2",
+          "pygltflib": "1.16.5",
+          "requests": "2.34.2",
+          "trimesh": "4.10.1",
+          "typing_inspect": "0.9.0",
+          "typing_extensions": "4.16.0",
+          "urllib3": "2.7.0",
+          "wrapt": "2.4.1",
+          "zstandard": "0.25.0"
+        }
+      }
+    },
+    "summary": {
+      "studio": {
+        "trimesh": "4.10.1",
+        "pillow": "12.3.0",
+        "fastapi": "0.141.1",
+        "uvicorn": "0.52.4",
+        "pydantic": "2.13.5",
+        "pygltflib": "1.16.5",
+        "numpy": "2.5.3"
+      },
+      "image-worker": {
+        "torch": "2.11.0+cu128",
+        "torchvision": "0.26.0+cu128",
+        "triton": "3.6.0",
+        "diffusers": "0.40.0",
+        "transformers": "5.17.0",
+        "accelerate": "1.15.0",
+        "huggingface_hub": "1.31.0",
+        "safetensors": "0.8.0",
+        "pillow": "12.0.0",
+        "numpy": "2.4.6"
+      },
+      "pixal3d-worker": {
+        "torch": "2.11.0+cu128",
+        "torchvision": "0.26.0+cu128",
+        "triton": "3.6.0",
+        "diffusers": "0.37.1",
+        "transformers": "4.57.3",
+        "accelerate": "1.13.0",
+        "huggingface_hub": "0.36.2",
+        "safetensors": "0.8.0",
+        "natten": "0.21.0",
+        "flash_attn": "2.8.3",
+        "nvdiffrast": "file:///tmp/nvdiffrast",
+        "o_voxel": "file:///workspace/o-voxel",
+        "cumesh": "file:///tmp/cumesh",
+        "flex_gemm": "file:///tmp/flexgemm",
+        "utils3d": "git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8",
+        "utils3d_moge": "git+https://github.com/EasternJournalist/utils3d-moge.git@62f09d58509485564e24d5d9f6aac9ee9ebc0c37",
+        "moge": "git+https://github.com/microsoft/MoGe.git@74fbce054ebed49800de42d0ad0e83495065719a",
+        "kornia": "0.8.2",
+        "timm": "1.0.22",
+        "trimesh": "4.10.1",
+        "pillow": "12.0.0",
+        "opencv-python-headless": "4.12.0.88",
+        "fastapi": "0.141.1",
+        "uvicorn": "0.52.4",
+        "pydantic": "2.12.4",
+        "numpy": "2.2.6",
+        "einops": "0.8.2"
+      },
+      "blender": {
+        "trimesh": "4.10.1",
+        "pillow": "12.3.0",
+        "bpy": "4.5.13",
+        "pygltflib": "1.16.5",
+        "numpy": "1.26.4"
+      }
+    }
+  },
+  "artifacts": [
+    {
+      "name": "ceramic_coffee_mug_with_a.glb",
+      "bytes": 2540296,
+      "sha256": "820ed569fe9fa75bc642cfaf074f7c165e7845aa68a848b73ae131ce4ec3719b",
+      "url": "/v1/jobs/20260912-231658-f8dcb166/artifacts/ceramic_coffee_mug_with_a.glb"
+    },
+    {
+      "name": "ceramic_coffee_mug_with_a_LOD1.glb",
+      "bytes": 845844,
+      "sha256": "d3032682ae2008828dadb4b00e2403c5e4a907bcc33997b43b1bbd993020cca3",
+      "url": "/v1/jobs/20260912-231658-f8dcb166/artifacts/ceramic_coffee_mug_with_a_LOD1.glb"
+    },
+    {
+      "name": "ceramic_coffee_mug_with_a_LOD2.glb",
+      "bytes": 303944,
+      "sha256": "9c7b3cecd1d287da72883fcfd4f5f36972b40dfeaa2f7c239727a3c6c918152e",
+      "url": "/v1/jobs/20260912-231658-f8dcb166/artifacts/ceramic_coffee_mug_with_a_LOD2.glb"
+    },
+    {
+      "name": "ceramic_coffee_mug_with_a_collision.glb",
+      "bytes": 26984,
+      "sha256": "75ac71b55101f5f6ab719f3bedc7b1b230d456172e11feb82f2c9ff576762447",
+      "url": "/v1/jobs/20260912-231658-f8dcb166/artifacts/ceramic_coffee_mug_with_a_collision.glb"
+    },
+    {
+      "name": "manifest.json",
+      "bytes": 51212,
+      "sha256": "608944908588414cbb8422b704e30b206e36eb459fb8c373dea859f1dedb8be6",
+      "url": "/v1/jobs/20260912-231658-f8dcb166/artifacts/manifest.json"
+    },
+    {
+      "name": "master.glb",
+      "bytes": 59606820,
+      "sha256": "7fccb815280c165512233e83cbf63ec3aa50aec1a0a2cb462563d85da36f86ee",
+      "url": "/v1/jobs/20260912-231658-f8dcb166/artifacts/master.glb"
+    },
+    {
+      "name": "previews/asset_back.png",
+      "bytes": 285194,
+      "sha256": "9a300966778efe5faa3a6ccdc0e8388aa8205b0199d5f2818d7a2ce13a7fab90",
+      "url": "/v1/jobs/20260912-231658-f8dcb166/artifacts/previews/asset_back.png"
+    },
+    {
+      "name": "previews/asset_front_left.png",
+      "bytes": 274945,
+      "sha256": "ac4fe53267b69a3e5cf00dff4200aa62cbffe007a46080219d76cfaa24ebfe9e",
+      "url": "/v1/jobs/20260912-231658-f8dcb166/artifacts/previews/asset_front_left.png"
+    },
+    {
+      "name": "previews/asset_front_right.png",
+      "bytes": 282781,
+      "sha256": "2854eddd1c145fd1122af2e28c73a299713fefd9033c2b659a0bfe630a1c13f0",
+      "url": "/v1/jobs/20260912-231658-f8dcb166/artifacts/previews/asset_front_right.png"
+    },
+    {
+      "name": "previews/asset_top.png",
+      "bytes": 283539,
+      "sha256": "41d0a3d6132a92b9d7395ba89d9b08dd95e58ca8dbdea340fba85ebf8c9e807b",
+      "url": "/v1/jobs/20260912-231658-f8dcb166/artifacts/previews/asset_top.png"
+    },
+    {
+      "name": "previews/contact_sheet.png",
+      "bytes": 876179,
+      "sha256": "8a43694eca7ee3166709ab7cf1cb2b2b068b1a22aaa0cb5b3483bdd5b8dcaf21",
+      "url": "/v1/jobs/20260912-231658-f8dcb166/artifacts/previews/contact_sheet.png"
+    },
+    {
+      "name": "previews/master_front_left.png",
+      "bytes": 273676,
+      "sha256": "f347fc5260dc139b660c9b0f647e1fd9e0efb9f11d151390e1404543d3f2084b",
+      "url": "/v1/jobs/20260912-231658-f8dcb166/artifacts/previews/master_front_left.png"
+    },
+    {
+      "name": "reference.png",
+      "bytes": 1346729,
+      "sha256": "c294f298b22382f041b225200ba31a355b67a97ae7583c9f4566f8bd4fbe9a23",
+      "url": "/v1/jobs/20260912-231658-f8dcb166/artifacts/reference.png"
+    },
+    {
+      "name": "reference_candidates/cand_00.png",
+      "bytes": 1346729,
+      "sha256": "c294f298b22382f041b225200ba31a355b67a97ae7583c9f4566f8bd4fbe9a23",
+      "url": "/v1/jobs/20260912-231658-f8dcb166/artifacts/reference_candidates/cand_00.png"
+    },
+    {
+      "name": "reference_candidates/selection.json",
+      "bytes": 1188,
+      "sha256": "d2f7f799bb0d299b49d1b62d281bdb1a973f8a27f2fdbd18409a4a0762fb07d5",
+      "url": "/v1/jobs/20260912-231658-f8dcb166/artifacts/reference_candidates/selection.json"
+    },
+    {
+      "name": "reference_preprocessed.png",
+      "bytes": 249729,
+      "sha256": "948b7245f5e4227047aad0215f7da823017da6ff59d22301450d6ecb8d09a0cf",
+      "url": "/v1/jobs/20260912-231658-f8dcb166/artifacts/reference_preprocessed.png"
+    },
+    {
+      "name": "textures/asset_baseColor.png",
+      "bytes": 1095651,
+      "sha256": "a7955b1bcb888ab74a7b7af568395394f6149a0502612766f9476a48ae6d9c2f",
+      "url": "/v1/jobs/20260912-231658-f8dcb166/artifacts/textures/asset_baseColor.png"
+    },
+    {
+      "name": "textures/asset_metallicRoughness.png",
+      "bytes": 305004,
+      "sha256": "0eb465576ddd64bf5044fd4af5bb48dbbf8467de930f652098142dee480c67c3",
+      "url": "/v1/jobs/20260912-231658-f8dcb166/artifacts/textures/asset_metallicRoughness.png"
+    },
+    {
+      "name": "textures/asset_normal.png",
+      "bytes": 961002,
+      "sha256": "cc6706b0f0336c2355f0f1e0bc2bd10986199cc220b6ffef3463788b992e131d",
+      "url": "/v1/jobs/20260912-231658-f8dcb166/artifacts/textures/asset_normal.png"
+    },
+    {
+      "name": "textures/lod1_baseColor.png",
+      "bytes": 313302,
+      "sha256": "824e9967e49348b0a75136e47d3599adbe8bc2a7a63df0bdce548bc75fac79f1",
+      "url": "/v1/jobs/20260912-231658-f8dcb166/artifacts/textures/lod1_baseColor.png"
+    },
+    {
+      "name": "textures/lod1_metallicRoughness.png",
+      "bytes": 99432,
+      "sha256": "3eea1d1fc1ec59268caebea3fecc5fd405ffc880c96083f028a8e0026d265466",
+      "url": "/v1/jobs/20260912-231658-f8dcb166/artifacts/textures/lod1_metallicRoughness.png"
+    },
+    {
+      "name": "textures/lod1_normal.png",
+      "bytes": 327063,
+      "sha256": "7b96930872a5ee40865b915d3878938002b676bab914eb2b1d28da3638dad02c",
+      "url": "/v1/jobs/20260912-231658-f8dcb166/artifacts/textures/lod1_normal.png"
+    },
+    {
+      "name": "textures/lod2_baseColor.png",
+      "bytes": 95780,
+      "sha256": "663cc2c6f84e80f6a218ff9cc3f61d0722e775535267b2e4f0a6e4c836c75dc0",
+      "url": "/v1/jobs/20260912-231658-f8dcb166/artifacts/textures/lod2_baseColor.png"
+    },
+    {
+      "name": "textures/lod2_metallicRoughness.png",
+      "bytes": 31741,
+      "sha256": "fa0ad4fd3d3bcc43e670eb94ab2e9a1751fbad6fa235a4caef522d629456ccc7",
+      "url": "/v1/jobs/20260912-231658-f8dcb166/artifacts/textures/lod2_metallicRoughness.png"
+    },
+    {
+      "name": "textures/lod2_normal.png",
+      "bytes": 113311,
+      "sha256": "ab79a72b41f71be6b6acd51627349a89f6917736b5dcadf5331c3e1b9ba16cb6",
+      "url": "/v1/jobs/20260912-231658-f8dcb166/artifacts/textures/lod2_normal.png"
+    }
+  ]
+}
