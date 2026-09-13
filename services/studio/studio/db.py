@@ -210,9 +210,14 @@ class JobStore:
         return d
 
     # ---- worker side -------------------------------------------------------
-    def claim_next(self, worker_id: str) -> dict | None:
+    def claim_next(self, worker_id: str, kind: str | None = None) -> dict | None:
+        """Claim the next queued job; `kind` restricts the lane ('image' or 'asset')."""
         with self.tx() as c:
-            row = c.execute("SELECT id FROM jobs WHERE status='queued' ORDER BY priority DESC, created_at LIMIT 1").fetchone()
+            if kind:
+                row = c.execute("SELECT id FROM jobs WHERE status='queued' AND kind=? ORDER BY priority DESC, created_at LIMIT 1",
+                                (kind,)).fetchone()
+            else:
+                row = c.execute("SELECT id FROM jobs WHERE status='queued' ORDER BY priority DESC, created_at LIMIT 1").fetchone()
             if not row:
                 return None
             now = time.time()

@@ -99,7 +99,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/health":
-            return self._json(200, {"ok": True, "busy": CURRENT["run_id"] is not None, "name": NAME})
+            return self._json(200, {"ok": True, "busy": CURRENT["run_id"] is not None, "run_id": CURRENT["run_id"], "name": NAME})
         if self.path == "/gpu":
             return self._json(200, nvidia_smi())
         if self.path.startswith("/runs/"):

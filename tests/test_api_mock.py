@@ -155,14 +155,14 @@ def test_stage_resume_and_failure_reporting(env, monkeypatch):
     run.stage_reference()  # must not call the runner (which is unreachable) -> reused
     assert any("reusing" in e["message"] for e in store.events(job))
 
-    class FakeRunner:
-        def wait_gpu_free(self, *a, **k):
-            return {}
+    from studio import config as cfg
+    cfg.OOM_RETRY_PAUSE_S = 0  # no thresholds: other lane idle -> one quick same-settings retry, then the ladder
 
-        def gpu(self):  # nothing else on the GPU -> OOM goes straight to the fallback ladder
-            return {"available": True, "gpus": [{"used_mib": 1000, "total_mib": 32000}], "processes": []}
+    class FakeRunner:
+        calls = 0
 
         def run(self, cmd, log_path, **k):
+            FakeRunner.calls += 1
             Path(log_path).write_text("[phase] generate\nRuntimeError: CUDA out of memory. Tried to allocate 2 GiB\n")
             raise StageFailed("stage exited with code 1", 1, oom=True)
 
@@ -219,3 +219,46 @@ def test_glb_validation_rejects_webp_and_reports_counts(tmp_path):
     m.export(pw, extension_webp=True)
     repw = validate_glb(pw)
     assert not repw["ok"] and any("EXT_texture_webp" in e for e in repw["errors"])
+
+
+def test_lanes_claim_by_kind_and_oom_waits_for_other_lane(env, monkeypatch):
+    import threading
+    from studio.db import JobStore
+    from studio.pipeline import LANES, JobRun, JobFailed
+    from studio.runner_client import StageFailed
+    from studio import config as cfg
+
+    client, api, tmp = env
+    a = client.post("/v1/jobs", json={"prompt": "a crate"}).json()["job_id"]            # asset job
+    i = client.post("/v1/image-jobs", json={"prompt": "a crate", "variations": 1}).json()["job_id"]  # image job
+    store = JobStore()
+    assert store.claim_next("w", kind="image")["id"] == i      # the image lane skips the older asset job
+    assert store.claim_next("w", kind="image") is None
+    assert store.claim_next("w", kind="asset")["id"] == a
+    # OOM while the other lane is busy: wait for it, then retry with the same settings (no fallback applied)
+    cfg.OOM_RETRY_PAUSE_S = 0
+    run = JobRun(store, store.get(a))
+    d = run.stage_dir("reference")
+    (d / "cand.png").write_bytes(b"\x89PNG")
+    (d / "result.json").write_text(json.dumps({"status": "ok", "selected": "cand.png", "elapsed_s": 1}))
+    LANES.enter("image", "reference")
+    threading.Timer(0.5, lambda: LANES.leave("image")).start()
+
+    class Flaky:
+        calls = 0
+
+        def run(self, cmd, log_path, **k):
+            Flaky.calls += 1
+            if Flaky.calls == 1:
+                Path(log_path).write_text("[phase] generate\nRuntimeError: CUDA out of memory\n")
+                raise StageFailed("stage exited with code 1", 1, oom=True)
+            Path(log_path).write_text("[phase] generate\nok\n")
+            raise StageFailed("stage exited with code 3", 3, oom=False)  # a non-OOM failure ends the test path
+
+    run.runners["pixal3d"] = Flaky()
+    with pytest.raises(JobFailed) as ei:
+        run.stage_pixal3d()
+    assert Flaky.calls == 2 and "code 3" in str(ei.value)
+    assert run.settings["pixal3d"]["resolution"] == 1024 and not run.settings.get("_fallbacks_applied")
+    assert any("waiting for it to finish" in w for w in run.warnings)
+    assert LANES.other_busy("asset") is None

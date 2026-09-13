@@ -1,6 +1,7 @@
 """HTTP client for the stage runners (see services/runner/runner.py)."""
 from __future__ import annotations
 
+import json
 import time
 
 import httpx
@@ -53,46 +54,49 @@ class Runner:
         except Exception as e:  # noqa: BLE001
             return {"error": str(e)[:200]}
 
-    def wait_gpu_free(self, threshold_mib: int, wait_s: int, should_cancel, log) -> dict:
-        """Block until the GPU's used memory drops under the threshold. Never kills anything."""
-        t0 = time.time()
-        last_log = 0.0
-        while True:
-            g = self.gpu()
-            if not g.get("available"):
-                raise RunnerError(f"GPU not visible from {self.name}: {g.get('error')}")
-            used = g["gpus"][0]["used_mib"]
-            if used <= threshold_mib:
-                return g
-            if should_cancel():
-                raise StageCancelled("cancelled while waiting for GPU")
-            if time.time() - t0 > wait_s:
-                procs = ", ".join(f"{p['name']}({p['pid']})" for p in g.get("processes", [])[:8])
-                raise StageFailed(
-                    f"resource_busy: GPU has {used} MiB in use (> {threshold_mib} MiB threshold for this stage) for {wait_s}s; "
-                    f"other workloads were not interrupted (close GPU apps such as Blender viewports/ComfyUI or raise "
-                    f"STUDIO_GPU_BUSY_THRESHOLD_MIB_*). processes: {procs or 'n/a'}")
-            if time.time() - last_log > 30:
-                log(f"GPU busy ({used} MiB used > {threshold_mib} MiB); waiting up to {wait_s}s for another workload to finish")
-                last_log = time.time()
-            time.sleep(5)
+    def attached_run(self, run_file: str | None) -> str | None:
+        """If a previous worker started this stage and the runner still has that run (running, or exited cleanly),
+        return its id so the caller can wait for it instead of starting the stage again."""
+        if not run_file:
+            return None
+        try:
+            rid = json.loads(open(run_file, encoding="utf-8").read())["run_id"]
+            s = self.http.get(f"/runs/{rid}").json()
+        except Exception:  # noqa: BLE001
+            return None
+        if s.get("state") == "running" or (s.get("state") == "exited" and s.get("returncode") == 0 and not s.get("cancelled")):
+            return rid
+        return None
 
     def run(self, cmd: list[str], log_path: str, env: dict | None = None, cwd: str | None = None,
-            should_cancel=None, timeout_s: int | None = None, poll_s: float = 2.0) -> dict:
-        """Start a stage subprocess and block until it exits. Raises StageCancelled / StageFailed."""
+            should_cancel=None, timeout_s: int | None = None, poll_s: float = 2.0, run_file: str | None = None,
+            log=None) -> dict:
+        """Start a stage subprocess and block until it exits. Raises StageCancelled / StageFailed.
+        `run_file` records the run id so a restarted worker re-attaches to a stage that is still running."""
         timeout_s = timeout_s or config.STAGE_TIMEOUT_S
-        t_busy = time.time()
-        while True:  # a run left over from a previous worker may still be winding down: wait instead of failing
-            r = self.http.post("/run", json={"cmd": cmd, "log_path": log_path, "env": env or {}, "cwd": cwd})
-            if r.status_code != 409:
-                break
-            if should_cancel and should_cancel():
-                raise StageCancelled("cancelled while waiting for the runner")
-            if time.time() - t_busy > 300:
-                raise StageFailed(f"runner {self.name} stayed busy with another run for 300s")
-            time.sleep(3)
-        r.raise_for_status()
-        rid = r.json()["run_id"]
+        rid = self.attached_run(run_file)
+        if rid:
+            if log:
+                log(f"re-attached to the {self.name} stage still running from before the worker restart (run {rid})")
+        else:
+            t_busy = time.time()
+            while True:  # a run left over from a previous worker may still be winding down: wait instead of failing
+                r = self.http.post("/run", json={"cmd": cmd, "log_path": log_path, "env": env or {}, "cwd": cwd})
+                if r.status_code != 409:
+                    break
+                if should_cancel and should_cancel():
+                    raise StageCancelled("cancelled while waiting for the runner")
+                if time.time() - t_busy > 600:
+                    raise StageFailed(f"runner {self.name} stayed busy with another run for 600s")
+                time.sleep(3)
+            r.raise_for_status()
+            rid = r.json()["run_id"]
+            if run_file:
+                try:
+                    with open(run_file, "w", encoding="utf-8") as f:
+                        json.dump({"run_id": rid, "cmd": cmd, "started": time.time()}, f)
+                except OSError:
+                    pass
         t0 = time.time()
         while True:
             s = self.http.get(f"/runs/{rid}").json()

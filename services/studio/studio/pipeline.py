@@ -48,6 +48,41 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+class Lanes:
+    """Which lanes (image / asset) currently have a GPU stage running. Used only to decide what to wait for after an
+    out-of-memory error; nothing is gated up front."""
+
+    def __init__(self):
+        import threading
+
+        self._lock = threading.Lock()
+        self._busy: dict[str, str] = {}
+
+    def enter(self, lane: str, stage: str):
+        with self._lock:
+            self._busy[lane] = stage
+
+    def leave(self, lane: str):
+        with self._lock:
+            self._busy.pop(lane, None)
+
+    def other_busy(self, lane: str):
+        with self._lock:
+            for k, v in self._busy.items():
+                if k != lane:
+                    return k, v
+        return None
+
+    def wait_other_idle(self, lane: str, should_cancel, poll_s: float = 3.0):
+        while self.other_busy(lane):
+            if should_cancel():
+                raise JobCancelled()
+            time.sleep(poll_s)
+
+
+LANES = Lanes()
+
+
 class JobRun:
     def __init__(self, store, job: dict):
         self.store = store
@@ -70,6 +105,7 @@ class JobRun:
             d.mkdir(parents=True, exist_ok=True)
         atomic_write_json(self.dir / "request.json", self.request)
         self.runners = {k: Runner(k) for k in ("image", "pixal3d", "blender")}
+        self.lane = "image" if job.get("kind") == "image" else "asset"
 
     # ---- helpers -----------------------------------------------------------
     def log(self, msg: str, level: str = "info"):
@@ -145,42 +181,56 @@ class JobRun:
         return False
 
     def _run_gpu_stage(self, runner_name: str, stage: str, cmd: list[str], log_path: Path, fallback_keys: list[str]):
-        """Run a GPU stage: lenient pre-start check, then on CUDA OOM (1) wait for other workloads to release memory and
-        retry with the same settings, (2) apply the preset's fallback ladder (quality-reducing steps only if allowed)."""
+        """Run a GPU stage. No VRAM thresholds: the stage starts right away (other lanes and other apps share the card).
+        On CUDA OOM: (1) if the other lane is in a GPU stage, wait for it to finish and retry with the same settings,
+        (2) otherwise retry once after a short pause (another app may release memory), (3) then apply the preset's
+        fallback ladder (quality-reducing steps only if the job allows them)."""
         r = self.runners[runner_name]
+        lane = self.lane
         attempts = 0
-        waited_for_gpu = False
+        same_settings_retries = 0
+        run_file = log_path.with_name("run.json")
         while True:
             attempts += 1
             self.check_cancel()
-            r.wait_gpu_free(config.GPU_BUSY_THRESHOLD_MIB[runner_name], config.GPU_BUSY_WAIT_S, self.cancelled, self.log)
             with open(log_path, "a", encoding="utf-8") as f:
                 f.write(f"\n===== attempt {attempts} at {time.strftime('%Y-%m-%d %H:%M:%S')} =====\n")
+            LANES.enter(lane, stage)
             try:
-                return r.run(cmd, str(log_path), should_cancel=self.cancelled)
+                return r.run(cmd, str(log_path), should_cancel=self.cancelled, run_file=str(run_file), log=self.log)
             except StageCancelled:
                 raise JobCancelled()
             except StageFailed as e:
-                if e.oom and attempts <= config.MAX_OOM_RETRIES:
-                    g = r.gpu()
-                    used = g["gpus"][0]["used_mib"] if g.get("available") and g.get("gpus") else 0
-                    if not waited_for_gpu and used > config.GPU_RETRY_THRESHOLD_MIB[runner_name]:
-                        waited_for_gpu = True
-                        self.warn(f"CUDA out of memory in stage '{stage}' while {used} MiB of the GPU was in use by other "
-                                  f"workloads; waiting for them to release memory, then retrying with the same settings")
-                        try:
-                            r.wait_gpu_free(config.GPU_RETRY_THRESHOLD_MIB[runner_name], config.GPU_BUSY_WAIT_S, self.cancelled, self.log)
-                        except StageFailed:
-                            self.log("GPU did not free up in time; continuing with the fallback ladder", "warn")
-                        continue
-                    phase = _last_phase(log_path)
-                    keys = [k for k in fallback_keys if (phase != "export" or k == "master") and (phase == "export" or k != "master")]
-                    if any(self._fallback(k, log_path) for k in keys or fallback_keys):
-                        continue
-                    raise JobFailed(stage, f"CUDA out of memory in stage '{stage}' and no permitted fallback remains",
-                                    {"log": str(log_path.relative_to(self.dir)), "run": e.run})
-                tail = _log_tail(log_path)
-                raise JobFailed(stage, f"{e}", {"log": str(log_path.relative_to(self.dir)), "run": e.run, "log_tail": tail})
+                if not e.oom:
+                    tail = _log_tail(log_path)
+                    raise JobFailed(stage, f"{e}", {"log": str(log_path.relative_to(self.dir)), "run": e.run, "log_tail": tail})
+                other = LANES.other_busy(lane)
+                if other and same_settings_retries < config.MAX_OOM_RETRIES:
+                    same_settings_retries += 1
+                    self.warn(f"CUDA out of memory in stage '{stage}' while the {other[0]} lane was running its {other[1]} stage; "
+                              f"waiting for it to finish, then retrying with the same settings")
+                    LANES.wait_other_idle(lane, self.cancelled)
+                    continue
+                if same_settings_retries == 0:
+                    same_settings_retries += 1
+                    self.warn(f"CUDA out of memory in stage '{stage}'; retrying once with the same settings in "
+                              f"{config.OOM_RETRY_PAUSE_S} s in case another application releases memory")
+                    for _ in range(config.OOM_RETRY_PAUSE_S):
+                        self.check_cancel()
+                        time.sleep(1)
+                    continue
+                phase = _last_phase(log_path)
+                keys = [k for k in fallback_keys if (phase != "export" or k == "master") and (phase == "export" or k != "master")]
+                if any(self._fallback(k, log_path) for k in keys or fallback_keys):
+                    continue
+                raise JobFailed(stage, f"CUDA out of memory in stage '{stage}' and no permitted fallback remains",
+                                {"log": str(log_path.relative_to(self.dir)), "run": e.run})
+            finally:
+                try:
+                    run_file.unlink()
+                except OSError:
+                    pass
+                LANES.leave(lane)
 
     # ---- stages ------------------------------------------------------------
     def run(self):
@@ -362,7 +412,7 @@ class JobRun:
                  f"collision={opt['generate_collision']}")
         try:
             run = self.runners["blender"].run(["python", "-m", "blender.process_asset", "--request", str(d / "request.json")],
-                                              str(log_path), should_cancel=self.cancelled)
+                                              str(log_path), should_cancel=self.cancelled, run_file=str(log_path.with_name("run.json")), log=self.log)
         except StageCancelled:
             raise JobCancelled()
         except StageFailed as e:

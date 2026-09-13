@@ -128,8 +128,13 @@ Lightning 4 vs 8 share seeds, so the compositions match and the difference is de
 * **Retry / reprocess:** `POST /v1/jobs/{id}/retry` resumes failed jobs from completed stages;
   `{"from_stage":"blender","optimize":{...}}` re-optimises a finished job (used to re-run all three assets with new budgets
   and the meshoptimizer path without regenerating images or 3D).
-* **GPU sharing:** other GPU users (ComfyUI, host Blender viewports) are never killed; stages start unless the card is
-  essentially full, and on CUDA OOM the worker waits for memory to free before touching quality.
+* **Two lanes, no VRAM thresholds (2026-09-13):** the worker runs an image lane and an asset lane, so an 8-second
+  image session never waits behind a 4-minute 3D job. GPU stages start immediately; on CUDA OOM the stage waits for the
+  other lane's GPU stage to finish and retries with the same settings (then one paused retry, then the quality ladder).
+  Other GPU users (ComfyUI, host Blender viewports) are never killed.
+* **Restart re-attach:** each GPU/Blender stage records its runner run id in `stages/<stage>/run.json`; a restarted worker
+  re-attaches to a stage still running in the runner container instead of cancelling it (a worker rebuild used to cost a
+  full Pixal3D stage).
 * **Offline:** every worker runs with `HF_HUB_OFFLINE=1`; the Pixal3D and Qwen loaders were verified with
   `docker run --network none`.
 * **Mocked error paths:** `tests/test_api_mock.py` (9 tests): invalid inputs, auth, cancel, artifact path confinement,

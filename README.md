@@ -78,7 +78,8 @@ http://127.0.0.1:8090 once `scripts\start.ps1` finishes.
    and choose how many variations you want (4 by default).
 2. **Pick the images you like.** You get that many reference-image variations of your idea. Nothing has been built
    in 3D yet, so this stage is cheap to iterate on — reroll, tweak the wording, try another style.
-3. **Send them to the queue.** Selected variations become 3D jobs. The queue runs them one at a time on the GPU,
+3. **Send them to the queue.** Selected variations become 3D jobs. Image sessions and 3D jobs run in separate lanes,
+   so you can keep generating images while a 3D job is building; 3D jobs run one at a time on the GPU,
    automatically, or you can park jobs on hold and release them when you want the card free.
 4. **Browse the library.** Finished assets show their previews, spin in an in-browser 3D viewer, and download as
    single files or the whole folder. Re-optimise re-runs just the mesh step at a new triangle or texture budget —
