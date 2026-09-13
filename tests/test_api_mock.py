@@ -264,3 +264,25 @@ def test_lanes_claim_by_kind_and_oom_waits_for_other_lane(env, monkeypatch):
     assert run.settings["pixal3d"]["resolution"] == 1024 and not run.settings.get("_fallbacks_applied")
     assert any("waiting for it to finish" in w for w in run.warnings)
     assert LANES.other_busy("asset") is None
+
+
+def test_cancel_then_purge_never_resurrects(env):
+    """cancel (in flight) -> purge -> worker restart: the job must not come back (issue #4)."""
+    client, api, _ = env
+    from studio.db import JobStore
+
+    store = JobStore()
+    job = client.post("/v1/jobs", json={"prompt": "a stylized cargo crate"}).json()["job_id"]
+    store.claim_next("w")
+    assert client.delete(f"/v1/jobs/{job}?purge=true").status_code == 409     # running, no cancel yet
+    assert client.post(f"/v1/jobs/{job}/cancel").json()["result"] == "cancelling"
+    assert client.delete(f"/v1/jobs/{job}?purge=true").json()["result"] == "purged"
+    assert store.is_cancel_requested(job)                                     # a purged row counts as cancelled
+    assert JobStore().requeue_orphans("worker-B") == []
+    assert client.get(f"/v1/jobs/{job}").status_code == 404
+    # a cancel pending when the worker died is finished on restart instead of being re-run
+    job2 = client.post("/v1/jobs", json={"prompt": "a stylized cargo crate"}).json()["job_id"]
+    store.claim_next("w")
+    client.post(f"/v1/jobs/{job2}/cancel")
+    assert JobStore().requeue_orphans("worker-C") == []
+    assert client.get(f"/v1/jobs/{job2}").json()["status"] == "cancelled"

@@ -183,7 +183,7 @@ Ready-made request bodies: [`examples/pump_station.json`](examples/pump_station.
 ```powershell
 pip install "mcp>=1.2"
 python mcp\server.py
-# Claude Code:  claude mcp add asset-studio -- python C:/Users/Zorro/asset-studio/mcp/server.py
+# Claude Code:  claude mcp add asset-studio -- python <path-to-repo>/mcp/server.py
 ```
 
 Tools: `capabilities`, `generate`, `status`, `wait`, `artifacts`, `download`, `manifest`, `cancel`, `retry`,

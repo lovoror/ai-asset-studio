@@ -228,12 +228,18 @@ class JobStore:
     def requeue_orphans(self, worker_id: str) -> list[str]:
         """On worker start: jobs left 'running' by a crashed/restarted worker go back to the queue."""
         with self.tx() as c:
-            rows = c.execute("SELECT id FROM jobs WHERE status='running'").fetchall()
-            ids = [r["id"] for r in rows]
+            rows = c.execute("SELECT id, cancel_requested FROM jobs WHERE status='running'").fetchall()
+            ids = [r["id"] for r in rows if not r["cancel_requested"]]
+            dropped = [r["id"] for r in rows if r["cancel_requested"]]
             for i in ids:
                 c.execute("UPDATE jobs SET status='queued', updated_at=? WHERE id=?", (time.time(), i))
+            for i in dropped:  # a cancel was in flight when the worker died: finish the cancel, never re-run it
+                c.execute("UPDATE jobs SET status='cancelled', stage='cancelled', finished_at=?, updated_at=? WHERE id=?",
+                          (time.time(), time.time(), i))
         for i in ids:
             self.event(i, "warn", f"requeued after worker restart ({worker_id}); completed stages will be reused")
+        for i in dropped:
+            self.event(i, "warn", f"cancelled (cancel was pending when the worker restarted: {worker_id})")
         return ids
 
     def update(self, job_id: str, **fields):
@@ -283,7 +289,7 @@ class JobStore:
 
     def is_cancel_requested(self, job_id: str) -> bool:
         row = self.con.execute("SELECT cancel_requested FROM jobs WHERE id=?", (job_id,)).fetchone()
-        return bool(row and row["cancel_requested"])
+        return row is None or bool(row["cancel_requested"])  # a purged job must stop too
 
     # ---- events ------------------------------------------------------------
     def event(self, job_id: str, level: str, message: str):
