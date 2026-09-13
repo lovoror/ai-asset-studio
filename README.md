@@ -246,8 +246,8 @@ errors and import into headless Godot 4.7.2.
 ## Limitations
 
 * The output is an **optimized static prop**: automatic decimation topology, no rig, no animation-friendly edge flow.
-* `briaai/RMBG-2.0` (the upstream matting model) is gated and this account has no access, so the open
-  `ZhengPeng7/BiRefNet` is used instead. `STUDIO_REMBG_MODEL` switches back if you do have access.
+* Matting defaults to Pixal3D's upstream `briaai/RMBG-2.0`, which is gated: accept its license on Hugging Face and run the
+  prefetch with your token. Without access, set `STUDIO_REMBG_MODEL=ZhengPeng7/BiRefNet` (open drop-in replacement).
 * Multi-view input is implemented and statically validated, but the `*_mv` checkpoints (+17 GB) were never downloaded
   and no multi-view job has been run. There is no automatic novel-view generation.
 * **Godot 4.7.2 import is tested**; Unity is not installed on this machine, so it is untested here (the GLBs are
