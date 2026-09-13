@@ -160,4 +160,4 @@ docker compose run --rm --no-deps -v ${PWD}:/src api python -m pytest -q /src/te
 python tests\acceptance_real.py --cancel-test --restart-test                                          # real GPU runs
 ```
 
-See `docs/RESULTS.md` for measured timings, VRAM/RAM and known limitations.
+See **[BENCHMARKS.md](BENCHMARKS.md)** for measured timings, VRAM/RAM and reduction results, and `docs/RESULTS.md` for the narrative and known limitations.
