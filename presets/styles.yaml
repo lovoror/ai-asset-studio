@@ -1,11 +1,11 @@
-# Style presets for the reference-image prompt builder.
-# Each preset contributes: a descriptive style clause, material/palette defaults, background colour,
-# extra negatives, and optimisation defaults. Application-level only: nothing here is forwarded verbatim to a backend.
+# Style presets for the reference-image prompt builder and the default optimisation budgets.
+# Each preset contributes: a short UI description, a style clause for the image prompt, material/palette defaults,
+# background colour, extra negatives, and optimisation defaults. Application-level only: nothing here is forwarded
+# verbatim to a backend. Keys are referenced by the API/CLI (`style`) and the portal.
 mobile_factory:
-  label: "Stylized mobile factory game"
-  description: >
-    Chunky readable forms for a mobile factory-building game: strong silhouettes, controlled detail,
-    coherent limited palette, minimal tiny protrusions, painted-metal materials, slight bevels.
+  label: "Stylized factory game"
+  description: "Chunky, readable machines and props for a factory-builder. Bold silhouettes, painted metal, limited palette."
+  best_for: "Machines, conveyors, tanks, crates and buildings that must read at a small on-screen size."
   style_clause: >
     stylized game asset for a mobile factory-building game, chunky simplified forms with a strong readable
     silhouette, controlled detail level, slightly exaggerated proportions, soft bevelled edges, clean
@@ -21,7 +21,9 @@ mobile_factory:
     lod_fractions: [0.5, 0.25]
     collision_triangles: 200
 stylized_generic:
-  label: "Stylized (generic)"
+  label: "Stylized"
+  description: "Hand-painted look with appealing proportions. Works for most props, characters' gear, furniture and vehicles."
+  best_for: "General game props when you do not need the factory look or photo-realism."
   style_clause: >
     stylized 3D game asset, clean readable shapes, hand-painted PBR materials, appealing proportions,
     moderate detail, coherent palette
@@ -31,7 +33,9 @@ stylized_generic:
   negative_extra: "clutter, tiny greebles"
   optimize_defaults: {target_triangles: 30000, texture_size: 2048, lod_fractions: [0.5, 0.25], collision_triangles: 256}
 realistic:
-  label: "Realistic prop"
+  label: "Realistic"
+  description: "Physically plausible materials, proportions and light wear, like a product photo of the real thing."
+  best_for: "Tools, furniture, vehicles, architecture pieces and anything meant to look believable."
   style_clause: >
     realistic 3D prop, physically plausible materials and proportions, moderate surface wear, product-shot clarity
   default_materials: ""
@@ -40,7 +44,9 @@ realistic:
   negative_extra: "cartoon, toy-like, exaggerated proportions"
   optimize_defaults: {target_triangles: 40000, texture_size: 2048, lod_fractions: [0.5, 0.25], collision_triangles: 256}
 lowpoly:
-  label: "Low-poly flat-shaded"
+  label: "Low-poly"
+  description: "Flat-shaded facets and solid colours. Very small triangle budgets; detail comes from shape, not texture."
+  best_for: "Trees, rocks, simple props and mobile/retro looks where a few thousand triangles is the target."
   style_clause: >
     low-poly 3D game asset, flat-shaded faceted surfaces, simple geometric forms, solid flat colours,
     minimal texture detail, strong silhouette
@@ -50,7 +56,9 @@ lowpoly:
   negative_extra: "fine texture detail, realistic grime, smooth organic curves"
   optimize_defaults: {target_triangles: 6000, texture_size: 1024, lod_fractions: [0.5], collision_triangles: 128}
 clean_product:
-  label: "Clean product visualisation"
+  label: "Clean product"
+  description: "Catalogue-style render of a manufactured object: precise smooth surfaces, accurate materials, no wear."
+  best_for: "Consumer goods, appliances, packaging, mugs and bottles, hard-surface items with a factory finish."
   style_clause: >
     clean product-visualisation render of a single manufactured object, precise smooth surfaces,
     accurate materials, catalogue clarity
@@ -58,4 +66,28 @@ clean_product:
   default_palette: []
   background: "plain flat white studio background"
   negative_extra: "wear, dirt, scratches, stylization"
+  optimize_defaults: {target_triangles: 30000, texture_size: 2048, lod_fractions: [0.5, 0.25], collision_triangles: 256}
+scifi:
+  label: "Sci-fi hard surface"
+  description: "Panelled hard-surface design with emissive accents and machined details, clean and readable."
+  best_for: "Crates, terminals, drones, weapons props, modular station parts."
+  style_clause: >
+    sci-fi hard-surface game asset, clean panel lines and bevels, machined metal and composite panels,
+    a few emissive accent strips, readable silhouette, moderate detail density
+  default_materials: "brushed metal, matte composite panels, emissive accents"
+  default_palette: ["gunmetal", "off-white", "cyan accent"]
+  background: "plain flat dark grey studio background"
+  negative_extra: "tangled cables, tiny greebles, holographic screens, text panels"
+  optimize_defaults: {target_triangles: 30000, texture_size: 2048, lod_fractions: [0.5, 0.25], collision_triangles: 256}
+fantasy:
+  label: "Fantasy"
+  description: "Hand-crafted medieval and magical props: worn wood, forged iron, stone, leather, warm painted look."
+  best_for: "Chests, barrels, weapons, lanterns, potions, market stalls, ruins pieces."
+  style_clause: >
+    stylized fantasy game prop, hand-crafted look with worn wood, forged iron, carved stone and leather,
+    slightly exaggerated proportions, warm hand-painted PBR textures, readable silhouette
+  default_materials: "worn wood, forged iron, leather"
+  default_palette: ["oak brown", "iron grey", "brass"]
+  background: "plain flat light grey studio background"
+  negative_extra: "modern materials, plastic, photorealistic grime, runes with text"
   optimize_defaults: {target_triangles: 30000, texture_size: 2048, lod_fractions: [0.5, 0.25], collision_triangles: 256}

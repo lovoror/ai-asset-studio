@@ -83,7 +83,13 @@ def import_master(path: str):
 
 
 def tri_count(obj) -> int:
-    return sum(max(0, len(p.vertices) - 2) for p in obj.data.polygons)
+    me = obj.data
+    n = len(me.polygons)
+    if n == 0:
+        return 0
+    lt = np.empty(n, dtype=np.int32)
+    me.polygons.foreach_get("loop_total", lt)
+    return int(np.maximum(lt - 2, 0).sum())
 
 
 def bounds(obj):
@@ -410,27 +416,29 @@ def _bake_target(obj, size, name, is_data):
     return img, mat
 
 
-def fill_missed(arr: np.ndarray, hit: np.ndarray, iters: int = 24) -> np.ndarray:
-    """Replace texels whose bake ray missed the master (hit=False) with the nearest hit texel's value, by iterative
-    dilation. Also grows a margin around UV islands, which hides mip/seam bleeding."""
+def fill_missed(arr: np.ndarray, hit: np.ndarray, iters: int = 8) -> np.ndarray:
+    """Replace texels whose bake ray missed the master (hit=False) with the mean of their hit neighbours, growing
+    outwards by one texel per iteration (also a small margin around islands). `arr` may stack several maps along the
+    last axis so all of them are filled in one pass. Stops early once no fillable texel is left."""
     out = arr.copy()
     ok = hit.copy()
+    H, W = ok.shape
     for _ in range(iters):
-        if ok.all():
-            break
-        shifted = []
-        oks = []
-        for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (1, -1), (-1, 1), (-1, -1)):
-            shifted.append(np.roll(np.roll(out, dy, 0), dx, 1))
-            oks.append(np.roll(np.roll(ok, dy, 0), dx, 1))
-        cnt = np.zeros(ok.shape, dtype=np.float32)
+        # 4-neighbour dilation with slicing (no np.roll copies of the full stack)
+        nb_ok = np.zeros((H, W), dtype=np.uint8)
         acc = np.zeros_like(out)
-        for sh, o in zip(shifted, oks):
-            acc += sh * o[..., None]
-            cnt += o
-        fillable = (~ok) & (cnt > 0)
-        out[fillable] = acc[fillable] / cnt[fillable][:, None]
-        ok = ok | fillable
+        for src_sl, dst_sl in (((slice(1, None), slice(None)), (slice(0, -1), slice(None))),
+                               ((slice(0, -1), slice(None)), (slice(1, None), slice(None))),
+                               ((slice(None), slice(1, None)), (slice(None), slice(0, -1))),
+                               ((slice(None), slice(0, -1)), (slice(None), slice(1, None)))):
+            m = ok[src_sl]
+            nb_ok[dst_sl] += m
+            acc[dst_sl] += out[src_sl] * m[..., None]
+        fillable = (~ok) & (nb_ok > 0)
+        if not fillable.any():
+            break
+        out[fillable] = acc[fillable] / nb_ok[fillable][:, None]
+        ok |= fillable
     return out
 
 
@@ -454,7 +462,7 @@ def bake_from_master(master, target, size: int, maps: dict, out_dir: Path, diag:
     mr = maps["images"]["metallic"] or maps["images"]["roughness"]
     channel_jobs = [("base_color", base, None, False, "EMIT")]
     if mr is not None:
-        channel_jobs += [("roughness", mr, "G", True, "EMIT"), ("metallic", mr, "B", True, "EMIT")]
+        channel_jobs += [("mr", mr, None, True, "EMIT")]  # one bake: G=roughness, B=metallic (glTF packing)
     if base is not None and maps["alpha_mode"] not in (None, "OPAQUE"):
         channel_jobs.append(("alpha", base, "A", True, "EMIT"))
     baked = {}
@@ -501,9 +509,18 @@ def bake_from_master(master, target, size: int, maps: dict, out_dir: Path, diag:
     bpy.data.images.remove(tgt)
     bpy.data.materials.remove(tmat)
     results["bake_normal_s"] = round(time.time() - t0, 2)
-    # fill ray misses (and grow island margins) from nearest hit texels
-    for k in list(baked):
-        baked[k] = fill_missed(baked[k], hit)
+    if "mr" in baked:
+        baked["roughness"] = baked["mr"][..., 1:2]
+        baked["metallic"] = baked["mr"][..., 2:3]
+        del baked["mr"]
+    # fill ray misses (and grow island margins) from nearest hit texels: one pass over all maps stacked
+    names = list(baked)
+    widths = [baked[k].shape[-1] for k in names]
+    stacked = fill_missed(np.concatenate([baked[k] for k in names], axis=-1), hit)
+    off = 0
+    for k, w in zip(names, widths):
+        baked[k] = stacked[..., off:off + w]
+        off += w
     # compose glTF images
     b = baked["base_color"]
     if "alpha" in baked:
@@ -639,6 +656,86 @@ def mo_decimate(obj, target: int, error_ladder=(0.01, 0.03, 0.05)) -> dict:
             "simplifier": "meshoptimizer.simplifyWithAttributes(normals w=0.7, PRUNE)"}
 
 
+def lod_from_asset(asset, target: int, error_ladder=(0.01, 0.03, 0.05, 0.1, 0.2, 0.35)) -> dict:
+    """Simplify the optimized asset while preserving its UV layout (meshoptimizer with UV+normal attributes on the
+    UV-split vertex set), so LODs reuse LOD0's textures and material: no re-unwrap, no re-bake, one texture set."""
+    import ctypes
+
+    import meshoptimizer as mo
+
+    me = asset.data
+    me.calc_loop_triangles()
+    n_tri = len(me.loop_triangles)
+    tri_loops = np.empty(n_tri * 3, dtype=np.int64)
+    me.loop_triangles.foreach_get("loops", tri_loops)
+    loop_v = np.empty(len(me.loops), dtype=np.int64)
+    me.loops.foreach_get("vertex_index", loop_v)
+    uv = np.empty(len(me.loops) * 2, dtype=np.float32)
+    me.uv_layers.active.data.foreach_get("uv", uv)
+    uv = uv.reshape(-1, 2)
+    co = np.empty(len(me.vertices) * 3, dtype=np.float32)
+    me.vertices.foreach_get("co", co)
+    co = co.reshape(-1, 3)
+    # split vertices: unique (vertex, uv) pairs
+    key = np.concatenate([loop_v[:, None].astype(np.float64), np.round(uv, 6).astype(np.float64)], axis=1)
+    _, first, inv = np.unique(key, axis=0, return_index=True, return_inverse=True)
+    inv = inv.reshape(-1)
+    v = np.ascontiguousarray(co[loop_v[first]], dtype=np.float32)
+    vuv = np.ascontiguousarray(uv[first], dtype=np.float32)
+    idx = np.ascontiguousarray(inv[tri_loops], dtype=np.uint32)
+    # per split-vertex normals (area weighted) as extra attributes
+    f = idx.reshape(-1, 3).astype(np.int64)
+    fn = np.cross(v[f[:, 1]] - v[f[:, 0]], v[f[:, 2]] - v[f[:, 0]])
+    vn = np.zeros_like(v)
+    for k in range(3):
+        np.add.at(vn, f[:, k], fn)
+    vn /= np.maximum(np.linalg.norm(vn, axis=1, keepdims=True), 1e-12)
+    attrs = np.ascontiguousarray(np.concatenate([vuv, vn], axis=1), dtype=np.float32)
+    weights = np.array([10.0, 10.0, 0.5, 0.5, 0.5], dtype=np.float32)  # docs: texcoords 10-100, normals 0.5-1
+    fn_, _ = _meshopt_simplify_with_attributes()
+    C = ctypes
+    target_idx = int(target) * 3
+    best = None  # closest non-degenerate result; a too-loose error bound can collapse a small mesh completely
+    for err in error_ladder:
+        dest = np.empty(len(idx), dtype=np.uint32)
+        res_err = C.c_float(0.0)
+        n = fn_(dest.ctypes.data_as(C.POINTER(C.c_uint)), idx.ctypes.data_as(C.POINTER(C.c_uint)), len(idx),
+                v.ctypes.data_as(C.POINTER(C.c_float)), len(v), 12,
+                attrs.ctypes.data_as(C.POINTER(C.c_float)), 20, weights.ctypes.data_as(C.POINTER(C.c_float)), 5,
+                None, target_idx, float(err), int(mo.SIMPLIFY_PRUNE), C.byref(res_err))
+        if n < 36:  # collapsed to nothing: keep the previous result
+            break
+        best = (dest[:n].copy(), float(res_err.value), err)
+        if n <= target_idx * 1.05:
+            break
+    if best is None:
+        best = (idx.copy(), 0.0, 0.0)
+    new_idx, result_error, used_err = best
+    used = np.unique(new_idx)
+    remap = np.full(len(v), -1, dtype=np.int64)
+    remap[used] = np.arange(len(used))
+    faces = remap[new_idx].reshape(-1, 3)
+    log(f"[lod] target={target} split_verts={len(v)} in_idx={len(idx)} out_idx={len(new_idx)} used={len(used)} err={result_error:.4f}@{used_err}")
+    me2 = bpy.data.meshes.new(asset.name + "_lod")
+    me2.from_pydata(v[used].tolist(), [], faces.tolist())
+    me2.validate(verbose=False)
+    uvl = me2.uv_layers.new(name="UVMap")
+    lv = np.empty(len(me2.loops), dtype=np.int64)
+    me2.loops.foreach_get("vertex_index", lv)
+    uvl.data.foreach_set("uv", vuv[used][lv].reshape(-1))
+    me2.update()
+    lod = bpy.data.objects.new(asset.name + "_lod", me2)
+    bpy.context.scene.collection.objects.link(lod)
+    for m in asset.data.materials:
+        lod.data.materials.append(m)
+    select_only([lod])
+    bpy.ops.object.shade_smooth()
+    if hasattr(bpy.ops.object, "shade_smooth_by_angle"):
+        bpy.ops.object.shade_smooth_by_angle(angle=math.radians(45))
+    return {"object": lod, "triangles": tri_count(lod), "result_error_relative": result_error, "target_error_relative": used_err,
+            "reached": tri_count(lod) <= target * 1.05, "simplifier": "meshoptimizer.simplifyWithAttributes(uv w=20, normals w=0.5, PRUNE) on LOD0"}
+
+
 def reduce_to(obj, target: int, error_ladder=(0.01, 0.03, 0.05)) -> dict:
     """Reduction dispatcher: meshoptimizer within the error ladder; falls back to fast-simplification if the module is missing."""
     try:
@@ -723,7 +820,7 @@ def smart_uv(obj):
     bpy.ops.mesh.select_all(action="SELECT")
     bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.002, correct_aspect=True, scale_to_bounds=False)
     try:  # tighter packing = more texels on the surface (smart_project alone wastes most of the atlas on large meshes)
-        bpy.ops.uv.pack_islands(rotate=True, margin=0.003, margin_method="FRACTION")
+        bpy.ops.uv.pack_islands(rotate=False, margin=0.003, margin_method="FRACTION")
     except Exception:  # noqa: BLE001
         pass
     bpy.ops.object.mode_set(mode="OBJECT")
@@ -952,36 +1049,26 @@ def main():
     outputs["lods"] = []
     if opt.get("generate_lods"):
         t0 = time.time()
-        lod_source = lod_base
+        prev = asset  # LODs form a chain (docs: simplifying the previous LOD is cheaper and gives smoother transitions)
         for i, frac in enumerate(opt.get("lod_fractions", [0.5, 0.25]), start=1):
             lod_target = max(12, int(got * frac))
-            if method == "decimate_keep_uv" or method == "no_decimation":
-                lod = duplicate(asset, f"{name}_LOD{i}")
-                decimate(lod, lod_target / max(tri_count(lod), 1), True)
-                for _ in range(2):
-                    if tri_count(lod) > lod_target * 1.05:
-                        decimate(lod, lod_target / tri_count(lod) * 0.98, True)
-                renormalise(lod, opt)
-                lod_maps = "reused_from_asset"
-            else:
-                lod = duplicate(lod_source, f"{name}_LOD{i}")
-                lod.hide_render = False
-                lod_red = reduce_to(lod, lod_target)
-                renormalise(lod, opt)
-                smart_uv(lod)
-                lod_tex = max(256, tex_size >> i)
-                baked = bake_from_master(master, lod, lod_tex, maps, out_dir, diag, prefix=f"lod{i}",
-                                         cage=(max(diag * 0.01, 2.5 * proxy_info["voxel_size_m"]) if proxy_info else None))
-                lod.data.materials.clear()
-                lod.data.materials.append(build_pbr_material(f"lod{i}_material", baked["base"], baked["mr"], baked["normal"], maps["alpha_mode"]))
-                lod_maps = {**baked["info"]["maps"], "texture_size": lod_tex}
+            info = lod_from_asset(prev, lod_target)
+            lod = info.pop("object")
+            lod.name = f"{name}_LOD{i}"
+            renormalise(lod, opt)
             p = out_dir / f"{name}_LOD{i}.glb"
             export_glb([lod], p)
             files.append(p.name)
-            outputs["lods"].append({"file": p.name, "fraction": frac, "target_triangles": lod_target, "maps": lod_maps,
-                                    "reduction": (lod_red if method not in ("decimate_keep_uv", "no_decimation") else "blender_collapse_keep_uv"),
-                                    **mesh_report(lod)})
-            bpy.data.objects.remove(lod, do_unlink=True)
+            outputs["lods"].append({"file": p.name, "fraction": frac, "target_triangles": lod_target,
+                                    "maps": "shared_with_asset (UVs preserved)", "reduction": info, **mesh_report(lod)})
+            if info["triangles"] > lod_target * 1.1:
+                WARN.append(f"LOD{i} stopped at {info['triangles']} triangles (budget {lod_target}): further UV-preserving "
+                            f"collapse would exceed a 35% error bound")
+            if prev is not asset:
+                bpy.data.objects.remove(prev, do_unlink=True)
+            prev = lod
+        if prev is not asset:
+            bpy.data.objects.remove(prev, do_unlink=True)
         tick("lods_s", t0)
 
     bpy.data.objects.remove(lod_base, do_unlink=True)

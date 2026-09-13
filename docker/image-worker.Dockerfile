@@ -6,7 +6,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     python -m pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cu128
 RUN --mount=type=cache,target=/root/.cache/pip \
     python -m pip install diffusers==0.40.0 transformers==5.17.0 accelerate==1.15.0 safetensors \
-        "huggingface_hub[hf_xet]" pillow==12.0.0 numpy scipy sentencepiece protobuf psutil
+        "huggingface_hub[hf_xet]" pillow==12.0.0 numpy scipy sentencepiece protobuf psutil pyyaml peft
 ENV HF_HOME=/models/hf PYTHONPATH=/app RUNNER_NAME=image-worker PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 WORKDIR /app
 COPY services/runner /app/runner

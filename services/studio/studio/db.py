@@ -60,6 +60,7 @@ MIGRATIONS = [
 DEFAULT_SETTINGS = {
     "auto_process": False,       # selected images start 3D generation immediately (else they are held for review)
     "default_variations": 4,
+    "default_image_model": "qwen-image-2512",
     "default_quality": "balanced",
     "default_style": "mobile_factory",
     "default_target_triangles": 20000,
@@ -136,6 +137,13 @@ class JobStore:
         sql = "SELECT * FROM jobs" + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY created_at DESC LIMIT ? OFFSET ?"
         rows = self.con.execute(sql, (*args, limit, offset))
         return [self._row(r) for r in rows]
+
+    def children_counts(self, parent_ids: list) -> dict:
+        if not parent_ids:
+            return {}
+        q = ",".join("?" * len(parent_ids))
+        rows = self.con.execute(f"SELECT parent_id, COUNT(*) AS n FROM jobs WHERE parent_id IN ({q}) GROUP BY parent_id", parent_ids)
+        return {r["parent_id"]: r["n"] for r in rows}
 
     def children(self, parent_id: str) -> "list[dict]":
         rows = self.con.execute("SELECT * FROM jobs WHERE parent_id=? ORDER BY created_at", (parent_id,))

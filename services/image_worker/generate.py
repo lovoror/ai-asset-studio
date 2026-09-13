@@ -87,14 +87,39 @@ def encode_prompts(pipe, prompt: str, negative: str, max_len: int = 512):
     return pe, pm, ne, nm
 
 
-def load_generator(model_id: str, gpu_resident_blocks: int):
+def lightning_scheduler():
+    """Scheduler config used by the official Qwen-Image-Lightning diffusers script (shift=3, exponential time shift)."""
+    import math
+
+    from diffusers import FlowMatchEulerDiscreteScheduler
+
+    return FlowMatchEulerDiscreteScheduler.from_config({
+        "base_image_seq_len": 256, "base_shift": math.log(3), "invert_sigmas": False, "max_image_seq_len": 8192,
+        "max_shift": math.log(3), "num_train_timesteps": 1000, "shift": 1.0, "shift_terminal": None, "stochastic_sampling": False,
+        "time_shift_type": "exponential", "use_beta_sigmas": False, "use_dynamic_shifting": True, "use_exponential_sigmas": False,
+        "use_karras_sigmas": False})
+
+
+def load_generator(model_id: str, gpu_resident_blocks: int, lightning: dict | None = None):
     import torch
     from diffusers import QwenImagePipeline, QwenImageTransformer2DModel
 
     dm, n_blocks = build_device_map(model_id, gpu_resident_blocks)
     print(f"[load] transformer device map: {min(gpu_resident_blocks, n_blocks)}/{n_blocks} blocks GPU-resident, rest CPU-offloaded", flush=True)
     transformer = QwenImageTransformer2DModel.from_pretrained(model_id, subfolder="transformer", torch_dtype=torch.bfloat16, device_map=dm)
-    pipe = QwenImagePipeline.from_pretrained(model_id, transformer=transformer, text_encoder=None, tokenizer=None, torch_dtype=torch.bfloat16)
+    kw = {}
+    if lightning:
+        kw["scheduler"] = lightning_scheduler()
+    pipe = QwenImagePipeline.from_pretrained(model_id, transformer=transformer, text_encoder=None, tokenizer=None, torch_dtype=torch.bfloat16, **kw)
+    if lightning:
+        from huggingface_hub import snapshot_download
+
+        d = snapshot_download(lightning["repo"], revision=lightning["revision"], allow_patterns=[lightning["file"]])
+        t0 = time.time()
+        pipe.load_lora_weights(os.path.join(d, lightning["file"]), adapter_name="lightning")
+        pipe.fuse_lora(adapter_names=["lightning"], lora_scale=1.0)
+        pipe.unload_lora_weights()
+        print(f"[load] fused Lightning LoRA {lightning['file']} in {time.time() - t0:.1f}s", flush=True)
     pipe.vae.to("cuda")
     pipe.vae.enable_tiling()  # keeps the 1328x1328 decode peak small; the transformer weights are the real VRAM cost
     pipe.set_progress_bar_config(disable=False)
@@ -208,9 +233,12 @@ def run(req: dict):
 
     out_dir = Path(req["out_dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
-    model_id = local_snapshot(req.get("model", "Qwen/Qwen-Image-2512"))
     timings, vram, warnings = {}, {}, []
     t_all = time.time()
+    family = req.get("family", "qwen")
+    if family in ("klein", "zimage"):
+        return run_single_gpu_family(req, family, out_dir, timings, vram, warnings, t_all)
+    model_id = local_snapshot(req.get("model", "Qwen/Qwen-Image-2512"))
 
     phase("text_encoder")
     t0 = time.time()
@@ -229,19 +257,35 @@ def run(req: dict):
 
     phase("transformer")
     t0 = time.time()
-    pipe, n_blocks = load_generator(model_id, int(req.get("gpu_resident_blocks", 30)))
+    pipe, n_blocks = load_generator(model_id, int(req.get("gpu_resident_blocks", 30)), req.get("lightning_lora"))
     timings["load_transformer_s"] = round(time.time() - t0, 2)
     vram["after_load_reserved_mib"] = int(torch.cuda.memory_reserved() // 2**20)
 
     phase("generate")
+
+    def qwen_gen(prompt, negative, seed, w, h):
+        with torch.inference_mode():
+            return pipe(prompt_embeds=pe, prompt_embeds_mask=pm, negative_prompt_embeds=ne, negative_prompt_embeds_mask=nm,
+                        width=w, height=h, num_inference_steps=int(req["steps"]), true_cfg_scale=float(req["true_cfg_scale"]),
+                        generator=torch.Generator(device="cuda").manual_seed(int(seed))).images[0]
+
+    cands = generate_candidates(req, out_dir, qwen_gen)
+    vram["generate_max_reserved_mib"] = int(torch.cuda.max_memory_reserved() // 2**20)
+    vram["generate_max_allocated_mib"] = int(torch.cuda.max_memory_allocated() // 2**20)
+    timings["generate_s"] = round(sum(c["time_s"] for c in cands), 2)
+    timings["per_candidate_s"] = [c["time_s"] for c in cands]
+    extra = {"transformer_blocks": n_blocks, "gpu_resident_blocks": int(req.get("gpu_resident_blocks", 30)),
+             "lightning_lora": (req.get("lightning_lora") or {}).get("file")}
+    finish(req, out_dir, cands, timings, vram, warnings, t_all, extra)
+
+
+def generate_candidates(req: dict, out_dir: Path, gen) -> list:
+    import torch
+
     cands = []
     for i, seed in enumerate(req["seeds"]):
         t0 = time.time()
-        gen = torch.Generator(device="cuda").manual_seed(int(seed))
-        with torch.inference_mode():
-            img = pipe(prompt_embeds=pe, prompt_embeds_mask=pm, negative_prompt_embeds=ne, negative_prompt_embeds_mask=nm,
-                       width=int(req["width"]), height=int(req["height"]), num_inference_steps=int(req["steps"]),
-                       true_cfg_scale=float(req["true_cfg_scale"]), generator=gen).images[0]
+        img = gen(req["prompt"], req["negative_prompt"], int(seed), int(req["width"]), int(req["height"]))
         torch.cuda.synchronize()
         dt = round(time.time() - t0, 2)
         cdir = out_dir / "candidates"
@@ -257,11 +301,31 @@ def run(req: dict):
             metrics["external"] = ext
         cands.append({"file": f"candidates/{f.name}", "seed": int(seed), "time_s": dt, "metrics": metrics})
         print(f"[candidate {i}] seed={seed} {dt}s score={metrics.get('score'):.2f} {metrics.get('reasons') or metrics.get('reject') or ''}", flush=True)
+    return cands
+
+
+def run_single_gpu_family(req: dict, family: str, out_dir: Path, timings: dict, vram: dict, warnings: list, t_all: float):
+    """Klein / Z-Image: everything fits on the GPU at once; load, generate all candidates, finish."""
+    import torch
+
+    from image_worker.backends import KleinBackend, ZImageBackend
+
+    phase("load")
+    t0 = time.time()
+    backend = (KleinBackend if family == "klein" else ZImageBackend)(req)
+    timings["load_s"] = round(time.time() - t0, 2)
+    vram["after_load_reserved_mib"] = int(torch.cuda.memory_reserved() // 2**20)
+    torch.cuda.reset_peak_memory_stats()
+    phase("generate")
+    cands = generate_candidates(req, out_dir, backend.gen)
     vram["generate_max_reserved_mib"] = int(torch.cuda.max_memory_reserved() // 2**20)
     vram["generate_max_allocated_mib"] = int(torch.cuda.max_memory_allocated() // 2**20)
     timings["generate_s"] = round(sum(c["time_s"] for c in cands), 2)
     timings["per_candidate_s"] = [c["time_s"] for c in cands]
+    finish(req, out_dir, cands, timings, vram, warnings, t_all, backend.describe())
 
+
+def finish(req: dict, out_dir: Path, cands: list, timings: dict, vram: dict, warnings: list, t_all: float, extra: dict):
     ranked = sorted(cands, key=lambda c: c["metrics"].get("score", 0), reverse=True)
     best = ranked[0]
     if best["metrics"].get("score", 0) < 0.4:
@@ -272,8 +336,8 @@ def run(req: dict):
     (out_dir / "selection.json").write_text(json.dumps({"selection": selection, "candidates": cands}, indent=2), encoding="utf-8")
     timings["total_s"] = round(time.time() - t_all, 2)
     result = {"selected": best["file"], "candidates": cands, "selection": selection, "warnings": warnings,
-              "stats": {"timings_s": timings, "vram": vram, "peak_rss_mb": _rss_peak_mb(), "transformer_blocks": n_blocks,
-                        "gpu_resident_blocks": int(req.get("gpu_resident_blocks", 30))}}
+              "stats": {"timings_s": timings, "vram": vram, "peak_rss_mb": _rss_peak_mb(), "model": req.get("model_id"),
+                        "family": req.get("family", "qwen"), **extra}}
     tmp = out_dir / "output.json.tmp"
     tmp.write_text(json.dumps(result, indent=2), encoding="utf-8")
     os.replace(tmp, out_dir / "output.json")
@@ -299,13 +363,28 @@ def selftest():
     print(f"selftest ok: {img.size}, blocks={n}, max reserved {torch.cuda.max_memory_reserved() // 2**20} MiB")
 
 
+def list_models(path: str):
+    import yaml
+
+    from image_worker.backends import available
+
+    out = []
+    for e in yaml.safe_load(Path(path).read_text(encoding="utf-8")):
+        ok, why = available(e)
+        out.append({"id": e["id"], "available": ok, "reason": why})
+    print(json.dumps(out))
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--request")
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--list", metavar="IMAGE_MODELS_YAML")
     a = ap.parse_args()
     try:
-        if a.selftest:
+        if a.list:
+            list_models(a.list)
+        elif a.selftest:
             selftest()
         else:
             run(json.loads(Path(a.request).read_text(encoding="utf-8")))

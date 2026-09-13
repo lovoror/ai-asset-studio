@@ -66,8 +66,21 @@ export interface AssetSummary {
   warnings: string[];
 }
 
+export interface ImageModel {
+  id: string;
+  label: string;
+  tier: "fast" | "quality";
+  family: string;
+  est_s: number;
+  description: string;
+  params: { steps?: number; width?: number; height?: number };
+  available: boolean | null;
+  reason?: string;
+}
+
 export interface Settings {
   auto_process: boolean;
+  default_image_model: string;
   default_variations: number;
   default_quality: "balanced" | "quality";
   default_style: string;

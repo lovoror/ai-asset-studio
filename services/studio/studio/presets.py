@@ -13,7 +13,13 @@ from . import config
 def load_presets() -> dict:
     styles = yaml.safe_load((config.PRESETS_DIR / "styles.yaml").read_text(encoding="utf-8"))
     quality = yaml.safe_load((config.PRESETS_DIR / "quality.yaml").read_text(encoding="utf-8"))
-    return {"styles": styles, "quality": quality}
+    p = config.PRESETS_DIR / "image_models.yaml"
+    models = yaml.safe_load(p.read_text(encoding="utf-8")) if p.exists() else []
+    return {"styles": styles, "quality": quality, "image_models": {m["id"]: m for m in models}}
+
+
+def image_model_ids() -> list[str]:
+    return list(load_presets()["image_models"].keys())
 
 
 def style_ids() -> list[str]:
@@ -32,6 +38,14 @@ def resolve_settings(req: dict) -> dict:
     if seed is None:
         seed = random.SystemRandom().randint(0, 2**31 - 1)
     ref = q["reference"]
+    model_id = req.get("model") or "qwen-image-2512"
+    entry = p["image_models"].get(model_id)
+    if entry is None:
+        raise ValueError(f"unknown image model {model_id!r}; available: {', '.join(p['image_models'])}")
+    ref.update(copy.deepcopy(entry.get("params", {})))
+    ref["model"] = model_id
+    ref["family"] = entry.get("family", "qwen")
+    ref["est_s"] = entry.get("est_s")
     if req.get("reference_candidates"):
         ref["candidates"] = int(req["reference_candidates"])
     if req.get("variations"):

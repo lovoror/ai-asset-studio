@@ -214,14 +214,20 @@ class JobRun:
         ref = self.settings["reference"]
         req = {
             "prompt": built["prompt"], "negative_prompt": built["negative_prompt"], "template": built["template"],
-            "model": "Qwen/Qwen-Image-2512", "width": ref["width"], "height": ref["height"], "steps": ref["steps"],
-            "true_cfg_scale": ref["true_cfg_scale"], "mode": ref["mode"], "gpu_resident_blocks": ref["gpu_resident_blocks"],
+            "model": "Qwen/Qwen-Image-2512", "model_id": ref.get("model", "qwen-image-2512"), "family": ref.get("family", "qwen"),
+            "width": ref["width"], "height": ref["height"], "steps": ref["steps"],
+            "true_cfg_scale": ref.get("true_cfg_scale", 1.0), "guidance_scale": ref.get("guidance_scale", 1.0),
+            "mode": ref.get("mode", "bf16_split"), "gpu_resident_blocks": ref.get("gpu_resident_blocks", 30),
+            "lightning_lora": ref.get("lightning_lora"), "config_repo": ref.get("config_repo"), "config_revision": ref.get("config_revision"),
+            "transformer_file": ref.get("transformer_file"), "text_encoder_file": ref.get("text_encoder_file"),
             "seeds": [(self.settings["seed"] + i) % (2**31 - 1) for i in range(ref["candidates"])],
             "out_dir": str(d), "evaluator_url": os.environ.get("STUDIO_VISION_EVALUATOR_URL", ""),
         }
+        for k, v in ref.items():  # every registry parameter of the chosen model reaches the worker (distilled, sequential, ...)
+            req.setdefault(k, v)
         atomic_write_json(d / "request.json", req)
         log_path = d / "log.txt"
-        self.log(f"generating {ref['candidates']} reference candidate(s) with Qwen-Image-2512 ({ref['steps']} steps, cfg {ref['true_cfg_scale']})")
+        self.log(f"generating {ref['candidates']} reference candidate(s) with {ref.get('model', 'qwen-image-2512')} ({ref['steps']} steps)")
         # the request may be re-written by fallbacks; the worker re-reads it on each attempt
         run = self._run_gpu_stage("image", name, ["python", "-m", "image_worker.generate", "--request", str(d / "request.json")],
                                   log_path, ["reference"])
@@ -243,7 +249,8 @@ class JobRun:
             make_thumb(d / out["selected"], thumbs / "card.jpg")
         res = {"selected": out["selected"], "selection": out["selection"], "stats": out.get("stats", {}), "run": run,
                "prompt": built["prompt"], "negative_prompt": built["negative_prompt"],
-               "effective": {k: req[k] for k in ("width", "height", "steps", "true_cfg_scale", "mode", "gpu_resident_blocks", "seeds")}}
+               "effective": {k: req[k] for k in ("model_id", "family", "width", "height", "steps", "true_cfg_scale", "guidance_scale", "mode",
+                                                  "gpu_resident_blocks", "lightning_lora", "seeds")}}
         self.finish_stage(name, res, t0)
 
     def stage_reference_from_parent(self):
@@ -319,7 +326,7 @@ class JobRun:
             "attn_backend": px.get("attn_backend", "flash_attn"),
             "export": {"decimation_target": master["decimation_target"], "texture_size": master["texture_size"],
                        "remesh": master["remesh"], "remesh_band": master["remesh_band"], "remesh_project": master["remesh_project"]},
-            "rembg_model": os.environ.get("STUDIO_REMBG_MODEL", "ZhengPeng7/BiRefNet"),
+            "rembg_model": os.environ.get("STUDIO_REMBG_MODEL", "briaai/RMBG-2.0"),
         }
         atomic_write_json(d / "request.json", req)
         log_path = d / "log.txt"

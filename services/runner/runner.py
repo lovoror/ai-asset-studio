@@ -65,14 +65,17 @@ def _read_rss_mb(pid):
 
 def _monitor(run_id, proc):
     rec = RUNS[run_id]
+    tick = 0
     while proc.poll() is None:
         rss = _read_rss_mb(proc.pid)
         if rss and rss > rec["peak_rss_mb"]:
             rec["peak_rss_mb"] = rss
-        g = nvidia_smi()
-        if g.get("available") and g.get("gpus"):
-            used = g["gpus"][0]["used_mib"]
-            rec["peak_gpu_used_mib"] = max(rec["peak_gpu_used_mib"], used)
+        if tick % 3 == 0:  # nvidia-smi is a subprocess: sample every 3 s, RSS every second
+            g = nvidia_smi()
+            if g.get("available") and g.get("gpus"):
+                used = g["gpus"][0]["used_mib"]
+                rec["peak_gpu_used_mib"] = max(rec["peak_gpu_used_mib"], used)
+        tick += 1
         time.sleep(1.0)
     rec["returncode"] = proc.returncode
     rec["ended"] = time.time()
@@ -110,6 +113,15 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         n = int(self.headers.get("Content-Length") or 0)
         body = json.loads(self.rfile.read(n) or b"{}")
+        if self.path == "/exec":  # short synchronous helper (no GPU work): returns stdout/stderr, never blocks a stage run
+            cmd = body.get("cmd")
+            if not isinstance(cmd, list) or not all(isinstance(c, str) for c in cmd):
+                return self._json(400, {"error": "cmd must be a list of strings"})
+            try:
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=float(body.get("timeout", 60)))
+                return self._json(200, {"returncode": r.returncode, "stdout": r.stdout[-20000:], "stderr": r.stderr[-4000:]})
+            except Exception as e:  # noqa: BLE001
+                return self._json(500, {"error": str(e)[:300]})
         if self.path == "/run":
             cmd = body.get("cmd")
             if not isinstance(cmd, list) or not all(isinstance(c, str) for c in cmd):

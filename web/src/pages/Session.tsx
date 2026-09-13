@@ -63,7 +63,7 @@ export default function Session() {
         <div>
           <Link to="/library?kind=image" className="small muted"><ArrowLeft size={13} style={{ verticalAlign: -2 }} /> Variations</Link>
           <h1 style={{ marginTop: 4 }}>{job.title || job.request.prompt}</h1>
-          <p className="small">{job.request.style} · {expected} variations · {fmtAgo(job.created_at)} · <StatusChip job={job} /></p>
+          <p className="small">{job.settings?.reference?.model || job.request.model || "qwen-image-2512"} · {job.request.style} · {expected} variations · {fmtAgo(job.created_at)} · <StatusChip job={job} /></p>
         </div>
         <div className="row">
           <button className="btn sm" onClick={fav}>{job.favorite ? <Star size={14} fill="currentColor" /> : <StarOff size={14} />} {job.favorite ? "Favourite" : "Favourite"}</button>

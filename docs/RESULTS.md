@@ -77,8 +77,8 @@ model at a time to the GPU; standard mode would not fit 1536 on 32 GB alongside 
   vision evaluator can be plugged in (`STUDIO_VISION_EVALUATOR_URL`) but none is bundled. The first scorer (global colour
   threshold) misread the crate reference's soft vignette as clipping; the edge-based scorer that replaced it rates the same
   image 1.0 and scored both pump candidates 1.0.
-* `briaai/RMBG-2.0` (Pixal3D's default matting model) is gated and the account has no access; `ZhengPeng7/BiRefNet` is
-  used instead (`STUDIO_REMBG_MODEL` switches).
+* Matting: the three acceptance jobs used `ZhengPeng7/BiRefNet` (RMBG-2.0 access was granted later; it is now the default,
+  `STUDIO_REMBG_MODEL` switches).
 * Multi-view: the calibrated-input path is implemented and validated statically (matrices, FOV, front-view convention);
   the `*_mv` checkpoints were not downloaded (+17 GB) and no multi-view job was run. No automatic novel-view generation.
 * No quantised Qwen mode yet (BF16 with block offload only); a faster mode would need a quality comparison first.

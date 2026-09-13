@@ -305,4 +305,4 @@ Everything is pinned in `manifests/dependency-manifest.json`.
 
 Models (Hugging Face, pinned revisions, cached in the `studio-models` volume): `Qwen/Qwen-Image-2512`,
 `TencentARC/Pixal3D` (single-view checkpoints; `*_mv` optional), `Ruicheng/moge-2-vitl`,
-`camenduru/dinov3-vitl16-pretrain-lvd1689m`, `ZhengPeng7/BiRefNet`, plus `valeoai/NAF` (torch.hub, pinned commit).
+`camenduru/dinov3-vitl16-pretrain-lvd1689m`, `briaai/RMBG-2.0` (gated) or `ZhengPeng7/BiRefNet`, plus `valeoai/NAF` (torch.hub, pinned commit).

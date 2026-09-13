@@ -72,3 +72,21 @@
   style: clean_product
   height_m: 1.8
   target_triangles: 20000
+- id: scifi_crate
+  title: Sci-fi supply crate
+  prompt: Sci-fi supply crate with bevelled panel lines, recessed handles, two cyan emissive strips and a hinged lid, hard-surface game prop
+  style: scifi
+  height_m: 0.8
+  target_triangles: 12000
+- id: fantasy_chest
+  title: Fantasy treasure chest
+  prompt: Fantasy treasure chest with worn oak planks, forged iron straps, a domed lid and a heavy round padlock, closed
+  style: fantasy
+  height_m: 0.7
+  target_triangles: 15000
+- id: potion_bottle
+  title: Potion bottle
+  prompt: Round glass potion bottle with a cork stopper and a leather cord, glowing green liquid inside, fantasy game prop
+  style: fantasy
+  height_m: 0.25
+  target_triangles: 6000

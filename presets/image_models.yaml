@@ -1,0 +1,60 @@
+# Selectable reference-image models. All run inside the image-worker container with diffusers (no external service).
+#   family qwen   : Qwen-Image-2512 BF16 with block offload; optional official Lightning LoRA (distilled, few steps).
+#   family klein  : FLUX.2 Klein 4B, transformer + Qwen3-4B text encoder loaded from the files already on disk in the
+#                   ComfyUI models folder (mounted read-only at /extra-models); configs/VAE/tokenizer from the HF repo.
+#   family zimage : Z-Image Turbo, same approach (bf16 single file + Qwen3-4B from the ComfyUI folder).
+# `est_s` is the rough wall clock per image on the RTX 5090 (model load is paid once per job and amortised).
+# Availability is checked live in /capabilities (required files present in the caches/mounts).
+- id: qwen-image-2512
+  label: Qwen-Image-2512
+  tier: quality
+  family: qwen
+  est_s: 290
+  description: Full-quality sampling (50 steps, CFG 4). Best prompt adherence and material detail; ~5 min per image.
+  params: {steps: 50, true_cfg_scale: 4.0, width: 1328, height: 1328}
+- id: qwen-image-2512-lightning-8
+  label: Qwen-Image-2512 Lightning (8 steps)
+  tier: fast
+  family: qwen
+  est_s: 70
+  description: Same model with the official distillation LoRA, 8 steps, no CFG. Close to full quality, several times faster.
+  params: {steps: 8, true_cfg_scale: 1.0, width: 1328, height: 1328,
+           lightning_lora: {repo: lightx2v/Qwen-Image-2512-Lightning, revision: a52649c9d0f6e1a248bff13f0df33bb8a2abdb52,
+                            file: Qwen-Image-2512-Lightning-8steps-V1.0-bf16.safetensors}}
+- id: qwen-image-2512-lightning-4
+  label: Qwen-Image-2512 Lightning (4 steps)
+  tier: fast
+  family: qwen
+  est_s: 55
+  description: 4-step distilled variant for quick iteration; slightly softer than 8 steps.
+  params: {steps: 4, true_cfg_scale: 1.0, width: 1328, height: 1328,
+           lightning_lora: {repo: lightx2v/Qwen-Image-2512-Lightning, revision: a52649c9d0f6e1a248bff13f0df33bb8a2abdb52,
+                            file: Qwen-Image-2512-Lightning-4steps-V1.0-bf16.safetensors}}
+- id: flux2-klein-4b
+  label: FLUX.2 Klein 4B
+  tier: fast
+  family: klein
+  est_s: 15
+  description: Distilled FLUX.2 Klein 4B (bf16), 4 steps, fully GPU-resident. Seconds per image once loaded.
+  params: {steps: 4, guidance_scale: 1.0, width: 1024, height: 1024,
+           config_repo: black-forest-labs/FLUX.2-klein-4B, config_revision: e7b7dc27f91deacad38e78976d1f2b499d76a294,
+           transformer_file: diffusion_models/flux-2-klein-4b.safetensors, text_encoder_file: text_encoders/qwen_3_4b.safetensors}
+- id: z-image-turbo
+  label: Z-Image Turbo
+  tier: fast
+  family: zimage
+  est_s: 15
+  description: Z-Image Turbo (bf16), 8 steps, no CFG. Fast with strong detail.
+  params: {steps: 8, guidance_scale: 1.0, width: 1024, height: 1024,
+           config_repo: Tongyi-MAI/Z-Image-Turbo, config_revision: f332072aa78be7aecdf3ee76d5c247082da564a6,
+           transformer_file: diffusion_models/z_image_turbo_bf16.safetensors, text_encoder_file: text_encoders/qwen_3_4b.safetensors}
+- id: flux2-klein-9b
+  label: FLUX.2 Klein 9B
+  tier: fast
+  family: klein
+  est_s: 20
+  license: FLUX Non-Commercial License (accept on huggingface.co/black-forest-labs/FLUX.2-klein-9B)
+  description: Distilled FLUX.2 Klein 9B (on-disk fp8 transformer dequantized to bf16; bf16 Qwen3-8B text encoder from the HF repo), 4 steps. Text encoder and transformer run one after the other (~19 GB peak).
+  params: {steps: 4, guidance_scale: 1.0, width: 1024, height: 1024, distilled: true, sequential: true, text_encoder_from_hub: true,
+           config_repo: black-forest-labs/FLUX.2-klein-9B, config_revision: 92196c8e11f7b6cf2b7493e037d8c5345c559216,
+           transformer_file: diffusion_models/flux-2-klein-9b-fp8.safetensors, text_encoder_file: text_encoders/qwen_3_8b_fp8mixed.safetensors}

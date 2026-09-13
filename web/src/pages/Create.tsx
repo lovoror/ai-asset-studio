@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Dice5, Sparkles, ChevronDown, ChevronUp, Wand2 } from "lucide-react";
-import { api, Example } from "../api";
+import { api, Example, ImageModel } from "../api";
 import { useStore } from "../store";
 
-interface StyleInfo { label: string; description?: string; optimize_defaults?: Record<string, any> }
+interface StyleInfo { label: string; description?: string; best_for?: string; optimize_defaults?: Record<string, any> }
 
 export default function Create() {
   const nav = useNavigate();
   const { settings, toast } = useStore();
   const [examples, setExamples] = useState<Example[]>([]);
   const [styles, setStyles] = useState<Record<string, StyleInfo>>({});
+  const [models, setModels] = useState<ImageModel[]>([]);
+  const [model, setModel] = useState<string>("qwen-image-2512");
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState("mobile_factory");
   const [variations, setVariations] = useState(4);
@@ -25,12 +27,13 @@ export default function Create() {
 
   useEffect(() => {
     api.examples().then((r) => setExamples(r.items)).catch(() => {});
-    api.capabilities().then((c) => setStyles(c.styles)).catch(() => {});
+    api.capabilities().then((c) => { setStyles(c.styles); setModels(c.image_models || []); }).catch(() => {});
   }, []);
   useEffect(() => {
     if (settings) {
       setVariations(settings.default_variations);
       setStyle(settings.default_style);
+      if (settings.default_image_model) setModel(settings.default_image_model);
     }
   }, [settings]);
 
@@ -41,13 +44,18 @@ export default function Create() {
     setTitle(ex.title);
   };
   const surprise = () => examples.length && apply(examples[Math.floor(Math.random() * examples.length)]);
-  const est = useMemo(() => Math.round(variations * 5), [variations]);
+  const cur = models.find((m) => m.id === model);
+  const est = useMemo(() => {
+    const per = cur?.est_s ?? 290;
+    const s = variations * per + (cur?.family === "qwen" ? 40 : 20); // + one-time model load
+    return s < 120 ? `${Math.round(s)} s` : `${Math.round(s / 60)} min`;
+  }, [variations, cur]);
 
   const submit = async () => {
     if (prompt.trim().length < 3) return toast("Describe the object first", true);
     setBusy(true);
     try {
-      const body: Record<string, unknown> = { prompt: prompt.trim(), style, variations, title: title || undefined };
+      const body: Record<string, unknown> = { prompt: prompt.trim(), style, variations, model, title: title || undefined };
       if (seed) body.seed = Number(seed);
       if (height) body.height_m = Number(height);
       if (materials) body.materials = materials;
@@ -67,7 +75,7 @@ export default function Create() {
       <div className="page-head">
         <div>
           <h1>Create</h1>
-          <p>Describe one object. You'll get {variations} image variations to choose from before anything is built in 3D.</p>
+          <p>Describe one object. You'll get {variations} image variation{variations > 1 ? "s" : ""} to choose from before anything is built in 3D.</p>
         </div>
       </div>
       <div className="grid" style={{ gridTemplateColumns: "minmax(0, 2fr) minmax(280px, 1fr)", alignItems: "start" }}>
@@ -91,15 +99,32 @@ export default function Create() {
             </div>
           </div>
           <div className="field">
-            <label>Style</label>
+            <label>Image model</label>
             <div className="styles">
-              {Object.entries(styles).map(([id, s]) => (
-                <button key={id} className={"style-card" + (style === id ? " active" : "")} onClick={() => setStyle(id)}>
-                  <b>{s.label || id}</b>
-                  <span>{s.description || (s.optimize_defaults ? `${s.optimize_defaults.target_triangles?.toLocaleString()} tris · ${s.optimize_defaults.texture_size}px` : "")}</span>
+              {models.map((m) => (
+                <button key={m.id} className={"style-card" + (model === m.id ? " active" : "")} disabled={m.available === false}
+                        onClick={() => setModel(m.id)} title={m.available === false ? m.reason : m.description}>
+                  <b>{m.label} <span className={"chip " + (m.tier === "fast" ? "accent" : "")} style={{ marginLeft: 4 }}>{m.tier === "fast" ? "fast" : "quality"}</span></b>
+                  <span>{m.est_s < 60 ? `~${m.est_s} s` : `~${Math.round(m.est_s / 60)} min`} / image · {m.params?.steps} steps · {m.params?.width}px{m.available === false ? " · unavailable" : ""}</span>
                 </button>
               ))}
             </div>
+            {cur && <div className="small faint">{cur.description}</div>}
+          </div>
+          <div className="field">
+            <label>Style</label>
+            <div className="styles">
+              {Object.entries(styles).map(([id, s]) => (
+                <button key={id} className={"style-card" + (style === id ? " active" : "")} onClick={() => setStyle(id)} title={s.best_for}>
+                  <b>{s.label || id}</b>
+                  <span>{s.description}</span>
+                  {s.optimize_defaults && (
+                    <span className="budget">{s.optimize_defaults.target_triangles?.toLocaleString()} tris · {s.optimize_defaults.texture_size} px default</span>
+                  )}
+                </button>
+              ))}
+            </div>
+            {styles[style]?.best_for && <div className="small faint">Good for: {styles[style].best_for}</div>}
           </div>
           <button className="btn ghost sm" onClick={() => setAdvanced(!advanced)} style={{ alignSelf: "flex-start" }}>
             {advanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />} Advanced
@@ -123,7 +148,7 @@ export default function Create() {
                 <button key={n} className={"btn sm" + (variations === n ? " primary" : "")} onClick={() => setVariations(n)}>{n}</button>
               ))}
             </div>
-            <div className="small muted">≈ {est} min on the GPU (about 5 min per image at full quality). Pick your favourites afterwards.</div>
+            <div className="small muted">≈ {est} on the GPU with {cur?.label || "the selected model"}. Pick your favourites afterwards.</div>
           </div>
           <div className="sep" />
           <div className="small muted stack" style={{ gap: 4 }}>

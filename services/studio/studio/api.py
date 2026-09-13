@@ -86,8 +86,9 @@ def capabilities():
         "pipeline": ["prompt->template", "Qwen-Image-2512 reference (diffusers, local)", "Pixal3D preprocessing + MoGe-2 camera",
                      "Pixal3D geometry+PBR (TRELLIS.2 backbone)", "master GLB (PNG textures)",
                      "Blender: meshoptimizer reduction / bake / LODs / collision / previews", "validation + manifest"],
-        "styles": {k: {"label": v.get("label"), "description": v.get("description"), "optimize_defaults": v.get("optimize_defaults")}
-                   for k, v in p["styles"].items()},
+        "styles": {k: {"label": v.get("label"), "description": v.get("description"), "best_for": v.get("best_for"),
+                       "optimize_defaults": v.get("optimize_defaults")} for k, v in p["styles"].items()},
+        "image_models": _image_models_with_availability(p["image_models"]),
         "quality": {k: {"reference": v["reference"], "pixal3d": v["pixal3d"], "master": v["master"], "fallback": v.get("fallback")}
                     for k, v in p["quality"].items()},
         "request_schema": JobRequest.model_json_schema(),
@@ -110,6 +111,8 @@ def capabilities():
 def create_job(req: JobRequest):
     """One-shot: prompt -> auto-selected reference -> 3D asset (the original agent path)."""
     data = req.model_dump()
+    if not data.get("model"):
+        data["model"] = store().get_settings().get("default_image_model", "qwen-image-2512")
     try:
         settings = resolve_settings(data)
     except ValueError as e:
@@ -123,6 +126,8 @@ def create_image_job(req: ImageJobRequest):
     """Ideation: generate `variations` reference images of one idea; nothing is turned into 3D until you pick one."""
     data = req.model_dump()
     data["quality"] = "balanced"
+    if not data.get("model"):
+        data["model"] = store().get_settings().get("default_image_model", "qwen-image-2512")
     try:
         settings = resolve_settings(data)
     except ValueError as e:
@@ -166,6 +171,30 @@ def create_asset_job(req: AssetFromCandidateRequest):
 def list_jobs(limit: int = 50, status: str | None = None, kind: str | None = None):
     limit = max(1, min(limit, 500))
     return [_public(j) for j in store().list_jobs(limit=limit, status=status, kind=kind, archived=None)]
+
+
+_avail_cache: dict = {"t": 0.0, "v": {}}
+
+
+def _image_models_with_availability(models: dict) -> list[dict]:
+    """Registry entries plus a live availability check done inside the image worker (files/caches are mounted there)."""
+    now = time.time()
+    if now - _avail_cache["t"] > 60:
+        try:
+            import subprocess  # noqa: F401
+            r = Runner("image").http.post("/exec", json={"cmd": ["python", "-m", "image_worker.generate", "--list", "/app/presets/image_models.yaml"]}, timeout=60)
+            out = r.json().get("stdout", "[]") if r.status_code == 200 else "[]"
+            _avail_cache["v"] = {e["id"]: e for e in json.loads(out.strip().splitlines()[-1])} if out.strip() else {}
+        except Exception:  # noqa: BLE001
+            _avail_cache["v"] = {}
+        _avail_cache["t"] = now
+    out = []
+    for mid, m in models.items():
+        a = _avail_cache["v"].get(mid)
+        out.append({"id": mid, "label": m.get("label"), "tier": m.get("tier"), "family": m.get("family"), "est_s": m.get("est_s"),
+                    "description": m.get("description"), "params": {k: v for k, v in m.get("params", {}).items() if k in ("steps", "width", "height")},
+                    "available": (a["available"] if a else None), "reason": (a.get("reason") if a else "not checked")})
+    return out
 
 
 def _thumb(j: dict) -> str | None:
@@ -230,13 +259,21 @@ def get_job(job_id: str, events: int = 20):
     return out
 
 
+_cand_cache: dict = {}
+
+
 def _candidates(j: dict) -> list[dict]:
-    """Candidates of an image job, including partial results while it is still running."""
+    """Candidates of an image job, including partial results while it is still running. Completed jobs are cached
+    by output.json mtime so library listings do not re-read every job's JSON."""
     d = config.JOBS_DIR / j["id"] / "stages" / "reference"
     out = []
     op = d / "output.json"
     if op.exists():
         try:
+            mt = op.stat().st_mtime
+            hit = _cand_cache.get(j["id"])
+            if hit and hit[0] == mt:
+                return hit[1]
             o = json.loads(op.read_text(encoding="utf-8"))
             for c in o.get("candidates", []):
                 name = Path(c["file"]).name
@@ -244,6 +281,9 @@ def _candidates(j: dict) -> list[dict]:
                             "reasons": c["metrics"].get("reasons") or c["metrics"].get("reject"),
                             "url": f"/v1/jobs/{j['id']}/artifacts/reference_candidates/{name}",
                             "thumb": f"/v1/jobs/{j['id']}/artifacts/thumbs/{Path(name).stem}.jpg"})
+            if len(_cand_cache) > 2000:
+                _cand_cache.clear()
+            _cand_cache[j["id"]] = (mt, out)
             return out
         except json.JSONDecodeError:
             pass
@@ -445,11 +485,12 @@ def library(kind: str | None = None, status: str | None = None, q: str | None = 
             archived: bool = False, limit: int = 60, offset: int = 0):
     limit = max(1, min(limit, 500))
     jobs = store().list_jobs(limit=limit, status=status, kind=kind, q=q, favorite=favorite, archived=archived, offset=offset)
+    counts = store().children_counts([j["id"] for j in jobs if j["kind"] == "image"])
     cards = []
     for j in jobs:
         c = _public(j)
         if j["kind"] == "image":
-            c["children_count"] = len(store().children(j["id"]))
+            c["children_count"] = counts.get(j["id"], 0)
             c["candidate_count"] = len(_candidates(j)) if j["status"] in ("running", "completed") else 0
         cards.append(c)
     return {"items": cards, "limit": limit, "offset": offset}
@@ -466,6 +507,8 @@ def put_settings(body: SettingsPatch):
     vals = {k: v for k, v in body.model_dump().items() if v is not None}
     if "default_style" in vals and vals["default_style"] not in p["styles"]:
         raise HTTPException(422, "unknown style")
+    if "default_image_model" in vals and vals["default_image_model"] not in p["image_models"]:
+        raise HTTPException(422, "unknown image model")
     return store().put_settings(vals)
 
 

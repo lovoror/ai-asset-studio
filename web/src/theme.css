@@ -168,10 +168,13 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 1px 5px; border: 1px s
 .examples button { border: 1px solid var(--border); background: var(--bg-sunken); padding: 6px 10px; border-radius: 999px; cursor: pointer; color: var(--fg-muted); }
 .examples button:hover { border-color: var(--accent); color: var(--fg); }
 .styles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
-.style-card { text-align: left; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-elev); cursor: pointer; }
+.style-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-elev); cursor: pointer; transition: border-color 0.12s, transform 0.08s; }
+.style-card:hover { border-color: var(--border-strong); transform: translateY(-1px); }
+.style-card:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 .style-card.active { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.style-card b { display: block; margin-bottom: 4px; }
-.style-card span { font-size: 12px; color: var(--fg-muted); }
+.style-card b { display: block; }
+.style-card span { font-size: 12px; color: var(--fg-muted); line-height: 1.4; }
+.style-card .budget { margin-top: auto; padding-top: 6px; font-size: 11px; color: var(--fg-faint); }
 
 /* candidate grid */
 .cands { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }

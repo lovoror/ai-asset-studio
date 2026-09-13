@@ -93,7 +93,7 @@ def main():
         return
     import inference as up  # upstream single-view inference module (functions; __main__ guarded)
 
-    model_path = ensure_local_pipeline_dir(req.get("rembg_model", "ZhengPeng7/BiRefNet"))
+    model_path = ensure_local_pipeline_dir(req.get("rembg_model", "briaai/RMBG-2.0"))
     pipeline = up.init_pipeline(model_path, low_vram=bool(req["low_vram"]))
     timings["load_s"] = round(time.time() - t0, 2)
     vram_snapshot("load")

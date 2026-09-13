@@ -28,6 +28,7 @@ class MultiViewInput(BaseModel):
 class JobRequest(BaseModel):
     prompt: str = Field(..., min_length=3, max_length=1500)
     style: str = Field("mobile_factory")
+    model: Optional[str] = Field(None, pattern=r"^[a-z0-9\-_.]{2,60}$", description="image model id from /capabilities.image_models")
     quality: Literal["balanced", "quality"] = "balanced"
     seed: Optional[int] = Field(None, ge=0, le=2**31 - 1)
     height_m: Optional[float] = Field(None, gt=0.001, le=1000)
@@ -125,6 +126,7 @@ class ImageJobRequest(BaseModel):
     """Ideation step: generate several reference-image variations of one idea (no 3D)."""
     prompt: str = Field(..., min_length=3, max_length=1500)
     style: str = Field("mobile_factory")
+    model: Optional[str] = Field(None, pattern=r"^[a-z0-9\-_.]{2,60}$", description="image model id (default from settings)")
     variations: int = Field(4, ge=1, le=8)
     seed: Optional[int] = Field(None, ge=0, le=2**31 - 1)
     materials: Optional[str] = Field(None, max_length=300)
@@ -169,6 +171,7 @@ class JobPatch(BaseModel):
 
 class SettingsPatch(BaseModel):
     auto_process: Optional[bool] = None
+    default_image_model: Optional[str] = Field(None, pattern=r"^[a-z0-9\-_.]{2,60}$")
     default_variations: Optional[int] = Field(None, ge=1, le=8)
     default_quality: Optional[Literal["balanced", "quality"]] = None
     default_style: Optional[str] = Field(None, pattern=r"^[a-z0-9_]{1,40}$")

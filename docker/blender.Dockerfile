@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libx11-6 libxi6 libxxf86vm1 libxfixes3 libxrender1 libgl1 libegl1 libsm6 libxkbcommon0 libgomp1 libxext6 g++ \
     && rm -rf /var/lib/apt/lists/*
 RUN --mount=type=cache,target=/root/.cache/pip \
-    python -m pip install bpy==4.5.13 numpy pillow trimesh==4.10.1 pygltflib psutil fast-simplification==0.2.0 meshoptimizer==0.2.30a0
+    python -m pip install bpy==4.5.13 numpy pillow trimesh==4.10.1 pygltflib psutil fast-simplification==0.2.0 meshoptimizer==0.2.30a0 pytest
 ENV PYTHONPATH=/app RUNNER_NAME=blender
 WORKDIR /app
 COPY services/runner /app/runner

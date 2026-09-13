@@ -42,6 +42,10 @@ export default function SettingsPage() {
                 <input type="checkbox" checked={settings.auto_process} onChange={(e) => save({ auto_process: e.target.checked })} />
                 <span><b>Process selected images automatically</b><div className="small muted">Off: selections wait in the queue for review until you press Process.</div></span>
               </label>
+              <div className="field"><label>Default image model</label>
+                <select className="input" value={settings.default_image_model} onChange={(e) => save({ default_image_model: e.target.value })}>
+                  {(caps?.image_models || []).map((m: any) => <option key={m.id} value={m.id} disabled={m.available === false}>{m.label}{m.available === false ? " (unavailable)" : ""} · ~{m.est_s < 60 ? m.est_s + " s" : Math.round(m.est_s / 60) + " min"}/image</option>)}
+                </select></div>
               <div className="field"><label>Default variations per prompt</label>
                 <select className="input" value={settings.default_variations} onChange={(e) => save({ default_variations: Number(e.target.value) })}>{[1, 2, 3, 4, 6, 8].map((n) => <option key={n} value={n}>{n}</option>)}</select></div>
               <div className="field"><label>Default 3D quality</label>

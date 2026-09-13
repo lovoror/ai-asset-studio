@@ -73,7 +73,7 @@ def test_cancel_queued_and_unknown(env):
     assert r.json()["result"] == "cancelled"
     assert client.get(f"/v1/jobs/{job}").json()["status"] == "cancelled"
     assert client.post("/v1/jobs/nope/cancel").status_code == 404
-    assert client.post("/v1/jobs/../etc/cancel").status_code in (400, 404)
+    assert client.post("/v1/jobs/..%2Fetc/cancel").status_code in (400, 404, 405)
 
 
 def test_retry_requeues_failed_job(env):

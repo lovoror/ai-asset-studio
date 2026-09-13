@@ -21,6 +21,7 @@ PINS = {
     "Ruicheng/moge-2-vitl": "39c4d5e957afe587e04eec59dc2bcc3be5ecd968",
     "camenduru/dinov3-vitl16-pretrain-lvd1689m": "3c276edd87d6f6e569ff0c4400e086807d0f3881",
     "ZhengPeng7/BiRefNet": "e2bf8e4460fc8fa32bba5ea4d94b3233d367b0e4",
+    "briaai/RMBG-2.0": "5df4c9c76d8170882c34f6986e848ee07fd0ba43",  # gated; upstream default matting model
 }
 NAF_COMMIT = "37f2dfc180f2de53d98bd601109c0da0dd6b0f43"
 NAF_WEIGHTS = "https://github.com/valeoai/NAF/releases/download/model/naf_release.pth"
@@ -89,7 +90,7 @@ def verify():
     report = {"torch": torch.__version__, "cuda": torch.version.cuda, "device": torch.cuda.get_device_name(0)}
     import inference as up
 
-    model_path = ensure_local_pipeline_dir(os.environ.get("STUDIO_REMBG_MODEL", "ZhengPeng7/BiRefNet"))
+    model_path = ensure_local_pipeline_dir(os.environ.get("STUDIO_REMBG_MODEL", "briaai/RMBG-2.0"))
     pipe = up.init_pipeline(model_path, low_vram=True)
     report["pipeline_models"] = sorted(pipe.models.keys())
     report["rembg"] = type(pipe.rembg_model).__name__

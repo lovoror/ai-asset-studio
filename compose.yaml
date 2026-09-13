@@ -41,7 +41,7 @@ services:
       STUDIO_GPU_RETRY_THRESHOLD_MIB_IMAGE: ${STUDIO_GPU_RETRY_THRESHOLD_MIB_IMAGE:-6144}
       STUDIO_GPU_RETRY_THRESHOLD_MIB_PIXAL3D: ${STUDIO_GPU_RETRY_THRESHOLD_MIB_PIXAL3D:-14336}
       STUDIO_GPU_BUSY_WAIT_S: ${STUDIO_GPU_BUSY_WAIT_S:-1800}
-      STUDIO_REMBG_MODEL: ${STUDIO_REMBG_MODEL:-ZhengPeng7/BiRefNet}
+      STUDIO_REMBG_MODEL: ${STUDIO_REMBG_MODEL:-briaai/RMBG-2.0}   # Pixal3D upstream default; set ZhengPeng7/BiRefNet if the gated repo is not accessible
       STUDIO_VISION_EVALUATOR_URL: ${STUDIO_VISION_EVALUATOR_URL:-}
     depends_on: [api, image-worker, pixal3d-worker, blender]
     volumes:
@@ -65,6 +65,8 @@ services:
       - studio-models:/models
       - ./services/image_worker:/app/image_worker:ro
       - ./services/runner:/app/runner:ro
+      - ./presets:/app/presets:ro
+      - ${STUDIO_EXTRA_MODELS_DIR:-./presets}:/extra-models:ro   # ComfyUI-style model folder (diffusion_models/, text_encoders/)
     deploy:
       resources:
         reservations:
