@@ -65,6 +65,8 @@ DEFAULT_SETTINGS = {
     "default_style": "mobile_factory",
     "default_target_triangles": 20000,
     "default_texture_size": 2048,
+    "style_edits": {},           # per style id: {label, style_clause, background, negative_extra, target_triangles, texture_size};
+                                 # key "custom" is the user's own style. Sent as custom_style with jobs by the portal.
 }
 
 

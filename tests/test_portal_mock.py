@@ -197,3 +197,48 @@ def test_spa_serves_asset_routes(tmp_path, monkeypatch):
     assert client.get("/sessions/x").text == "<html>spa</html>"
     assert client.get("/static/app.js").text == "1"
     assert client.get("/v1/jobs/nope").status_code == 404
+
+
+def test_custom_and_edited_styles(env):
+    client, api, tmp = env
+    from studio.promptbuilder import build_reference_prompt
+
+    # 'custom' needs a clause
+    r = client.post("/v1/image-jobs", json={"prompt": "a crate", "style": "custom"})
+    assert r.status_code == 422
+    r = client.post("/v1/image-jobs", json={"prompt": "a crate", "style": "custom",
+                                            "custom_style": {"label": "Voxel", "style_clause": "chunky voxel-style game asset, blocky cubic forms",
+                                                             "target_triangles": 4000, "texture_size": 1024}})
+    assert r.status_code == 200, r.text
+    j = client.get(f"/v1/jobs/{r.json()['job_id']}").json()
+    sd = j["settings"]["style_def"]
+    assert sd["custom"] and sd["label"] == "Voxel" and j["settings"]["optimize"]["target_triangles"] == 4000
+    built = build_reference_prompt(j["request"], sd)
+    assert "chunky voxel-style game asset" in built["prompt"] and "no text" in built["prompt"].lower().replace("absolutely ", "")
+    # a preset with the look edited keeps its id and budgets but uses the new clause and keep-out
+    r = client.post("/v1/image-jobs", json={"prompt": "a crate", "style": "mobile_factory",
+                                            "custom_style": {"style_clause": "clean cel-shaded cartoon look with thick outlines", "negative_extra": "rust"}})
+    assert r.status_code == 200, r.text
+    j = client.get(f"/v1/jobs/{r.json()['job_id']}").json()
+    sd = j["settings"]["style_def"]
+    assert sd["edited"] and j["request"]["style"] == "mobile_factory" and j["settings"]["optimize"]["target_triangles"] == 20000
+    built = build_reference_prompt(j["request"], sd)
+    assert "cel-shaded cartoon" in built["prompt"] and "factory-building" not in built["prompt"] and "rust" in built["negative_prompt"]
+    # the asset job made from a candidate carries the edited style along
+    jid = _fake_completed_image_job(client, tmp)
+    caps = client.get("/capabilities").json()
+    assert caps["styles"]["mobile_factory"]["style_clause"].startswith("stylized game asset")
+
+
+def test_style_edits_persist_in_settings(env):
+    client, api, tmp = env
+    r = client.put("/v1/settings", json={"style_edits": {"mobile_factory": {"style_clause": "clean cel-shaded cartoon look with thick outlines", "target_triangles": 9000},
+                                                          "custom": {"label": "Voxel", "style_clause": "chunky voxel-style game asset"},
+                                                          "lowpoly": {"style_clause": ""}}})
+    assert r.status_code == 200, r.text
+    se = r.json()["style_edits"]
+    assert set(se) == {"mobile_factory", "custom"} and se["mobile_factory"]["target_triangles"] == 9000
+    assert client.get("/v1/settings").json()["style_edits"]["custom"]["label"] == "Voxel"  # survives a fresh read from SQLite
+    assert client.put("/v1/settings", json={"style_edits": {"bad id!": {"style_clause": "x" * 20}}}).status_code == 422
+    r = client.put("/v1/settings", json={"style_edits": {}})
+    assert r.json()["style_edits"] == {}

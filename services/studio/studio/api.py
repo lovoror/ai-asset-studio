@@ -87,6 +87,9 @@ def capabilities():
                      "Pixal3D geometry+PBR (TRELLIS.2 backbone)", "master GLB (PNG textures)",
                      "Blender: meshoptimizer reduction / bake / LODs / collision / previews", "validation + manifest"],
         "styles": {k: {"label": v.get("label"), "description": v.get("description"), "best_for": v.get("best_for"),
+                       "style_clause": " ".join((v.get("style_clause") or "").split()), "background": v.get("background"),
+                       "negative_extra": v.get("negative_extra"), "default_materials": v.get("default_materials"),
+                       "default_palette": v.get("default_palette"),
                        "optimize_defaults": v.get("optimize_defaults")} for k, v in p["styles"].items()},
         "image_models": _image_models_with_availability(p["image_models"]),
         "quality": {k: {"reference": v["reference"], "pixal3d": v["pixal3d"], "master": v["master"], "fallback": v.get("fallback")}
@@ -148,7 +151,7 @@ def create_asset_job(req: AssetFromCandidateRequest):
         raise HTTPException(404, f"candidate {req.candidate} not found (is the image job complete?)")
     preq = parent["request"]
     data = {
-        "prompt": preq["prompt"], "style": preq.get("style", "mobile_factory"), "quality": req.quality,
+        "prompt": preq["prompt"], "style": preq.get("style", "mobile_factory"), "custom_style": preq.get("custom_style"), "quality": req.quality,
         "seed": parent["settings"].get("seed"), "materials": preq.get("materials"), "palette": preq.get("palette"),
         "negative_extra": preq.get("negative_extra"),
         "height_m": req.height_m if req.height_m is not None else preq.get("height_m"), "width_m": req.width_m, "depth_m": req.depth_m,
@@ -510,7 +513,10 @@ def get_settings():
 @app.put("/v1/settings", dependencies=[Depends(auth)])
 def put_settings(body: SettingsPatch):
     p = load_presets()
-    vals = {k: v for k, v in body.model_dump().items() if v is not None}
+    vals = {k: v for k, v in body.model_dump(exclude_none=True).items()}
+    if "style_edits" in vals:  # drop empty entries so a cleared preset really resets
+        vals["style_edits"] = {k: {kk: vv for kk, vv in e.items() if vv not in (None, "")} for k, e in vals["style_edits"].items()}
+        vals["style_edits"] = {k: e for k, e in vals["style_edits"].items() if e.get("style_clause")}
     if "default_style" in vals and vals["default_style"] not in p["styles"]:
         raise HTTPException(422, "unknown style")
     if "default_image_model" in vals and vals["default_image_model"] not in p["image_models"]:

@@ -38,3 +38,4 @@ Open **http://127.0.0.1:8090** after `scripts\start.ps1`. The portal is a React 
 cd web; npm install; npm run dev     # http://localhost:5173 proxying /v1 to the running stack
 npm run build                        # dist/ (also built inside docker/studio.Dockerfile)
 ```
+- [ ] Style editor: edit a preset's look, generate, then `GET /v1/settings` shows it under `style_edits`; Reset to preset removes it; the Custom card requires a clause.

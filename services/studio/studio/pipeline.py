@@ -209,7 +209,7 @@ class JobRun:
         t0 = time.time()
         self.set_stage(name, 0.05)
         d = self.stage_dir(name)
-        style = load_presets()["styles"][self.settings["style"]]
+        style = self.settings.get("style_def") or load_presets()["styles"][self.settings["style"]]
         built = build_reference_prompt(self.request, style)
         ref = self.settings["reference"]
         req = {

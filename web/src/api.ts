@@ -86,6 +86,11 @@ export interface Settings {
   default_style: string;
   default_target_triangles: number;
   default_texture_size: number;
+  style_edits?: Record<string, StyleEditRecord>;
+}
+
+export interface StyleEditRecord {
+  label?: string; style_clause?: string; background?: string; negative_extra?: string; target_triangles?: number; texture_size?: number;
 }
 
 export interface Example {

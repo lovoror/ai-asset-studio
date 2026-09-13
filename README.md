@@ -202,6 +202,12 @@ Styles ([`presets/styles.yaml`](presets/styles.yaml)) set the look and sensible 
 | `scifi` | Hard-surface sci-fi: clean panel lines, machined metal, a few emissive accents | 30,000 / 2048 |
 | `fantasy` | Hand-crafted fantasy props: worn wood, forged iron, stone, leather, warm painted look | 30,000 / 2048 |
 
+Every style is editable in the portal: pick a card, press **Edit this style**, and change the look sentence, background,
+keep-out list and budgets. Edits are saved per style in the app's settings (SQLite) and sent with each job as
+`custom_style`; **Reset to preset** brings the original back. The dashed **Custom** card is a style written from scratch.
+The API takes the same thing: `"style": "custom"` with a `custom_style.style_clause`, or a preset id plus a partial
+`custom_style` to override only some fields.
+
 Quality ([`presets/quality.yaml`](presets/quality.yaml)) decides how much GPU time to spend:
 
 | Quality | Reference images | 3D resolution | Typical wall clock |

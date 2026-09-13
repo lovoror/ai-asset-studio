@@ -175,6 +175,9 @@ kbd { font-family: var(--mono); font-size: 11px; padding: 1px 5px; border: 1px s
 .style-card b { display: block; }
 .style-card span { font-size: 12px; color: var(--fg-muted); line-height: 1.4; }
 .style-card .budget { margin-top: auto; padding-top: 6px; font-size: 11px; color: var(--fg-faint); }
+.style-card.custom { border-style: dashed; }
+.style-card.custom.active { border-style: solid; }
+.custom-style { border-color: var(--accent); }
 
 /* candidate grid */
 .cands { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }

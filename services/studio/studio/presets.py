@@ -26,12 +26,40 @@ def style_ids() -> list[str]:
     return list(load_presets()["styles"].keys())
 
 
+def custom_style_def(req: dict, presets: dict, base: dict | None) -> dict | None:
+    """Apply `custom_style` on top of a preset (`base`), or build a style from scratch when the style id is 'custom'.
+    Only the fields that are given override the preset; budgets fall back to the preset's (or the generic stylized)
+    optimize_defaults. The result has the same shape as a presets/styles.yaml entry."""
+    cs = req.get("custom_style")
+    if not cs:
+        return base
+    if base is None and not cs.get("style_clause"):
+        return None
+    style = copy.deepcopy(base) if base else {"label": "Custom", "description": "User-defined style",
+                                              "optimize_defaults": copy.deepcopy(presets["styles"].get("stylized_generic", {}).get("optimize_defaults", {}))}
+    for k in ("label", "style_clause", "background", "negative_extra"):
+        if cs.get(k) is not None and (cs.get(k) != "" or k == "negative_extra"):
+            style[k] = cs[k]
+    style.setdefault("background", "plain flat light grey studio background")
+    od = style.setdefault("optimize_defaults", {})
+    if cs.get("target_triangles"):
+        od["target_triangles"] = int(cs["target_triangles"])
+    if cs.get("texture_size"):
+        od["texture_size"] = int(cs["texture_size"])
+    style["custom"] = base is None
+    style["edited"] = base is not None
+    return style
+
+
 def resolve_settings(req: dict) -> dict:
     """Map the application-level request onto concrete backend settings (requested == effective at this point)."""
     p = load_presets()
-    style = p["styles"].get(req["style"])
+    base = None if req["style"] == "custom" else p["styles"].get(req["style"])
+    if base is None and req["style"] != "custom":
+        raise ValueError(f"unknown style {req['style']!r}; available: {', '.join(p['styles'])}, custom")
+    style = custom_style_def(req, p, base)
     if style is None:
-        raise ValueError(f"unknown style {req['style']!r}; available: {', '.join(p['styles'])}")
+        raise ValueError("style 'custom' requires custom_style.style_clause")
     q = copy.deepcopy(p["quality"][req["quality"]])
     od = style.get("optimize_defaults", {})
     seed = req.get("seed")
@@ -58,6 +86,7 @@ def resolve_settings(req: dict) -> dict:
     settings = {
         "seed": seed,
         "style": req["style"],
+        "style_def": style,  # the effective style (preset copy or custom) so the pipeline never depends on later preset edits
         "quality": req["quality"],
         "reference": ref,
         "pixal3d": q["pixal3d"],

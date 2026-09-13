@@ -25,9 +25,32 @@ class MultiViewInput(BaseModel):
         "rig", description="'approximate' is recorded as a warning: poses are assumed, not measured")
 
 
+class CustomStyle(BaseModel):
+    """Style overrides. With `style == "custom"` this is the whole style (style_clause required); with a preset id, the fields
+    given here replace the preset's (edit the look of a preset without losing its budgets). The clause goes into the
+    reference prompt exactly like a preset's style_clause."""
+    label: Optional[str] = Field(None, max_length=40)
+    style_clause: Optional[str] = Field(None, min_length=10, max_length=600, description="how the object should look, e.g. 'chunky voxel-style ...'")
+    background: Optional[str] = Field(None, max_length=120)
+    negative_extra: Optional[str] = Field(None, max_length=300)
+    target_triangles: Optional[int] = Field(None, ge=200, le=2_000_000)
+    texture_size: Optional[Literal[256, 512, 1024, 2048, 4096]] = None
+
+    @field_validator("label", "style_clause", "background", "negative_extra", mode="before")
+    @classmethod
+    def _clean(cls, v):
+        if v is None:
+            return v
+        v = " ".join(str(v).split())
+        if any(ord(ch) < 32 for ch in v):
+            raise ValueError("control characters not allowed")
+        return v or None  # an empty field means "not set", so a cleared clause resets to the preset
+
+
 class JobRequest(BaseModel):
     prompt: str = Field(..., min_length=3, max_length=1500)
-    style: str = Field("mobile_factory")
+    style: str = Field("mobile_factory", description="a preset id from /capabilities.styles, or 'custom' with `custom_style`")
+    custom_style: Optional[CustomStyle] = None
     model: Optional[str] = Field(None, pattern=r"^[a-z0-9\-_.]{2,60}$", description="image model id from /capabilities.image_models")
     quality: Literal["balanced", "quality"] = "balanced"
     seed: Optional[int] = Field(None, ge=0, le=2**31 - 1)
@@ -68,6 +91,12 @@ class JobRequest(BaseModel):
         if not re.match(r"^[a-z0-9_]{1,40}$", v):
             raise ValueError("style must be a preset id (lowercase letters, digits, underscore)")
         return v
+
+    @model_validator(mode="after")
+    def _custom_style_present(self):
+        if self.style == "custom" and (self.custom_style is None or not self.custom_style.style_clause):
+            raise ValueError("style 'custom' requires custom_style.style_clause")
+        return self
 
     @field_validator("palette")
     @classmethod
@@ -125,7 +154,8 @@ class JobRequest(BaseModel):
 class ImageJobRequest(BaseModel):
     """Ideation step: generate several reference-image variations of one idea (no 3D)."""
     prompt: str = Field(..., min_length=3, max_length=1500)
-    style: str = Field("mobile_factory")
+    style: str = Field("mobile_factory", description="a preset id from /capabilities.styles, or 'custom' with `custom_style`")
+    custom_style: Optional[CustomStyle] = None
     model: Optional[str] = Field(None, pattern=r"^[a-z0-9\-_.]{2,60}$", description="image model id (default from settings)")
     variations: int = Field(4, ge=1, le=8)
     seed: Optional[int] = Field(None, ge=0, le=2**31 - 1)
@@ -138,6 +168,7 @@ class ImageJobRequest(BaseModel):
     _clean = field_validator("prompt", "materials", "negative_extra")(JobRequest._clean_text.__func__)
     _style = field_validator("style")(JobRequest._style.__func__)
     _pal = field_validator("palette")(JobRequest._palette.__func__)
+    _custom = model_validator(mode="after")(JobRequest._custom_style_present)
 
 
 class AssetFromCandidateRequest(BaseModel):
@@ -177,6 +208,19 @@ class SettingsPatch(BaseModel):
     default_style: Optional[str] = Field(None, pattern=r"^[a-z0-9_]{1,40}$")
     default_target_triangles: Optional[int] = Field(None, ge=200, le=2_000_000)
     default_texture_size: Optional[Literal[256, 512, 1024, 2048, 4096]] = None
+    style_edits: Optional[dict[str, CustomStyle]] = Field(None, description="whole map; keys are style ids or 'custom'. Send {} to clear.")
+
+    @field_validator("style_edits")
+    @classmethod
+    def _style_edit_keys(cls, v):
+        if v is None:
+            return v
+        if len(v) > 64:
+            raise ValueError("too many style edits")
+        for k in v:
+            if not re.match(r"^[a-z0-9_]{1,40}$", k):
+                raise ValueError(f"invalid style id {k!r}")
+        return v
 
 
 class JobCreated(BaseModel):
