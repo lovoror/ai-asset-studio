@@ -448,7 +448,7 @@ class JobRun:
             "require_basecolor": True, "height_m": opt.get("height_m"), "max_texture": opt["texture_size"],
             "require_bottom_origin": True})
         for i, lod in enumerate(outputs.get("lods", [])):
-            reports[f"lod{i+1}"] = validate_glb(self.art / lod["file"], {"max_triangles": int(lod["target_triangles"] * 1.1),
+            reports[f"lod{i+1}"] = validate_glb(self.art / lod["file"], {"soft_max_triangles": int(lod["target_triangles"] * 1.1),
                                                                         "require_uv": True, "require_material": True})
         if outputs.get("collision_glb"):
             reports["collision"] = validate_glb(self.art / outputs["collision_glb"], {"max_triangles": int(opt["collision_triangles"] * 1.2)})

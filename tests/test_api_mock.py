@@ -215,6 +215,8 @@ def test_glb_validation_rejects_webp_and_reports_counts(tmp_path):
     assert rep["triangles"] == 12 and rep["images"][0]["mimeType"] == "image/png"
     rep2 = validate_glb(p, {"max_triangles": 4, "height_m": 3.0})
     assert not rep2["ok"] and len(rep2["errors"]) == 2
+    rep3 = validate_glb(p, {"soft_max_triangles": 4})  # LOD budgets are soft: a warning, never a failed job
+    assert rep3["ok"] and not rep3["errors"] and any("exceed budget" in w for w in rep3["warnings"])
     pw = tmp_path / "w.glb"
     m.export(pw, extension_webp=True)
     repw = validate_glb(pw)
