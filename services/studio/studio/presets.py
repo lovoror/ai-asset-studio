@@ -34,6 +34,8 @@ def resolve_settings(req: dict) -> dict:
     ref = q["reference"]
     if req.get("reference_candidates"):
         ref["candidates"] = int(req["reference_candidates"])
+    if req.get("variations"):
+        ref["candidates"] = int(req["variations"])
     master = q["master"]
     if req.get("master_texture_size"):
         master["texture_size"] = int(req["master_texture_size"])
@@ -61,6 +63,7 @@ def resolve_settings(req: dict) -> dict:
         },
         "fallback": q.get("fallback", []),
         "allow_quality_fallback": bool(req.get("allow_quality_fallback", True)),
-        "input_mode": "multiview" if req.get("multiview") else ("reference_image" if req.get("reference_image_b64") else "text"),
+        "input_mode": "multiview" if req.get("multiview") else ("reference_image" if req.get("reference_image_b64") else
+                      ("image_job" if req.get("image_job_id") else "text")),
     }
     return settings

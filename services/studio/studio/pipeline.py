@@ -185,8 +185,14 @@ class JobRun:
     # ---- stages ------------------------------------------------------------
     def run(self):
         self.store.update(self.id, status="running")
+        if self.job.get("kind") == "image":
+            self.stage_reference(variations_only=True)
+            self.stage_package()
+            return
         mode = self.settings.get("input_mode", "text")
-        if mode == "text":
+        if self.job.get("parent_id"):
+            self.stage_reference_from_parent()
+        elif mode == "text":
             self.stage_reference()
         else:
             self.stage_reference_provided()
@@ -195,7 +201,7 @@ class JobRun:
         self.stage_validate()
         self.stage_package()
 
-    def stage_reference(self):
+    def stage_reference(self, variations_only: bool = False):
         name = "reference"
         if self.stage_result(name):
             self.log("reference stage already complete; reusing")
@@ -220,19 +226,45 @@ class JobRun:
         run = self._run_gpu_stage("image", name, ["python", "-m", "image_worker.generate", "--request", str(d / "request.json")],
                                   log_path, ["reference"])
         out = json.loads((d / "output.json").read_text(encoding="utf-8"))
-        sel = d / out["selected"]
-        shutil.copy2(sel, self.art / "reference.png")
         cands = self.art / "reference_candidates"
         cands.mkdir(exist_ok=True)
+        thumbs = self.art / "thumbs"
+        thumbs.mkdir(exist_ok=True)
         for c in out["candidates"]:
             shutil.copy2(d / c["file"], cands / Path(c["file"]).name)
+            make_thumb(d / c["file"], thumbs / (Path(c["file"]).stem + ".jpg"))
         shutil.copy2(d / "selection.json", cands / "selection.json")
-        for w in out.get("warnings", []):
-            self.warn(w)
+        if not variations_only:
+            sel = d / out["selected"]
+            shutil.copy2(sel, self.art / "reference.png")
+            for w in out.get("warnings", []):
+                self.warn(w)
+        else:
+            make_thumb(d / out["selected"], thumbs / "card.jpg")
         res = {"selected": out["selected"], "selection": out["selection"], "stats": out.get("stats", {}), "run": run,
                "prompt": built["prompt"], "negative_prompt": built["negative_prompt"],
                "effective": {k: req[k] for k in ("width", "height", "steps", "true_cfg_scale", "mode", "gpu_resident_blocks", "seeds")}}
         self.finish_stage(name, res, t0)
+
+    def stage_reference_from_parent(self):
+        name = "reference"
+        if self.stage_result(name):
+            return
+        t0 = time.time()
+        d = self.stage_dir(name)
+        self.set_stage(name, 0.05)
+        parent = self.job["parent_id"]
+        cand = self.job.get("candidate") or ""
+        src_dir = (config.JOBS_DIR / parent / "stages" / "reference" / "candidates").resolve()
+        src = (src_dir / cand).resolve()
+        if src_dir not in src.parents or not src.is_file():
+            raise JobFailed(name, f"candidate {cand!r} of image job {parent} not found")
+        shutil.copy2(src, d / "provided.png")
+        shutil.copy2(src, self.art / "reference.png")
+        (self.art / "thumbs").mkdir(exist_ok=True)
+        make_thumb(src, self.art / "thumbs" / "reference.jpg")
+        self.log(f"using variation {cand} of image job {parent} (Qwen stage skipped)")
+        self.finish_stage(name, {"selected": "provided.png", "source": "image_job", "parent_id": parent, "candidate": cand}, t0)
 
     def stage_reference_provided(self):
         name = "reference"
@@ -336,6 +368,11 @@ class JobRun:
             shutil.copy2(src, dst)
         for w in out.get("warnings", []):
             self.warn(w)
+        thumbs = self.art / "thumbs"
+        thumbs.mkdir(exist_ok=True)
+        previews = [f for f in out["files"] if f.startswith("previews/") and "asset_front_left" in f]
+        if previews:
+            make_thumb(self.art / previews[0], thumbs / "card.jpg")
         res = {"files": out["files"], "stats": out.get("stats", {}), "run": run, "outputs": out.get("outputs", {})}
         self.finish_stage(name, res, t0)
 
@@ -371,10 +408,38 @@ class JobRun:
             raise JobFailed(name, "validation failed: " + json.dumps(errors), {"validation": reports})
         self.finish_stage(name, {"reports": reports}, t0)
 
+    def _package_image_job(self, name: str, t0: float):
+        ref = self.stage_result("reference") or {}
+        artifacts = []
+        for p in sorted(self.art.rglob("*")):
+            if p.is_file():
+                rel = p.relative_to(self.art).as_posix()
+                artifacts.append({"name": rel, "bytes": p.stat().st_size, "url": f"/v1/jobs/{self.id}/artifacts/{rel}"})
+        manifest = {
+            "job_id": self.id, "kind": "image", "version": config.VERSION, "created_at": self.job["created_at"], "finished_at": time.time(),
+            "request": self.request, "settings_effective": {k: v for k, v in self.settings.items() if not k.startswith("_")},
+            "prompt": ref.get("prompt"), "negative_prompt": ref.get("negative_prompt"),
+            "candidates": [{"file": Path(c["file"]).name, "seed": c["seed"], "time_s": c["time_s"],
+                            "score": c["metrics"].get("score"), "reasons": c["metrics"].get("reasons") or c["metrics"].get("reject"),
+                            "url": f"/v1/jobs/{self.id}/artifacts/reference_candidates/{Path(c['file']).name}",
+                            "thumb": f"/v1/jobs/{self.id}/artifacts/thumbs/{Path(c['file']).stem}.jpg"}
+                           for c in (json.loads((self.stages_dir / "reference" / "output.json").read_text(encoding="utf-8")).get("candidates", []))],
+            "stats": ref.get("stats"), "resources": {"reference": ref.get("run", {})},
+            "warnings": self.warnings, "timings_s": {**self.timings}, "artifacts": artifacts,
+        }
+        atomic_write_json(self.art / "manifest.json", manifest)
+        atomic_write_json(self.dir / "manifest.json", manifest)
+        self.finish_stage(name, {"artifacts": len(artifacts)}, t0)
+        self.store.update(self.id, status="completed", stage="done", progress=1.0, finished_at=time.time(),
+                          timings=self.timings, warnings=self.warnings, settings=self.settings)
+        self.log("variations ready")
+
     def stage_package(self):
         name = "package"
         t0 = time.time()
         self.set_stage(name, 0.97)
+        if self.job.get("kind") == "image":
+            return self._package_image_job(name, t0)
         artifacts = []
         for p in sorted(self.art.rglob("*")):
             if p.is_file():
@@ -394,6 +459,7 @@ class JobRun:
             "job_id": self.id, "version": config.VERSION, "created_at": self.job["created_at"], "finished_at": time.time(),
             "request": {k: v for k, v in self.request.items() if k not in ("reference_image_b64", "multiview")},
             "input_mode": self.settings.get("input_mode"),
+            "kind": "asset", "parent_id": self.job.get("parent_id"), "candidate": self.job.get("candidate"),
             "settings_effective": settings_public,
             "settings_requested_overrides": {k: v.get("_requested") for k, v in self.settings.items() if isinstance(v, dict) and v.get("_requested")},
             "fallbacks_applied": self.settings.get("_fallbacks_applied", []),
@@ -428,6 +494,20 @@ class JobRun:
         self.store.update(self.id, status="completed", stage="done", progress=1.0, finished_at=time.time(),
                           timings=self.timings, warnings=self.warnings, settings=self.settings)
         self.log("job completed")
+
+
+def make_thumb(src: Path, dst: Path, size: int = 512):
+    """JPEG thumbnail for library cards (Pillow is available in the studio image)."""
+    try:
+        from PIL import Image
+
+        with Image.open(src) as im:
+            im = im.convert("RGB")
+            im.thumbnail((size, size))
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            im.save(dst, "JPEG", quality=86)
+    except Exception as e:  # noqa: BLE001
+        print(f"[thumb] {src} -> {dst} failed: {e}")
 
 
 def _asset_name(prompt: str) -> str:

@@ -39,7 +39,32 @@ CREATE TABLE IF NOT EXISTS events (
   message TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS events_job ON events(job_id, id);
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 """
+
+# columns added after the first release; applied with ALTER TABLE when missing (keeps existing job rows)
+MIGRATIONS = [
+    ("kind", "TEXT NOT NULL DEFAULT 'asset'"),      # 'image' (variations only) | 'asset' (full pipeline)
+    ("parent_id", "TEXT"),                          # image job an asset job was created from
+    ("candidate", "TEXT"),                          # candidate file (relative to the parent's candidates dir)
+    ("title", "TEXT"),
+    ("favorite", "INTEGER NOT NULL DEFAULT 0"),
+    ("archived", "INTEGER NOT NULL DEFAULT 0"),
+    ("notes", "TEXT"),
+    ("priority", "INTEGER NOT NULL DEFAULT 0"),     # higher runs first among queued jobs
+]
+
+DEFAULT_SETTINGS = {
+    "auto_process": False,       # selected images start 3D generation immediately (else they are held for review)
+    "default_variations": 4,
+    "default_quality": "balanced",
+    "default_style": "mobile_factory",
+    "default_target_triangles": 20000,
+    "default_texture_size": 2048,
+}
 
 
 def connect(path: Path | None = None) -> sqlite3.Connection:
@@ -51,6 +76,11 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
     con.execute("PRAGMA synchronous=NORMAL")
     con.execute("PRAGMA busy_timeout=30000")
     con.executescript(SCHEMA)
+    have = {r[1] for r in con.execute("PRAGMA table_info(jobs)").fetchall()}
+    for col, decl in MIGRATIONS:
+        if col not in have:
+            con.execute(f"ALTER TABLE jobs ADD COLUMN {col} {decl}")
+    con.execute("CREATE INDEX IF NOT EXISTS jobs_parent ON jobs(parent_id)")
     return con
 
 
@@ -70,26 +100,93 @@ class JobStore:
                 raise
 
     # ---- creation / lookup -------------------------------------------------
-    def create(self, request: dict, settings: dict) -> str:
+    def create(self, request: dict, settings: dict, kind: str = "asset", parent_id: str | None = None,
+               candidate: str | None = None, title: str | None = None, held: bool = False) -> str:
         job_id = time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8]
         now = time.time()
+        status = "held" if held else "queued"
         with self.tx() as c:
             c.execute(
-                "INSERT INTO jobs(id,status,stage,created_at,updated_at,request_json,settings_json) VALUES(?,?,?,?,?,?,?)",
-                (job_id, "queued", "queued", now, now, json.dumps(request), json.dumps(settings)))
-        self.event(job_id, "info", "job queued")
+                "INSERT INTO jobs(id,status,stage,created_at,updated_at,request_json,settings_json,kind,parent_id,candidate,title) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                (job_id, status, status, now, now, json.dumps(request), json.dumps(settings), kind, parent_id, candidate,
+                 title or (request.get("prompt") or "")[:80]))
+        self.event(job_id, "info", "job held for review" if held else "job queued")
         return job_id
 
     def get(self, job_id: str) -> dict | None:
         row = self.con.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
         return self._row(row) if row else None
 
-    def list_jobs(self, limit: int = 50, status: str | None = None) -> "list[dict]":
+    def list_jobs(self, limit: int = 50, status: str | None = None, kind: str | None = None, parent_id: str | None = None,
+                  q: str | None = None, favorite: bool | None = None, archived: bool | None = False, offset: int = 0) -> "list[dict]":
+        where, args = [], []
         if status:
-            rows = self.con.execute("SELECT * FROM jobs WHERE status=? ORDER BY created_at DESC LIMIT ?", (status, limit))
-        else:
-            rows = self.con.execute("SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?", (limit,))
+            where.append("status=?"); args.append(status)
+        if kind:
+            where.append("kind=?"); args.append(kind)
+        if parent_id:
+            where.append("parent_id=?"); args.append(parent_id)
+        if q:
+            where.append("(title LIKE ? OR request_json LIKE ?)"); args += [f"%{q}%", f"%{q}%"]
+        if favorite is not None:
+            where.append("favorite=?"); args.append(1 if favorite else 0)
+        if archived is not None:
+            where.append("archived=?"); args.append(1 if archived else 0)
+        sql = "SELECT * FROM jobs" + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        rows = self.con.execute(sql, (*args, limit, offset))
         return [self._row(r) for r in rows]
+
+    def children(self, parent_id: str) -> "list[dict]":
+        rows = self.con.execute("SELECT * FROM jobs WHERE parent_id=? ORDER BY created_at", (parent_id,))
+        return [self._row(r) for r in rows]
+
+    def queue(self) -> "list[dict]":
+        rows = self.con.execute("SELECT * FROM jobs WHERE status IN ('held','queued','running') ORDER BY "
+                                "CASE status WHEN 'running' THEN 0 WHEN 'queued' THEN 1 ELSE 2 END, priority DESC, created_at")
+        return [self._row(r) for r in rows]
+
+    def set_status_simple(self, job_id: str, from_status: tuple, to_status: str) -> str | None:
+        with self.tx() as c:
+            row = c.execute("SELECT status FROM jobs WHERE id=?", (job_id,)).fetchone()
+            if not row:
+                return None
+            if row["status"] not in from_status:
+                return row["status"]
+            c.execute("UPDATE jobs SET status=?, stage=?, updated_at=? WHERE id=?", (to_status, to_status, time.time(), job_id))
+        self.event(job_id, "info", f"{row['status']} -> {to_status}")
+        return to_status
+
+    # ---- settings -----------------------------------------------------------
+    def get_settings(self) -> dict:
+        out = dict(DEFAULT_SETTINGS)
+        for r in self.con.execute("SELECT key, value FROM settings"):
+            try:
+                out[r["key"]] = json.loads(r["value"])
+            except json.JSONDecodeError:
+                pass
+        return out
+
+    def put_settings(self, values: dict) -> dict:
+        with self.tx() as c:
+            for k, v in values.items():
+                if k in DEFAULT_SETTINGS:
+                    c.execute("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                              (k, json.dumps(v)))
+        return self.get_settings()
+
+    def events_since(self, since_id: int, limit: int = 200) -> "list[dict]":
+        rows = self.con.execute("SELECT id, job_id, ts, level, message FROM events WHERE id>? ORDER BY id LIMIT ?", (since_id, limit))
+        return [dict(r) for r in rows]
+
+    def last_event_id(self) -> int:
+        r = self.con.execute("SELECT COALESCE(MAX(id),0) FROM events").fetchone()
+        return int(r[0])
+
+    def delete_job(self, job_id: str):
+        with self.tx() as c:
+            c.execute("DELETE FROM events WHERE job_id=?", (job_id,))
+            c.execute("DELETE FROM jobs WHERE id=?", (job_id,))
 
     @staticmethod
     def _row(r) -> dict:
@@ -98,12 +195,14 @@ class JobStore:
             v = d.pop(k)
             d[k[:-5]] = json.loads(v) if v else ({} if k != "warnings_json" else [])
         d["cancel_requested"] = bool(d["cancel_requested"])
+        d["favorite"] = bool(d.get("favorite"))
+        d["archived"] = bool(d.get("archived"))
         return d
 
     # ---- worker side -------------------------------------------------------
     def claim_next(self, worker_id: str) -> dict | None:
         with self.tx() as c:
-            row = c.execute("SELECT id FROM jobs WHERE status='queued' ORDER BY created_at LIMIT 1").fetchone()
+            row = c.execute("SELECT id FROM jobs WHERE status='queued' ORDER BY priority DESC, created_at LIMIT 1").fetchone()
             if not row:
                 return None
             now = time.time()
@@ -141,7 +240,7 @@ class JobStore:
             row = c.execute("SELECT status FROM jobs WHERE id=?", (job_id,)).fetchone()
             if not row:
                 return None
-            if row["status"] == "queued":
+            if row["status"] in ("queued", "held"):
                 c.execute("UPDATE jobs SET status='cancelled', stage='cancelled', finished_at=?, updated_at=?, "
                           "cancel_requested=1 WHERE id=?", (time.time(), time.time(), job_id))
                 return "cancelled"

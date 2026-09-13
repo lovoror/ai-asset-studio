@@ -121,6 +121,61 @@ class JobRequest(BaseModel):
         return self
 
 
+class ImageJobRequest(BaseModel):
+    """Ideation step: generate several reference-image variations of one idea (no 3D)."""
+    prompt: str = Field(..., min_length=3, max_length=1500)
+    style: str = Field("mobile_factory")
+    variations: int = Field(4, ge=1, le=8)
+    seed: Optional[int] = Field(None, ge=0, le=2**31 - 1)
+    materials: Optional[str] = Field(None, max_length=300)
+    palette: Optional[list[str]] = Field(None, max_length=8)
+    negative_extra: Optional[str] = Field(None, max_length=300)
+    height_m: Optional[float] = Field(None, gt=0.001, le=1000, description="hint for proportions; reused as default when making 3D")
+    title: Optional[str] = Field(None, max_length=120)
+
+    _clean = field_validator("prompt", "materials", "negative_extra")(JobRequest._clean_text.__func__)
+    _style = field_validator("style")(JobRequest._style.__func__)
+    _pal = field_validator("palette")(JobRequest._palette.__func__)
+
+
+class AssetFromCandidateRequest(BaseModel):
+    """Turn one selected variation of an image job into a 3D asset (full pipeline minus the image stage)."""
+    image_job_id: str = Field(..., min_length=8, max_length=64)
+    candidate: str = Field(..., pattern=r"^cand_\d{2}\.png$")
+    quality: Literal["balanced", "quality"] = "balanced"
+    hold: bool = Field(True, description="true: wait in the review queue; false: start as soon as the worker is free")
+    height_m: Optional[float] = Field(None, gt=0.001, le=1000)
+    width_m: Optional[float] = Field(None, gt=0.001, le=1000)
+    depth_m: Optional[float] = Field(None, gt=0.001, le=1000)
+    target_triangles: Optional[int] = Field(None, ge=200, le=2_000_000)
+    texture_size: Optional[Literal[256, 512, 1024, 2048, 4096]] = None
+    generate_lods: bool = True
+    lod_fractions: Optional[list[float]] = None
+    generate_collision: bool = True
+    collision_triangles: Optional[int] = Field(None, ge=12, le=5000)
+    allow_quality_fallback: bool = True
+    title: Optional[str] = Field(None, max_length=120)
+
+    _lods = field_validator("lod_fractions")(JobRequest._lods.__func__)
+
+
+class JobPatch(BaseModel):
+    title: Optional[str] = Field(None, max_length=120)
+    favorite: Optional[bool] = None
+    archived: Optional[bool] = None
+    notes: Optional[str] = Field(None, max_length=4000)
+    priority: Optional[int] = Field(None, ge=-100, le=100)
+
+
+class SettingsPatch(BaseModel):
+    auto_process: Optional[bool] = None
+    default_variations: Optional[int] = Field(None, ge=1, le=8)
+    default_quality: Optional[Literal["balanced", "quality"]] = None
+    default_style: Optional[str] = Field(None, pattern=r"^[a-z0-9_]{1,40}$")
+    default_target_triangles: Optional[int] = Field(None, ge=200, le=2_000_000)
+    default_texture_size: Optional[Literal[256, 512, 1024, 2048, 4096]] = None
+
+
 class JobCreated(BaseModel):
     job_id: str
     status: str

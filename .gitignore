@@ -7,3 +7,5 @@ tools/node_modules/
 tools/godot/
 tools/package-lock.json
 samples/*/master.glb
+web/node_modules/
+web/dist/

@@ -4,3 +4,7 @@ samples
 *.pyc
 docs
 tests
+web/node_modules
+web/dist
+tools/node_modules
+tools/godot

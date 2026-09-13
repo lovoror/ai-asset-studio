@@ -123,5 +123,50 @@ def open_in_blender(job_id: str, dest_dir: str | None = None) -> dict:
     return open_sample(dest)
 
 
+@mcp.tool()
+def generate_variations(prompt: str, style: str = "mobile_factory", variations: int = 4, seed: int | None = None,
+                        height_m: float | None = None, materials: str | None = None, palette: list[str] | None = None,
+                        title: str | None = None) -> dict:
+    """Step 1 of the two-step flow: generate image variations of one idea (no 3D). Poll with status/wait, then inspect
+    candidates via status(job_id)['candidates'] and call make_asset for the ones you want."""
+    body = {"prompt": prompt, "style": style, "variations": variations}
+    for k, v in (("seed", seed), ("height_m", height_m), ("materials", materials), ("palette", palette), ("title", title)):
+        if v is not None:
+            body[k] = v
+    return assetctl._req("POST", "/v1/image-jobs", body)
+
+
+@mcp.tool()
+def make_asset(image_job_id: str, candidate: str, quality: str = "balanced", start: bool = True, height_m: float | None = None,
+               target_triangles: int | None = None, texture_size: int | None = None, generate_lods: bool = True,
+               generate_collision: bool = True, allow_quality_fallback: bool = True, title: str | None = None) -> dict:
+    """Step 2: turn one variation (e.g. 'cand_01.png') of an image job into a 3D asset. start=False holds it for review."""
+    body = {"image_job_id": image_job_id, "candidate": candidate, "quality": quality, "hold": not start,
+            "generate_lods": generate_lods, "generate_collision": generate_collision, "allow_quality_fallback": allow_quality_fallback}
+    for k, v in (("height_m", height_m), ("target_triangles", target_triangles), ("texture_size", texture_size), ("title", title)):
+        if v is not None:
+            body[k] = v
+    return assetctl._req("POST", "/v1/asset-jobs", body)
+
+
+@mcp.tool()
+def release(job_id: str) -> dict:
+    """Start a job that is held for review."""
+    return assetctl._req("POST", f"/v1/jobs/{job_id}/release")
+
+
+@mcp.tool()
+def queue() -> dict:
+    """Held / queued / running jobs plus GPU state and the auto_process setting."""
+    return assetctl._req("GET", "/v1/queue")
+
+
+@mcp.tool()
+def library(kind: str | None = None, q: str | None = None, limit: int = 30) -> dict:
+    """Browse the library of image sessions and 3D assets (thumbs, status, lineage)."""
+    qs = f"?limit={limit}" + (f"&kind={kind}" if kind else "") + (f"&q={q}" if q else "")
+    return assetctl._req("GET", "/v1/library" + qs)
+
+
 if __name__ == "__main__":
     mcp.run()

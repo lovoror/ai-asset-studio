@@ -3,6 +3,9 @@
 
   assetctl generate "prompt" [--style mobile_factory] [--quality quality] [--seed 1] [--height-m 2] [--triangles 12000]
                     [--texture 2048] [--no-lods] [--no-collision] [--no-fallback] [--reference image.png] [--wait] [--download DIR]
+  assetctl images "prompt" [--variations 4 --style S --wait]          (step 1: image variations only)
+  assetctl make3d IMAGE_JOB cand_00.png [cand_02.png] [--start --triangles N]   (step 2: 3D from chosen variations)
+  assetctl release JOB_ID | hold JOB_ID | queue | library [--kind image|asset]
   assetctl status JOB_ID [--events N]
   assetctl wait JOB_ID [--timeout S]
   assetctl download JOB_ID DIR
@@ -156,6 +159,73 @@ def cmd_view(a):
     print(json.dumps(open_sample(dest, a.blender)))
 
 
+def cmd_images(a):
+    """Two-step flow, step 1: generate N image variations of an idea (no 3D)."""
+    body = {"prompt": a.prompt, "style": a.style, "variations": a.variations}
+    for k in ("seed", "height_m", "materials", "negative_extra", "title"):
+        v = getattr(a, k, None)
+        if v is not None:
+            body[k] = v
+    if a.palette:
+        body["palette"] = [p.strip() for p in a.palette.split(",") if p.strip()]
+    j = _req("POST", "/v1/image-jobs", body)
+    print(json.dumps(j, indent=2))
+    if a.wait:
+        final = _wait(j["job_id"], a.timeout)
+        if final["status"] == "completed":
+            for c in _req("GET", f"/v1/jobs/{j['job_id']}").get("candidates", []):
+                print(f"  {c['file']}  seed={c['seed']}  framing={c['score']}")
+        return 0 if final["status"] == "completed" else 1
+    return 0
+
+
+def cmd_make3d(a):
+    """Two-step flow, step 2: turn selected variations of an image job into 3D assets (held unless --start)."""
+    out = []
+    for cand in a.candidates:
+        body = {"image_job_id": a.image_job_id, "candidate": cand, "quality": a.quality, "hold": not a.start,
+                "generate_lods": not a.no_lods, "generate_collision": not a.no_collision, "allow_quality_fallback": not a.no_fallback}
+        for k in ("height_m", "target_triangles", "texture_size", "collision_triangles", "title"):
+            v = getattr(a, k, None)
+            if v is not None:
+                body[k] = v
+        out.append(_req("POST", "/v1/asset-jobs", body))
+    print(json.dumps(out, indent=2))
+    if a.wait:
+        rc = 0
+        for j in out:
+            if _wait(j["job_id"], a.timeout)["status"] != "completed":
+                rc = 1
+        return rc
+    return 0
+
+
+def cmd_release(a):
+    print(json.dumps(_req("POST", f"/v1/jobs/{a.job_id}/release"), indent=2))
+
+
+def cmd_hold(a):
+    print(json.dumps(_req("POST", f"/v1/jobs/{a.job_id}/hold"), indent=2))
+
+
+def cmd_queue(a):
+    q = _req("GET", "/v1/queue")
+    g = q["gpu"]["gpus"][0] if q["gpu"].get("available") else None
+    if g:
+        print(f"GPU {g['name']}: {g['used_mib']}/{g['total_mib']} MiB used   auto_process={q['settings']['auto_process']}")
+    for j in q["items"]:
+        print(f"{j['id']}  {j['status']:8s} {j['stage']:10s} {j['kind']:5s} {(j.get('title') or j['request']['prompt'])[:60]}")
+    if not q["items"]:
+        print("(queue is empty)")
+
+
+def cmd_library(a):
+    r = _req("GET", f"/v1/library?limit={a.limit}" + (f"&kind={a.kind}" if a.kind else "") + (f"&q={a.q}" if a.q else ""))
+    for j in r["items"]:
+        extra = f"{j.get('candidate_count', 0)} images, {j.get('children_count', 0)} assets" if j["kind"] == "image" else f"{j['request'].get('target_triangles') or ''} tris"
+        print(f"{j['id']}  {j['kind']:5s} {j['status']:10s} {(j.get('title') or j['request']['prompt'])[:50]:50s} {extra}")
+
+
 def cmd_status(a):
     print(json.dumps(_req("GET", f"/v1/jobs/{a.job_id}?events={a.events}"), indent=2))
 
@@ -298,6 +368,47 @@ def main(argv=None):
     vw.add_argument("--dir", help="download/open directory (default out/<job_id>)")
     vw.add_argument("--blender", help="path to blender executable (default: STUDIO_BLENDER, PATH, newest install)")
     vw.set_defaults(fn=cmd_view)
+    im = sub.add_parser("images", help="step 1: generate image variations of an idea (no 3D)")
+    im.add_argument("prompt")
+    im.add_argument("--style", default="mobile_factory")
+    im.add_argument("--variations", type=int, default=4)
+    im.add_argument("--seed", type=int)
+    im.add_argument("--height-m", dest="height_m", type=float)
+    im.add_argument("--materials")
+    im.add_argument("--palette")
+    im.add_argument("--negative", dest="negative_extra")
+    im.add_argument("--title")
+    im.add_argument("--wait", action="store_true")
+    im.add_argument("--timeout", type=float)
+    im.set_defaults(fn=cmd_images)
+    mk = sub.add_parser("make3d", help="step 2: turn chosen variations into 3D assets (held for review unless --start)")
+    mk.add_argument("image_job_id")
+    mk.add_argument("candidates", nargs="+", help="e.g. cand_00.png cand_02.png")
+    mk.add_argument("--start", action="store_true", help="queue immediately instead of holding for review")
+    mk.add_argument("--quality", default="balanced", choices=["balanced", "quality"])
+    mk.add_argument("--height-m", dest="height_m", type=float)
+    mk.add_argument("--triangles", dest="target_triangles", type=int)
+    mk.add_argument("--texture", dest="texture_size", type=int)
+    mk.add_argument("--collision-triangles", dest="collision_triangles", type=int)
+    mk.add_argument("--title")
+    mk.add_argument("--no-lods", action="store_true")
+    mk.add_argument("--no-collision", action="store_true")
+    mk.add_argument("--no-fallback", action="store_true")
+    mk.add_argument("--wait", action="store_true")
+    mk.add_argument("--timeout", type=float)
+    mk.set_defaults(fn=cmd_make3d)
+    rl = sub.add_parser("release", help="start a held job")
+    rl.add_argument("job_id")
+    rl.set_defaults(fn=cmd_release)
+    hd = sub.add_parser("hold", help="take a queued job out of the queue")
+    hd.add_argument("job_id")
+    hd.set_defaults(fn=cmd_hold)
+    sub.add_parser("queue", help="show held/queued/running jobs and GPU state").set_defaults(fn=cmd_queue)
+    lb = sub.add_parser("library", help="list image sessions and assets")
+    lb.add_argument("--kind", choices=["image", "asset"])
+    lb.add_argument("--q")
+    lb.add_argument("--limit", type=int, default=30)
+    lb.set_defaults(fn=cmd_library)
     s = sub.add_parser("status")
     s.add_argument("job_id")
     s.add_argument("--events", type=int, default=20)

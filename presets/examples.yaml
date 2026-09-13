@@ -1,0 +1,74 @@
+# Example prompts shown in the portal's Create page. Each is a complete, reconstruction-friendly single-object idea.
+# `style` refers to presets/styles.yaml; height/triangles are suggestions that pre-fill the 3D settings.
+- id: pump_station
+  title: Industrial water pump station
+  prompt: Stylized industrial water pump station for a mobile factory-building game, chunky readable silhouette, painted teal metal, copper pipes, small concrete foundation
+  style: mobile_factory
+  height_m: 2.0
+  target_triangles: 20000
+- id: cargo_crate
+  title: Wooden cargo crate
+  prompt: Stylized wooden cargo crate with riveted metal corner brackets and a plain diagonal hazard stripe, for a mobile factory game
+  style: mobile_factory
+  height_m: 1.0
+  target_triangles: 8000
+- id: conveyor_segment
+  title: Conveyor belt segment
+  prompt: Straight conveyor belt segment with a dark rubber belt, yellow painted steel frame, two support legs and chunky rollers, factory game module
+  style: mobile_factory
+  height_m: 0.9
+  target_triangles: 12000
+- id: smelter
+  title: Ore smelter furnace
+  prompt: Compact ore smelter furnace with a rounded brick body, iron bands, a short chimney and a glowing front hatch, mobile factory game building
+  style: mobile_factory
+  height_m: 3.0
+  target_triangles: 25000
+- id: storage_tank
+  title: Storage tank
+  prompt: Cylindrical liquid storage tank on four steel legs with a ladder, teal painted steel, copper valve on top, factory game prop
+  style: mobile_factory
+  height_m: 4.0
+  target_triangles: 15000
+- id: robot_arm
+  title: Assembler robot arm
+  prompt: Small industrial robot arm on a round base with three chunky joints and a gripper, orange and grey painted metal, factory game machine
+  style: mobile_factory
+  height_m: 1.6
+  target_triangles: 20000
+- id: mug
+  title: Ceramic coffee mug
+  prompt: Ceramic coffee mug with a wide open handle, glossy teal glaze with a cream interior, simple clean shape
+  style: clean_product
+  height_m: 0.1
+  target_triangles: 8000
+- id: lantern
+  title: Camping lantern
+  prompt: Vintage camping lantern with a glass globe, brass frame, wire handle and a small fuel tank, worn but clean
+  style: realistic
+  height_m: 0.3
+  target_triangles: 20000
+- id: treasure_chest
+  title: Treasure chest
+  prompt: Stylized wooden treasure chest with iron straps, a domed lid and a round padlock, closed, chunky proportions
+  style: stylized_generic
+  height_m: 0.7
+  target_triangles: 15000
+- id: lowpoly_tree
+  title: Low-poly pine tree
+  prompt: Low-poly pine tree with three stacked cone canopies and a short trunk, flat colours, game prop
+  style: lowpoly
+  height_m: 5.0
+  target_triangles: 3000
+- id: barrel
+  title: Steel barrel
+  prompt: Industrial steel barrel with two rolling hoops and a plain painted band, slightly dented, factory game prop
+  style: mobile_factory
+  height_m: 0.9
+  target_triangles: 6000
+- id: vending_machine
+  title: Vending machine
+  prompt: Retro vending machine with a glass front, rounded corners, chrome trim and a coin slot, clean product look
+  style: clean_product
+  height_m: 1.8
+  target_triangles: 20000
