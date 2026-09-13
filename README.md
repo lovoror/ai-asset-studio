@@ -86,6 +86,35 @@ http://127.0.0.1:8090 once `scripts\start.ps1` finishes.
 
 Dark and light themes, and the whole thing is local — the API binds to `127.0.0.1` only.
 
+| Create | Session (pick variations) |
+|---|---|
+| <img src="docs/screenshots/create-dark.png" width="440"> | <img src="docs/screenshots/session-dark.png" width="440"> |
+
+| Queue | Library | Asset (3D viewer, stats, downloads) |
+|---|---|---|
+| <img src="docs/screenshots/queue-dark.png" width="290"> | <img src="docs/screenshots/library-dark.png" width="290"> | <img src="docs/screenshots/asset-dark.png" width="290"> |
+
+Light-theme captures of the same pages are in [`docs/screenshots/`](docs/screenshots/).
+
+### Image models
+
+The reference-image step is the cheap, iterative part, so you can pick the model per session on the Create page
+(and set a default in Settings). Everything runs inside the image-worker container with diffusers; the FLUX and
+Z-Image weights are read from an existing ComfyUI models folder (`STUDIO_EXTRA_MODELS_DIR` in `.env`) and never
+through ComfyUI itself. Times are per image on the RTX 5090 after the model is loaded once per job
+(measurements in [`docs/RESULTS.md`](docs/RESULTS.md)).
+
+| Model | Settings | Per image | Notes |
+|---|---|---|---|
+| **FLUX.2 Klein 9B** | 1536², 4 steps, guidance 1.0 | ~5 s | Best of the fast models. FLUX non-commercial licence; gated text encoder downloaded from Hugging Face once. |
+| FLUX.2 Klein 4B | 1536², 4 steps, guidance 1.0 | ~2.5 s | Apache-2.0, fully GPU-resident, fastest. |
+| Z-Image Turbo | 1536², 9 steps, guidance 0 | ~9 s | Official Turbo settings. Strong material detail. |
+| Qwen-Image-2512 Lightning | 1328², 4 or 8 steps, no CFG | ~1 min | Official distillation LoRA on the full model. |
+| Qwen-Image-2512 | 1328², 50 steps, true CFG 4.0 | ~5 min | Full quality, best prompt adherence. |
+
+The distilled FLUX models are step- and guidance-distilled, so 4 steps / guidance 1.0 are fixed by the vendor; the
+resolution is the quality lever, and 1536² was chosen after a sweep (2048² works but needs 29 GB of VRAM).
+
 ## Command line
 
 ```powershell
@@ -166,6 +195,8 @@ Styles ([`presets/styles.yaml`](presets/styles.yaml)) set the look and sensible 
 | `realistic` | Realistic prop, plausible materials and proportions | 40,000 / 2048 |
 | `lowpoly` | Flat-shaded facets, solid colours, simple forms | 6,000 / 1024 |
 | `clean_product` | Clean product-visualisation look, precise surfaces, white background | 30,000 / 2048 |
+| `scifi` | Hard-surface sci-fi: clean panel lines, machined metal, a few emissive accents | 30,000 / 2048 |
+| `fantasy` | Hand-crafted fantasy props: worn wood, forged iron, stone, leather, warm painted look | 30,000 / 2048 |
 
 Quality ([`presets/quality.yaml`](presets/quality.yaml)) decides how much GPU time to spend:
 
@@ -174,8 +205,8 @@ Quality ([`presets/quality.yaml`](presets/quality.yaml)) decides how much GPU ti
 | `balanced` | 1 candidate | 1024 cascade | ~11 min |
 | `quality` | 2 candidates | 1536 cascade | ~16 min (about 20 min end to end with two candidates) |
 
-Both run the image model at its full-quality settings (50 steps, true CFG 4.0, 1328×1328, BF16) and export a
-1 M-triangle / 4096² master. You can always override `target_triangles`, `texture_size`, `height_m`, LOD fractions
+Both export a
+1 M-triangle / 4096² master; the image model is chosen separately (table above). You can always override `target_triangles`, `texture_size`, `height_m`, LOD fractions
 and collision budget per request.
 
 ## How it works

@@ -39,6 +39,29 @@ model at a time to the GPU; standard mode would not fit 1536 on 32 GB alongside 
   remesh_project=0)` → PNG textures (`extension_webp=False`).
 * No OOM fallback was triggered in any acceptance job (`fallbacks_applied: []`).
 
+## Fast reference models (2026-09-13, same prompt/seed sweep)
+
+Steady-state seconds per image and `torch.cuda.max_memory_reserved` inside the image worker (first image of a job also
+pays the model load: Klein 4B ≈ 6 s, Klein 9B ≈ 30 s incl. the text-encoder → transformer swap, Z-Image ≈ 25 s after the
+one-time copy of the 12 GB file into the Linux cache). Settings follow the vendors' reference configs; only the
+resolution was swept. All outputs stayed coherent (single centred object, no artifacts) at every setting.
+
+| Model | Setting | s / image | peak VRAM |
+|---|---|---|---|
+| FLUX.2 Klein 9B (fp8→bf16) | 1024², 4 steps, guidance 1.0 | 2.9 (22.8 incl. load) | 20.3 GB |
+| | 1280², 4 steps | 3.0 | 22.1 GB |
+| | **1536², 4 steps (default)** | 4.4 | 23.9 GB |
+| | 2048², 4 steps | 9.1 | 29.1 GB |
+| | 1536², 6 steps | 7.0 | – (no visible gain; distillation fixes 4 steps) |
+| FLUX.2 Klein 4B (bf16) | 1024², 4 steps | 2.1 | 18.1 GB |
+| | **1536², 4 steps (default)** | 2.4 | 21.8 GB |
+| Z-Image Turbo (bf16) | 1024², 9 steps, guidance 0 (official) | 6.4 | 22.5 GB |
+| | 1024², 8 steps, guidance 1.0 (old default) | 7.0 | 22.5 GB (CFG silently on: 2 passes/step, softer output) |
+| | **1536², 9 steps, guidance 0 (default)** | 8.7 | 26.0 GB |
+
+Why 1536² and not 2048²: the 1536² crops show noticeably finer paint wear and edge detail than 1024² for ~1.5 s extra,
+while 2048² peaks at 29 GB and would collide with a concurrent Pixal3D run under the lenient GPU-sharing policy.
+
 ## Reduction quality (what changed during acceptance)
 
 1. Blender's collapse decimation on the ~1 M-triangle, ~200-shell Pixal3D masters produced spiky, holed low-polys and the

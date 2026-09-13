@@ -4,6 +4,12 @@
 #                   ComfyUI models folder (mounted read-only at /extra-models); configs/VAE/tokenizer from the HF repo.
 #   family zimage : Z-Image Turbo, same approach (bf16 single file + Qwen3-4B from the ComfyUI folder).
 # `est_s` is the rough wall clock per image on the RTX 5090 (model load is paid once per job and amortised).
+# Fast-model settings follow the vendors' reference configs and were checked on this card (docs/RESULTS.md):
+#   FLUX.2 Klein (distilled): guidance 1.0 and 4 steps are fixed by the distillation (BFL flux2 `fixed_params`); resolution is
+#   the free quality lever (16-px multiples, up to 4 MP). 1536² gives visibly finer material detail than 1024² at 2-5 s/image;
+#   2048² works but peaks at 29 GB, which leaves no room for a concurrent Pixal3D run.
+#   Z-Image Turbo: official num_inference_steps=9 (8 DiT passes) with guidance 0.0. guidance_scale 1.0 silently enables CFG
+#   (diffusers treats >0 as CFG), doubling the cost for no gain.
 # Availability is checked live in /capabilities (required files present in the caches/mounts).
 - id: qwen-image-2512
   label: Qwen-Image-2512
@@ -34,27 +40,27 @@
   label: FLUX.2 Klein 4B
   tier: fast
   family: klein
-  est_s: 15
-  description: Distilled FLUX.2 Klein 4B (bf16), 4 steps, fully GPU-resident. Seconds per image once loaded.
-  params: {steps: 4, guidance_scale: 1.0, width: 1024, height: 1024,
+  est_s: 6
+  description: Distilled FLUX.2 Klein 4B (bf16) at 1536², 4 steps, fully GPU-resident (~22 GB). About 2-3 s per image once loaded.
+  params: {steps: 4, guidance_scale: 1.0, width: 1536, height: 1536,
            config_repo: black-forest-labs/FLUX.2-klein-4B, config_revision: e7b7dc27f91deacad38e78976d1f2b499d76a294,
            transformer_file: diffusion_models/flux-2-klein-4b.safetensors, text_encoder_file: text_encoders/qwen_3_4b.safetensors}
 - id: z-image-turbo
   label: Z-Image Turbo
   tier: fast
   family: zimage
-  est_s: 15
-  description: Z-Image Turbo (bf16), 8 steps, no CFG. Fast with strong detail.
-  params: {steps: 8, guidance_scale: 1.0, width: 1024, height: 1024,
+  est_s: 12
+  description: Z-Image Turbo (bf16) at 1536², official Turbo settings (9 scheduler steps = 8 DiT passes, guidance 0). Strong material detail, ~9 s per image.
+  params: {steps: 9, guidance_scale: 0.0, width: 1536, height: 1536,
            config_repo: Tongyi-MAI/Z-Image-Turbo, config_revision: f332072aa78be7aecdf3ee76d5c247082da564a6,
            transformer_file: diffusion_models/z_image_turbo_bf16.safetensors, text_encoder_file: text_encoders/qwen_3_4b.safetensors}
 - id: flux2-klein-9b
   label: FLUX.2 Klein 9B
   tier: fast
   family: klein
-  est_s: 20
+  est_s: 10
   license: FLUX Non-Commercial License (accept on huggingface.co/black-forest-labs/FLUX.2-klein-9B)
-  description: Distilled FLUX.2 Klein 9B (on-disk fp8 transformer dequantized to bf16; bf16 Qwen3-8B text encoder from the HF repo), 4 steps. Text encoder and transformer run one after the other (~19 GB peak).
-  params: {steps: 4, guidance_scale: 1.0, width: 1024, height: 1024, distilled: true, sequential: true, text_encoder_from_hub: true,
+  description: Distilled FLUX.2 Klein 9B at 1536² (on-disk fp8 transformer dequantized to bf16; bf16 Qwen3-8B text encoder from the HF repo), 4 steps. Best of the fast models; ~5 s per image after the ~30 s load (~24 GB peak).
+  params: {steps: 4, guidance_scale: 1.0, width: 1536, height: 1536, distilled: true, sequential: true, text_encoder_from_hub: true,
            config_repo: black-forest-labs/FLUX.2-klein-9B, config_revision: 92196c8e11f7b6cf2b7493e037d8c5345c559216,
            transformer_file: diffusion_models/flux-2-klein-9b-fp8.safetensors, text_encoder_file: text_encoders/qwen_3_8b_fp8mixed.safetensors}
