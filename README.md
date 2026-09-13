@@ -294,6 +294,9 @@ errors and import into headless Godot 4.7.2.
   and no multi-view job has been run. There is no automatic novel-view generation.
 * **Godot 4.7.2 import is tested**; Unity is not installed on this machine, so it is untested here (the GLBs are
   standard, validator-clean glTF).
+* **LODs are best-effort for small budgets.** Below roughly 8,000 triangles the UV-preserving reducer often stops
+  10–40 % above the LOD1/LOD2 targets rather than distort the mesh; that is reported as a warning in the manifest, not
+  a failure (it used to fail the job: [issue #1](https://github.com/zorrobyte/asset-studio/issues/1)).
 
 ## License
 
