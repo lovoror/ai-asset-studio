@@ -74,6 +74,7 @@ class JobRequest(BaseModel):
     preview_size: int = Field(512, ge=128, le=2048)
     master_texture_size: Optional[Literal[1024, 2048, 4096]] = None
     master_triangles: Optional[int] = Field(None, ge=10000, le=2_000_000)
+    title: Optional[str] = Field(None, max_length=120, description="library title (defaults to the prompt)")
 
     @field_validator("prompt", "materials", "negative_extra")
     @classmethod

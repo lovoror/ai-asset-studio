@@ -120,7 +120,7 @@ def create_job(req: JobRequest):
         settings = resolve_settings(data)
     except ValueError as e:
         raise HTTPException(422, str(e))
-    job_id = store().create(data, settings, kind="asset")
+    job_id = store().create(data, settings, kind="asset", title=req.title)
     return JobCreated(job_id=job_id, status="queued", status_url=f"/v1/jobs/{job_id}", artifacts_url=f"/v1/jobs/{job_id}/artifacts")
 
 
