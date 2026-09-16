@@ -4,7 +4,7 @@ Memory strategy ("bf16_split"): everything stays BF16 (no quantisation).
   1. The Qwen2.5-VL text encoder (16.6 GB) is loaded on the GPU alone, both prompts are encoded, then it is freed.
   2. The 41 GB MMDiT transformer is loaded with an explicit device map: the first `gpu_resident_blocks` of its 60
      blocks live on the GPU, the rest on CPU and are streamed per forward by accelerate's block-level offload hooks.
-     This never needs the whole transformer in host RAM (the Docker VM has ~46 GB) and never pins a duplicate copy.
+     This never needs the whole transformer in host RAM (budget ~46 GB of system RAM) and never pins a duplicate copy.
   3. VAE on GPU. Documented full-quality sampling: 50 steps, true_cfg_scale 4.0, 1328x1328, negative prompt.
 Runs as a one-shot subprocess so the driver releases all CUDA memory on exit.
 """
@@ -18,6 +18,8 @@ import sys
 import time
 import traceback
 from pathlib import Path
+
+import worker_paths
 
 MODEL_REVISION = "25468b98e3276ca6700de15c6628e51b7de54a26"
 
@@ -144,7 +146,7 @@ def _fp8_keep_bf16(param_name: str) -> bool:
 
 
 def _fp8_cache_path(lightning: dict | None) -> Path:
-    cache = Path(os.environ.get("STUDIO_EXTRA_CACHE_DIR", "/models/extra-cache"))
+    cache = worker_paths.extra_cache_dir()
     tag = "qwen-image-2512.fp8" + (("." + lightning["file"].rsplit(".", 1)[0]) if lightning else "")
     return cache / f"{tag}.safetensors"
 

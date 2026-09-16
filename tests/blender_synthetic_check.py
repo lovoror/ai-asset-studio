@@ -4,9 +4,11 @@ Builds a constant-colour PBR master (sphere + cube, roughness 0.3, metallic 0.9)
 reduction (forces the rebake path), then verifies: triangle budget met, height applied, origin at bottom-centre,
 baked base colour / roughness / metallic within a few levels of the source, collision and LODs present.
 
-Run:  docker compose run --rm --no-deps -v ${PWD}:/src blender python /src/tests/blender_synthetic_check.py
+Run:  python scripts/bootstrap.py --role blender        # once: installs bpy + meshoptimizer
+      python tests/blender_synthetic_check.py
 """
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -42,7 +44,10 @@ def main():
            "optimize": {"target_triangles": 3000, "texture_size": 512, "generate_lods": True, "lod_fractions": [0.5],
                         "generate_collision": True, "collision_triangles": 100, "height_m": 1.0, "render_previews": True, "preview_size": 128}}
     (root / "req.json").write_text(json.dumps(req))
-    r = subprocess.run([sys.executable, "-m", "blender.process_asset", "--request", str(root / "req.json")], capture_output=True, text=True, cwd="/app")
+    services = Path(__file__).resolve().parents[1] / "services"
+    r = subprocess.run([sys.executable, "-m", "blender.process_asset", "--request", str(root / "req.json")],
+                       capture_output=True, text=True, cwd=str(services),
+                       env={**os.environ, "PYTHONPATH": str(services)})
     if r.returncode != 0:
         print(r.stdout[-3000:], r.stderr[-3000:])
         raise SystemExit("process_asset failed")

@@ -1,10 +1,13 @@
 """Image model backends for the reference stage. Every backend returns a callable `gen(prompt, negative, seed, w, h) -> PIL.Image`
-plus a `describe()` dict for the manifest. All models run in this container with diffusers; nothing calls another service.
+plus a `describe()` dict for the manifest. The local backends all run in this container with diffusers and never call
+another service; family `comfyui` is the exception - it is handled by services/comfy_worker, which talks to a remote
+ComfyUI server over HTTP, and only shows up here so `available()` can report it.
 
   qwen   : Qwen-Image-2512 (BF16, text encoder loaded/freed first, transformer block-offloaded); optional Lightning LoRA.
   klein  : FLUX.2 Klein 4B — transformer from the on-disk BFL-format file (`Flux2Transformer2DModel.from_single_file`),
            Qwen3-4B text encoder from the on-disk transformers-format file, VAE/tokenizer/scheduler from the HF config repo.
   zimage : Z-Image Turbo — same pattern with `ZImageTransformer2DModel.from_single_file` and `Qwen3Model`.
+  comfyui: remote ComfyUI server; see services/comfy_worker/image_generate.py.
 """
 from __future__ import annotations
 
@@ -14,7 +17,9 @@ import os
 import time
 from pathlib import Path
 
-EXTRA_MODELS_DIR = Path(os.environ.get("STUDIO_EXTRA_MODELS_DIR", "/extra-models"))
+import worker_paths
+
+EXTRA_MODELS_DIR = worker_paths.extra_models_dir() or (worker_paths.hf_home() / "extra-models")
 
 
 def log(msg):
@@ -32,9 +37,10 @@ def _snapshot(repo: str, revision: str, patterns=None) -> str:
 
 
 def _local_copy(src: Path) -> Path:
-    """The extra-models folder is a Windows bind mount (slow, ~300 MB/s). Cache a copy on the Linux volume once so later
-    loads take seconds instead of a minute. Copies are keyed by name+size and live under /models/extra-cache."""
-    cache = Path(os.environ.get("STUDIO_EXTRA_CACHE_DIR", "/models/extra-cache"))
+    """Single-file weights usually live on a slow network or external drive. Keep a converted copy in the local
+    cache once so later loads take seconds instead of a minute. Copies are keyed by name and live under
+    <HF_HOME>/extra-cache (see [paths] models in config.toml)."""
+    cache = worker_paths.extra_cache_dir()
     try:
         cache.mkdir(parents=True, exist_ok=True)
         dst = cache / src.name
@@ -256,7 +262,19 @@ def available(entry: dict) -> tuple[bool, str]:
     """Static availability check (files present) used by the API's /capabilities via `--list`."""
     p = entry.get("params", {})
     fam = entry.get("family")
-    hub = Path(os.environ.get("HF_HOME", "/models/hf")) / "hub"
+    hub = worker_paths.hub_dir()
+    if fam == "comfyui":
+        # The weights live on a remote ComfyUI server, so there is nothing on this filesystem to check.
+        # Returning False here would grey the model out in the portal with reason "unknown family comfyui";
+        # a real failure surfaces when the proxy worker submits and /prompt comes back with node_errors.
+        return (True, "")
+    # Every other family loads with torch *in this interpreter*, which is the image worker's. Checking files
+    # alone would report them available on a worker that has no torch at all (a ComfyUI proxy), and the user
+    # would only discover it when the job failed to import.
+    import importlib.util
+    if importlib.util.find_spec("torch") is None:
+        return (False, "torch is not installed in this image worker: use a ComfyUI model, "
+                       "or install the image role (python scripts/bootstrap.py --role image)")
     if fam == "qwen":
         lora = p.get("lightning_lora")
         if lora:
@@ -271,7 +289,7 @@ def available(entry: dict) -> tuple[bool, str]:
             tsnap = hub / ("models--" + p.get("text_encoder_repo", p["config_repo"]).replace("/", "--")) / "snapshots" / p.get("text_encoder_revision", p["config_revision"])
             te = tsnap / "text_encoder" / "model.safetensors.index.json"
             if not te.exists() or len(list((tsnap / "text_encoder").glob("model-*.safetensors"))) < 4:
-                return (False, "text encoder not downloaded yet (scripts/prefetch.ps1)")
+                return (False, "text encoder not downloaded yet (scripts/prefetch.py)")
             te = tf  # only the transformer file needs to exist on disk
         else:
             te = EXTRA_MODELS_DIR / p["text_encoder_file"]
@@ -282,3 +300,4 @@ def available(entry: dict) -> tuple[bool, str]:
             return (False, "config repo not prefetched")
         return (True, "")
     return (False, f"unknown family {fam}")
+

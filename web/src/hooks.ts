@@ -48,3 +48,30 @@ export function useLive(loader: () => Promise<void> | void, intervalMs = 8000) {
     return () => clearInterval(t);
   }, []);
 }
+
+/** Live "can new work start" state: which stage servers answer, and the reasons a job would be refused.
+ *
+ * Polled slowly (the server caches its probes too), refreshed on every job event so a fixed address clears the
+ * banner as soon as the next poll lands. */
+export function useReadiness(intervalMs = 20000) {
+  const [state, setState] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  const tick = useStore((s) => s.tick);
+  const load = useCallback(async () => {
+    try {
+      setState(await api.readiness());
+      setError(null);
+    } catch (e: any) {
+      setError(e.message || String(e));
+    }
+  }, []);
+  useEffect(() => {
+    load();
+    const t = setInterval(load, intervalMs);
+    return () => clearInterval(t);
+  }, [load, intervalMs]);
+  useEffect(() => {
+    if (tick) load();
+  }, [tick]);
+  return { readiness: state, error, reload: load };
+}

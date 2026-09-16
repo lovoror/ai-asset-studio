@@ -23,9 +23,14 @@ balanced:
     remesh_band: 1
     remesh_project: 0
   fallback:                    # applied in order on CUDA OOM; entries marked quality_loss need allow_quality_fallback
-    - {stage: reference, set: {gpu_resident_blocks: 16}, quality_loss: false}
-    - {stage: pixal3d, set: {max_num_tokens: 32768}, quality_loss: true}
+    # local_only: true  -> the rung tunes something only the in-container backend reads, so pipeline._fallback drops it
+    #                      when the lane points at a remote ComfyUI server instead of re-running the stage for nothing.
+    - {stage: reference, set: {gpu_resident_blocks: 16}, quality_loss: false, local_only: true}
+    - {stage: pixal3d, set: {max_num_tokens: 32768}, quality_loss: true, local_only: true}
     - {stage: master, set: {texture_size: 2048}, quality_loss: true}
+    # Last resort for the reference stage, and the only one a remote backend can honour: width/height reach both
+    # diffusers and the ComfyUI latent node. Tried only after the rungs above are exhausted or skipped.
+    - {stage: reference, set: {width: 768, height: 768}, quality_loss: true}
 quality:
   reference:
     candidates: 2
@@ -47,6 +52,9 @@ quality:
     remesh_band: 1
     remesh_project: 0
   fallback:
-    - {stage: reference, set: {gpu_resident_blocks: 16}, quality_loss: false}
+    - {stage: reference, set: {gpu_resident_blocks: 16}, quality_loss: false, local_only: true}
+    # resolution and texture_size are honoured by the remote backend too (the TRELLIS.2 upsample node and the
+    # master texture-size node), so neither is marked local_only.
     - {stage: pixal3d, set: {resolution: 1024}, quality_loss: true}
     - {stage: master, set: {texture_size: 2048}, quality_loss: true}
+    - {stage: reference, set: {width: 1024, height: 1024}, quality_loss: true}

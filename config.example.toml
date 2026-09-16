@@ -1,0 +1,70 @@
+# asset-studio configuration.
+#
+# Copy this file to config.toml and edit it. config.toml is git-ignored, so each machine keeps its own copy:
+# the control machine lists where the 2D and 3D servers are, and each worker lists its own directories.
+#
+# Every setting can also be given as an environment variable (the STUDIO_* name in brackets), which wins over
+# this file. With no config.toml at all, asset-studio runs entirely on one machine using the defaults below.
+
+[control]
+bind = "127.0.0.1"        # [STUDIO_BIND] 0.0.0.0 to reach the portal/API from other machines
+port = 8090               # [STUDIO_API_PORT]
+api_token = ""            # [STUDIO_API_TOKEN] required as soon as bind is not a loopback address
+cors_origins = ""         # [STUDIO_CORS_ORIGINS] comma-separated extra portal origins; never "*"
+
+# Where each stage runs, seen from the control machine.
+#   "local"          -> this machine; `serve.py control` starts that worker and talks to it on 127.0.0.1
+#   "http://h:p"     -> a worker on another machine (a bare "host:port" also works)
+[servers]
+image = "local"           # [STUDIO_IMAGE_RUNNER]    2D: reference images (Qwen-Image / FLUX / Z-Image)
+pixal3d = "local"         # [STUDIO_PIXAL3D_RUNNER]  3D: Pixal3D / TRELLIS.2
+blender = "local"         # [STUDIO_BLENDER_RUNNER]  post-processing: reduce/bake/LOD/preview (CPU)
+
+# Settings for the worker servers started on THIS machine.
+[worker]
+bind = "127.0.0.1"        # [STUDIO_WORKER_BIND] a worker machine sets "0.0.0.0" to accept remote connections
+token = ""                # [STUDIO_WORKER_TOKEN] shared secret; a worker on 0.0.0.0 refuses to start without it
+image_port = 8701         # [STUDIO_IMAGE_PORT]
+pixal3d_port = 8702       # [STUDIO_PIXAL3D_PORT]
+blender_port = 8703       # [STUDIO_BLENDER_PORT]
+# Which roles this machine may serve, comma separated, e.g. "image". Empty = whatever `serve.py <role>` asks
+# for. Restricting it means a worker cannot be asked to run a stage it has no dependencies for.
+roles = ""                # [STUDIO_WORKER_ROLES]
+
+# Optional: the Python that runs each component. Empty = the interpreter running scripts/serve.py.
+# A role sometimes needs its own: bpy publishes exactly one interpreter tag per release and there is no cp312
+# build at all (bpy 4.5/5.0 are cp311, 5.1+ are cp313), so the blender role usually cannot share the control
+# plane's python. Provision one with uv - see requirements/blender.txt - and point this at it.
+# Relative paths are resolved against this repository.
+[python]
+control = ""
+image = ""
+pixal3d = ""
+blender = ""              # e.g. ".venv-blender/Scripts/python.exe" (Windows) or ".venv-blender/bin/python"
+
+[paths]
+# Relative paths are resolved against this repository, so the service can be started from anywhere.
+jobs = "var/jobs"         # [STUDIO_JOBS_DIR]  job outputs; the control machine owns this directory
+data = "var/data"         # [STUDIO_DATA_DIR]  SQLite database and worker scratch
+presets = "presets"       # [STUDIO_PRESETS_DIR]
+manifests = "manifests"   # [STUDIO_MANIFESTS_DIR]
+web_dist = "web/dist"     # [STUDIO_WEB_DIST]  built portal; `cd web && npm install && npm run build`
+# Model cache. Leave empty to let torch/diffusers use their platform default (~/.cache). Point it at a large
+# disk to keep the weights somewhere else; set it on every machine that runs GPU stages.
+models = ""               # [STUDIO_MODELS_DIR]  becomes <models>/hf and <models>/torch
+extra_models = ""         # [STUDIO_EXTRA_MODELS_DIR] ComfyUI-style folder: diffusion_models/, text_encoders/
+
+[stage]
+stage_timeout_s = 7200    # [STUDIO_STAGE_TIMEOUT_S] kill a stage that runs longer than this
+max_oom_retries = 4       # [STUDIO_MAX_OOM_RETRIES]
+oom_retry_pause_s = 20    # [STUDIO_OOM_RETRY_PAUSE_S]
+rembg_model = "briaai/RMBG-2.0"   # [STUDIO_REMBG_MODEL] gated; ZhengPeng7/BiRefNet is an open drop-in
+vision_evaluator_url = ""         # [STUDIO_VISION_EVALUATOR_URL] optional external candidate scorer
+gpu_uuid = ""             # [STUDIO_GPU_UUID] informational, shown by /capabilities
+# Refuse to start a job whose stage server or generation backend does not answer, with a readable reason, instead of
+# queueing it to fail minutes later. Only *new work* is blocked: the portal stays up so the address can be fixed in
+# Settings. Set false to queue regardless (the test suite does this against deliberately closed ports).
+require_ready = true      # [STUDIO_REQUIRE_READY]
+# Transfers to workers on other machines.
+connect_timeout_s = 10    # [STUDIO_CONNECT_TIMEOUT_S] fail fast when a worker is unreachable
+transfer_timeout_s = 1800 # [STUDIO_TRANSFER_TIMEOUT_S] allow slow uploads/downloads of large meshes

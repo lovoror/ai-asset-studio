@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 import io
 import json
-import os
 import secrets
 import shutil
 import sys
@@ -16,20 +15,37 @@ from typing import Literal, Optional
 import uvicorn
 import yaml
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import config
+from . import backends, config
 from .db import JobStore
-from .models import AssetFromCandidateRequest, ImageJobRequest, JobCreated, JobPatch, JobRequest, SettingsPatch
-from .presets import load_presets, resolve_settings
+from .models import (AssetFromCandidateRequest, BackendTest, ImageJobRequest, JobCreated, JobPatch, JobRequest,
+                     SettingsPatch)
+from .presets import load_presets, resolve_settings, workflow_names
 from .runner_client import Runner
 
 app = FastAPI(title="asset-studio", version=config.VERSION,
               description="Local text-to-3D asset generation service (Qwen-Image-2512 -> Pixal3D -> Blender).")
 _store: JobStore | None = None
-WEB_DIST = Path(os.environ.get("STUDIO_WEB_DIST", "/app/web/dist"))
+WEB_DIST = config.WEB_DIST or (config.REPO_ROOT / "web" / "dist")
+
+# The portal may be served from a different origin (studio-web lets you change the API address in the browser).
+# Origins come from a whitelist, never "*": auth is a bearer/query token rather than a cookie, but "*" combined
+# with an empty STUDIO_API_TOKEN would hand the whole API - including purge and cancel - to any web page.
+CORS_ORIGINS = config.CORS_ORIGINS
+if CORS_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=CORS_ORIGINS,
+        allow_credentials=False,        # must stay False: the token travels in a header or query param, not a cookie
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "Accept"],
+        expose_headers=["Content-Disposition"],   # so the portal can read download.zip's suggested filename
+        max_age=600,
+    )
 
 
 def store() -> JobStore:
@@ -54,7 +70,11 @@ async def auth(request: Request):
 
 @app.get("/health")
 def health():
-    runners = {k: Runner(k).health() for k in ("image", "pixal3d", "blender")}
+    # Probe the three workers at once. A host that is down costs the whole connect timeout (on some Windows
+    # setups even a refused loopback connection takes ~2s), and this is polled by the portal - and waited on by
+    # scripts/start.ps1 - while something is broken.
+    runners = backends.parallel_probes({k: (lambda r=k: Runner(r).health())
+                                        for k in ("image", "pixal3d", "blender")})
     ok = all(r.get("ok") for r in runners.values())
     try:
         store().con.execute("SELECT 1")
@@ -68,13 +88,41 @@ def health():
             "queue": {"running": running[0]["id"] if running else None, "queued": queued, "held": held}, "time": time.time()}
 
 
+# Verification that actually loads the models on each worker, used by `assetctl doctor --deep`. The commands are
+# fixed here and never taken from the caller, so this is not a remote-execution endpoint.
+SELFTEST_CMDS = {
+    "image": (["python", "-m", "image_worker.generate", "--selftest"], "selftest ok"),
+    "pixal3d": (["python", "-m", "pixal3d_worker.prefetch", "--verify"], '"naf_forward"'),
+    "blender": (["python", "-c", "import bpy;print('bpy',bpy.app.version_string)"], "bpy"),
+}
+
+
+@app.post("/v1/selftest", dependencies=[Depends(auth)])
+def selftest(deep: bool = True):
+    """Ask every worker to answer, and with deep=true to load what it needs (slow: minutes, GPU memory)."""
+    out = {}
+    for name, (cmd, marker) in SELFTEST_CMDS.items():
+        r = Runner(name)
+        h = r.health()
+        if not deep:
+            out[name] = {"ok": bool(h.get("ok")), "detail": h.get("url")}
+            continue
+        if not h.get("ok"):
+            out[name] = {"ok": False, "detail": f"unreachable: {h.get('error')}"}
+            continue
+        res = r.exec(cmd, timeout=1800)
+        tail = (res.get("stdout") or "") + (res.get("stderr") or "")
+        out[name] = {"ok": res.get("returncode") == 0 and marker in tail, "detail": tail[-1500:]}
+    return {"ok": all(v["ok"] for v in out.values()), "workers": out}
+
+
 @app.get("/capabilities")
 def capabilities():
     p = load_presets()
     gpu = Runner("pixal3d").gpu()
-    models_root = Path("/models/hf/hub")
+    models_root = Path(config.HF_HOME) / "hub" if config.HF_HOME else None
     mv_ready = False
-    if models_root.exists():
+    if models_root and models_root.exists():
         for snap in (models_root / "models--TencentARC--Pixal3D" / "snapshots").glob("*/ckpts"):
             mv_ready = mv_ready or any(snap.glob("*_mv.safetensors"))
     deps = {}
@@ -101,7 +149,18 @@ def capabilities():
                    "lod_fractions_max": 4},
         "features": {"text_to_asset": True, "image_variations": True, "reference_image_input": True, "multiview_input": True,
                      "multiview_checkpoints_cached": mv_ready, "automatic_novel_view_generation": False,
-                     "vision_evaluator": bool(os.environ.get("STUDIO_VISION_EVALUATOR_URL")), "web_portal": WEB_DIST.exists()},
+                     "vision_evaluator": bool(config.VISION_EVALUATOR_URL), "web_portal": WEB_DIST.exists(),
+                     # studio-web shows its Generation-backends panel only when this is true, and a degradation
+                     # warning otherwise. Flip it off if you revert the settings fields below.
+                     "backend_config": True, "backend_kinds": ["local", "comfyui"],
+                     # the Settings page can edit the stage worker addresses and test every address
+                     "backend_test": True, "worker_endpoints_config": True,
+                     "cors_origins": CORS_ORIGINS},
+        # What the Settings page needs to render its dropdowns: the workflow files this machine offers, and the
+        # stage addresses in effect (config.toml [servers], overridden by the settings table).
+        "workflows": workflow_names(),
+        "worker_endpoints": config.endpoint_values(),
+        "worker_ports": config.WORKER_PORTS,
         "gpu": gpu, "gpu_uuid": config.GPU_UUID,
         "dependencies": deps.get("summary", deps),
         "auth_required": bool(config.API_TOKEN),
@@ -110,16 +169,33 @@ def capabilities():
 
 # ----------------------------------------------------------------------------------------------- jobs
 
+def _assert_ready(settings: dict, *, kind: str, from_stage: str | None = None):
+    """Refuse a job whose stage servers are unreachable, instead of queueing it to fail minutes later.
+
+    Only *new work* is blocked. The service itself keeps running, so the portal is still reachable to fix an
+    address and the library stays usable - which is exactly what you need when a generation server is down.
+    `[stage] require_ready = false` turns the check off (pre-queueing, and the test suite).
+    """
+    if not config.REQUIRE_READY:
+        return
+    problems = backends.ready_for_job(settings, kind=kind, from_stage=from_stage)
+    if problems:
+        raise HTTPException(422, {"error": "not_ready", "problems": problems,
+                                  "message": "cannot start: " + backends.problems_text(problems)})
+
+
 @app.post("/v1/jobs", response_model=JobCreated, dependencies=[Depends(auth)])
 def create_job(req: JobRequest):
     """One-shot: prompt -> auto-selected reference -> 3D asset (the original agent path)."""
     data = req.model_dump()
+    gsettings = store().get_settings()
     if not data.get("model"):
-        data["model"] = store().get_settings().get("default_image_model", "qwen-image-2512-lightning-8")
+        data["model"] = gsettings.get("default_image_model", "qwen-image-2512-lightning-8")
     try:
-        settings = resolve_settings(data)
+        settings = resolve_settings(data, gsettings)
     except ValueError as e:
         raise HTTPException(422, str(e))
+    _assert_ready(settings, kind="asset")
     job_id = store().create(data, settings, kind="asset", title=req.title)
     return JobCreated(job_id=job_id, status="queued", status_url=f"/v1/jobs/{job_id}", artifacts_url=f"/v1/jobs/{job_id}/artifacts")
 
@@ -129,12 +205,14 @@ def create_image_job(req: ImageJobRequest):
     """Ideation: generate `variations` reference images of one idea; nothing is turned into 3D until you pick one."""
     data = req.model_dump()
     data["quality"] = "balanced"
+    gsettings = store().get_settings()
     if not data.get("model"):
-        data["model"] = store().get_settings().get("default_image_model", "qwen-image-2512-lightning-8")
+        data["model"] = gsettings.get("default_image_model", "qwen-image-2512-lightning-8")
     try:
-        settings = resolve_settings(data)
+        settings = resolve_settings(data, gsettings)
     except ValueError as e:
         raise HTTPException(422, str(e))
+    _assert_ready(settings, kind="image")
     job_id = store().create(data, settings, kind="image", title=req.title)
     return JobCreated(job_id=job_id, status="queued", status_url=f"/v1/jobs/{job_id}", artifacts_url=f"/v1/jobs/{job_id}/artifacts")
 
@@ -158,12 +236,14 @@ def create_asset_job(req: AssetFromCandidateRequest):
         "target_triangles": req.target_triangles, "texture_size": req.texture_size, "generate_lods": req.generate_lods,
         "lod_fractions": req.lod_fractions, "generate_collision": req.generate_collision, "collision_triangles": req.collision_triangles,
         "allow_quality_fallback": req.allow_quality_fallback, "image_job_id": parent["id"], "candidate": req.candidate,
+        "master_triangles": req.master_triangles, "master_texture_size": req.master_texture_size,
         "render_previews": True, "preview_size": 512,
     }
     try:
-        settings = resolve_settings(data)
+        settings = resolve_settings(data, store().get_settings())
     except ValueError as e:
         raise HTTPException(422, str(e))
+    _assert_ready(settings, kind="asset")
     title = req.title or f"{(parent.get('title') or preq['prompt'])[:60]} · {req.candidate[:-4]}"
     job_id = store().create(data, settings, kind="asset", parent_id=parent["id"], candidate=req.candidate, title=title, held=req.hold)
     return JobCreated(job_id=job_id, status="held" if req.hold else "queued", status_url=f"/v1/jobs/{job_id}",
@@ -180,13 +260,13 @@ _avail_cache: dict = {"t": 0.0, "v": {}}
 
 
 def _image_models_with_availability(models: dict) -> list[dict]:
-    """Registry entries plus a live availability check done inside the image worker (files/caches are mounted there)."""
+    """Registry entries plus a live availability check done on the image worker (the model files are there, which
+    may be a different machine: the worker resolves @presets against its own checkout)."""
     now = time.time()
     if now - _avail_cache["t"] > 60:
         try:
-            import subprocess  # noqa: F401
-            r = Runner("image").http.post("/exec", json={"cmd": ["python", "-m", "image_worker.generate", "--list", "/app/presets/image_models.yaml"]}, timeout=60)
-            out = r.json().get("stdout", "[]") if r.status_code == 200 else "[]"
+            r = Runner("image").exec(["python", "-m", "image_worker.generate", "--list", "@presets/image_models.yaml"])
+            out = r.get("stdout", "[]") if r.get("returncode") == 0 else "[]"
             _avail_cache["v"] = {e["id"]: e for e in json.loads(out.strip().splitlines()[-1])} if out.strip() else {}
         except Exception:  # noqa: BLE001
             _avail_cache["v"] = {}
@@ -424,8 +504,10 @@ def cancel_job(job_id: str):
 
 @app.post("/v1/jobs/{job_id}/release", dependencies=[Depends(auth)])
 def release_job(job_id: str):
-    """held -> queued (start processing)."""
-    _get_job(job_id)
+    """held -> queued (start processing). Gated like submission: releasing is what actually starts the work."""
+    j = _get_job(job_id)
+    if j["status"] == "held":
+        _assert_ready(j.get("settings") or {}, kind=j["kind"])
     return {"job_id": job_id, "result": store().set_status_simple(job_id, ("held",), "queued")}
 
 
@@ -469,6 +551,10 @@ def retry_job(job_id: str, body: RetryRequest | None = None):
             raise HTTPException(422, f"unknown optimize keys: {sorted(bad)}")
         settings = dict(j["settings"])
         settings["optimize"] = {**settings["optimize"], **body.optimize}
+    # Gate before anything is destroyed: a refused retry must not have deleted the completed stages below.
+    # Retrying from `blender` only needs the local Blender worker, so it stays possible while a generation
+    # server is down (that is the whole point of re-optimising an existing master).
+    _assert_ready(j.get("settings") or {}, kind=j["kind"], from_stage=body.from_stage)
     if body.from_stage:
         order = ["reference", "pixal3d", "blender"]
         for st in order[order.index(body.from_stage):]:
@@ -525,7 +611,57 @@ def put_settings(body: SettingsPatch):
         raise HTTPException(422, "unknown style")
     if "default_image_model" in vals and vals["default_image_model"] not in p["image_models"]:
         raise HTTPException(422, "unknown image model")
-    return store().put_settings(vals)
+    out = store().put_settings(vals)
+    # Addresses may have moved: drop the cached probe results so the next readiness check re-probes, and let the
+    # next Runner construction pick up a new worker URL (no restart needed for that part).
+    if "worker_endpoints" in vals or "image_url" in vals or "three_d_url" in vals:
+        backends.invalidate()
+    return out
+
+
+# -------------------------------------------------------------------- connectivity of the configured addresses
+
+@app.get("/v1/readiness", dependencies=[Depends(auth)])
+def get_readiness():
+    """Can new work start right now? Drives the portal's disabled buttons and its banner.
+
+    Cheap by design: probe results are cached for a few seconds, so the portal can poll this.
+    """
+    gsettings = store().get_settings()
+    backend = {
+        "image": {"kind": gsettings.get("image_kind") or "local", "url": gsettings.get("image_url") or "",
+                  "workflow": gsettings.get("image_workflow") or ""},
+        "three_d": {"kind": gsettings.get("three_d_kind") or "local", "url": gsettings.get("three_d_url") or "",
+                    "workflow": gsettings.get("three_d_workflow") or ""},
+    }
+    roles = ("image", "pixal3d", "blender")
+    # One round of parallel probes: a dead address costs seconds, and the portal polls this while something is
+    # down - exactly when it must stay responsive.
+    calls = {("worker", role): (lambda r=role: backends.test_worker(r)) for role in roles}
+    for lane, role in (("image", "image"), ("three_d", "pixal3d")):
+        cfg = backend[lane]
+        if cfg["kind"] == "comfyui":
+            calls[("backend", lane)] = (lambda c=cfg, r=role: backends.test_comfyui(r, c["url"], c["workflow"]))
+    got = backends.parallel_probes(calls)
+    return {
+        "workers": {role: got[("worker", role)] for role in roles},
+        "endpoints": config.endpoint_values(),
+        "backends": {lane: got[("backend", lane)] if ("backend", lane) in got
+                     else {"ok": True, "detail": "local backend (loads in the worker)"}
+                     for lane in ("image", "three_d")},
+        "create_image": backends.readiness(backend, kind="image", generates_reference=True),
+        "create_asset": backends.readiness(backend, kind="asset", generates_reference=True),
+    }
+
+
+@app.post("/v1/backends/test", dependencies=[Depends(auth)])
+def test_backend(body: BackendTest):
+    """Test one address, using the values in the form rather than what is saved, so it can be tested before saving.
+
+    A ComfyUI address is probed *through* the stage worker, because that worker is what will talk to it; a stage
+    worker is probed from here, because this is what calls it.
+    """
+    return backends.test(body)
 
 
 @app.get("/v1/examples", dependencies=[Depends(auth)])
@@ -565,27 +701,37 @@ async def _unhandled(request: Request, exc: Exception):
 
 # ----------------------------------------------------------------------------------------------- web portal (SPA)
 
-if (WEB_DIST / "index.html").exists():
-    if (WEB_DIST / "static").is_dir():
-        app.mount("/static", StaticFiles(directory=str(WEB_DIST / "static")), name="web-static")
+# The catch-all is registered unconditionally: whether the portal has been built is a per-request question.
+# Gating it on index.html at import time made "build the portal, then restart the API" an ordering requirement
+# (a build alone left /  404ing), and it disagreed with /capabilities, which reports web_portal from the same
+# directory on every request.
+if (WEB_DIST / "static").is_dir():
+    app.mount("/static", StaticFiles(directory=str(WEB_DIST / "static")), name="web-static")
 
-    @app.get("/{full_path:path}", include_in_schema=False)
-    def spa(full_path: str):
-        if full_path.startswith(("v1/", "health", "capabilities", "docs", "openapi.json")):
-            raise HTTPException(404)
-        target = (WEB_DIST / full_path).resolve() if full_path else None
-        if target and WEB_DIST.resolve() in target.parents and target.is_file():
-            return FileResponse(str(target))
-        return FileResponse(str(WEB_DIST / "index.html"))
+
+@app.get("/{full_path:path}", include_in_schema=False)
+def spa(full_path: str):
+    if full_path.startswith(("v1/", "health", "capabilities", "docs", "openapi.json")):
+        raise HTTPException(404)
+    index = WEB_DIST / "index.html"
+    if not index.is_file():
+        return PlainTextResponse(
+            "the web portal is not built yet: " + str(index) + " is missing.\n"
+            "build it with:  cd web && npm install && npm run build\n"
+            "(the HTTP API itself is running - see /docs, /health, /capabilities)\n",
+            status_code=503)
+    target = (WEB_DIST / full_path).resolve() if full_path else None
+    if target and WEB_DIST.resolve() in target.parents and target.is_file():
+        return FileResponse(str(target))
+    return FileResponse(str(index))
 
 
 def main():
     if config.BIND_HOST not in ("127.0.0.1", "localhost", "::1") and not config.API_TOKEN:
-        print("refusing to bind to a non-loopback address without STUDIO_API_TOKEN", file=sys.stderr)
+        print("refusing to bind to a non-loopback address without an API token "
+              "(set [control] api_token in config.toml, or STUDIO_API_TOKEN)", file=sys.stderr)
         sys.exit(2)
-    # inside compose the container listens on all interfaces; the *published* port is bound to localhost by compose.
-    host = "0.0.0.0" if os.environ.get("STUDIO_IN_CONTAINER") else config.BIND_HOST
-    uvicorn.run(app, host=host, port=config.PORT, log_level="info")
+    uvicorn.run(app, host=config.BIND_HOST, port=config.PORT, log_level="info")
 
 
 if __name__ == "__main__":

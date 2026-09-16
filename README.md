@@ -1,360 +1,258 @@
 # asset-studio
 
-Type a sentence, get a game-ready 3D asset. Everything runs on your own machine — one RTX 5090, Docker Desktop,
-no accounts, no uploads, no cloud.
+**中文** · [English](#english) · [完整英文文档 / full English documentation →](README.en.md)
 
-You describe an object ("stylized industrial water pump station, painted teal metal, copper pipes"). asset-studio
-paints a reference image, turns it into a high-detail 3D model, then optimizes that model down to the triangle
-budget you asked for, bakes the detail into textures, builds LODs and a collision hull, renders previews, and hands
-you a folder you can drop straight into Godot, Unity or Blender.
+> **来源声明 / Provenance** — 本仓库是 [`zorrobyte/asset-studio`](https://github.com/zorrobyte/asset-studio) 的**衍生版本**，
+> 在原作者的项目之上做了去容器化、多机可配置、中英双语工作台等改动；原项目与本仓库的代码同为 **0BSD** 许可，上游的提交历史与
+> 作者信息完整保留在本仓库的 git log 中。详见文末「来源与致谢」。
+>
+> This repository is a **derivative work** based on [`zorrobyte/asset-studio`](https://github.com/zorrobyte/asset-studio)
+> (0BSD). The upstream commit history and authorship are preserved in this repository's git log. See
+> "Provenance & credits" at the end.
 
-<p align="center">
-  <img src="samples/pump/previews/contact_sheet.png" alt="pump station: reference image, master mesh and optimized asset" width="820">
-</p>
+---
 
-### From a sentence to a 20k-triangle asset
+## 中文
 
-| Prompt | Reference image the model painted | Optimized asset, rendered |
+### 它是什么
+
+**输入一句话，得到能直接进游戏引擎的 3D 资产。**
+
+全部跑在自己的机器上：没有账号、没有上传、没有云。0.2 起也不需要 Docker —— 控制面（FastAPI）通过 HTTP 调用一组
+**可独立寻址的阶段服务**，所以生图和生 3D 可以分别落在两台不同显卡的机器上，各自用各自的环境。
+
+你描述一个东西（例如 *"stylized industrial water pump station, painted teal metal, copper pipes"*），
+它先画出参考图，把参考图变成高精度 3D 主模型，再把主模型优化到你指定的三角面预算、把细节烘焙进贴图、
+生成 LOD 和碰撞体、渲染预览，最后交给你一个可以直接丢进 Godot / Unity / Blender 的文件夹。
+
+### 流水线（五个阶段）
+
+| 阶段 | 做什么 | 在哪跑 |
 |---|---|---|
-| *"Stylized industrial water pump station, chunky readable silhouette, painted teal metal, copper pipes, small concrete foundation"* | <img src="samples/pump/reference.png" width="240"> | <img src="samples/pump/previews/asset_front_left.png" width="240"><br>19,803 tris, 2048² textures |
-| *"Stylized wooden cargo crate with riveted metal corner brackets and a plain diagonal hazard stripe"* | <img src="samples/crate/reference.png" width="240"> | <img src="samples/crate/previews/asset_front_left.png" width="240"><br>7,998 tris, 1024² textures |
-| *"Ceramic coffee mug with a wide open handle, glossy teal glaze with a cream interior"* | <img src="samples/mug/reference.png" width="240"> | <img src="samples/mug/previews/asset_front_left.png" width="240"><br>6,000 tris, 1024² textures |
+| `reference` | 生成参考图（多个候选，并做技术指标打分） | `image` 阶段服务 |
+| `pixal3d` | 参考图 → 高精度 3D 主模型（GLB） | `pixal3d` 阶段服务 |
+| `blender` | 优化到目标面数、烘焙贴图、生成 LOD 与碰撞体、渲染预览 | `blender` 阶段服务（bpy 4.5） |
+| `validate` | GLB 校验（面数 / 贴图 / 尺度；0 错误才算通过） | 控制面进程内 |
+| `package` | 打包 zip + 写 `manifest.json` | 控制面进程内 |
 
-Contact sheets for the other two (reference top-left, high-detail master bottom-left, optimized asset elsewhere):
+### 本仓库相对上游的改动
 
-<p align="center">
-  <img src="samples/crate/previews/contact_sheet.png" alt="crate contact sheet" width="400">
-  <img src="samples/mug/previews/contact_sheet.png" alt="mug contact sheet" width="400">
-</p>
+1. **去掉 Docker**：每个角色一个原生 Python 环境（`requirements/<role>.txt`），不再需要 compose，也不需要共享卷 ——
+   文件通过 HTTP 推拉（上传输入、下载产物 zip）。
+2. **多机可配置**：`[servers]` 里每个阶段可填 `local` 或一个 URL；`[python]` 可为每个角色单独指定解释器
+   （Blender 角色必须是 Python 3.11，因为 bpy 只发 cp311 轮子）。
+3. **中英双语工作台**：约 300 条文案中英一一对应，默认跟随系统语言，可在设置里切换。
+4. **设置页可直接配地址并测连通性**：生成后端（ComfyUI 地址 + workflow）和三个阶段服务地址都在这里配，每行带 Test 按钮，
+   测的是输入框里的值（未保存也能测）。
+5. **就绪门禁**：任何必需的服务不通，**新任务直接被拒绝**（HTTP 422 `not_ready` + 结构化原因），
+   但工作台本身照常可用 —— 方便你就地修地址，而不是排队几分钟后才失败。
+6. **3D 检视器重做**（three.js）：7 种显示模式（着色 / 着色+网格 / 线框 / **法线** / 素模 / **UV 检查** / 反照率）、
+   叠加层（网格地面 / 坐标轴 / 包围盒 / 阴影）、视角预设、**点选部件并可隔离 / 聚焦 / 隐藏**、
+   实时面数·顶点·网格·材质·贴图·绘制批次·帧率、贴图清单与场景树、一键截图。
+7. **界面设计系统重做**：统一 token、明暗双主题、骨架屏与空态、响应式、键盘可达。
+8. **新增文档**：[`docs/STAGES.md`](docs/STAGES.md)（英文）与 [`docs/STAGES.zh-CN.md`](docs/STAGES.zh-CN.md)（中文），
+   专门讲清"阶段服务是什么、为什么存在、两条配置轴怎么区分、坏了怎么查"。
+9. **生成 3D 默认直接开始**，不再先进"待审核"。
 
-Every file above is in [`samples/`](samples/), together with the GLBs and the `manifest.json` each job produced.
+### 快速开始（Windows 优先）
 
-## What you get
+前置：**Python 3.11**（Blender 角色必须是 3.11）、**Node 18+**（只用来构建工作台）。可选 [uv](https://docs.astral.sh/uv/)。
 
-One job produces a folder like this:
+```powershell
+# 1) 配置：config.toml 不进版本管理，每台机器一份
+copy config.example.toml config.toml
 
-| File | What it is |
+# 2) 装依赖：控制面 + 本机要跑的角色
+python scripts\bootstrap.py --role control
+python scripts\bootstrap.py --role blender    # 本机做后处理时才需要（要求 Python 3.11）
+python scripts\bootstrap.py --role comfy      # 只把生成转发给 ComfyUI 时用它：完全不需要 torch
+
+# 3) 构建工作台：web/dist 不入库，克隆后必须构建一次
+cd web; npm install; npm run build; cd ..
+
+# 4) 启动
+scripts\start.ps1                             # Windows：后台运行，日志写到 var\logs\control.log
+```
+
+然后打开 **http://127.0.0.1:8090**（端口在 `config.toml` 的 `[control] port`）。
+
+macOS / Linux 用 `scripts/bootstrap.sh` 与 `scripts/serve.sh`，或直接 `python scripts/serve.py all` 前台跑全套。
+权重按机器下载：`python scripts/prefetch.py --role <角色>`（`--mv` 会额外拉多视角权重，约 +17 GB）。
+
+### 两条配置轴（最容易搞混的地方）
+
+| 轴 | 存在哪 | 回答什么问题 |
+|---|---|---|
+| `[servers]` | `config.toml`，也可在设置页改（存 SQLite） | **哪个进程**跑这个阶段的 Python。`local` = 本机启一个 worker，仍然走 127.0.0.1 的 HTTP，**不是进程内调用** |
+| 生成后端 | SQLite，在设置页改 | 那个阶段进程**去连哪一台 ComfyUI** |
+
+因为 `comfy_worker.*` 是**不含 torch 的 HTTP 代理**，"2D 和 3D 在两台服务器"这件事是靠**第二轴**满足的。
+所以三个 `[servers]` 全填 `local` 是完全正常、也是推荐的单机用法。展开说明见
+[`docs/STAGES.md`](docs/STAGES.md) / [`docs/STAGES.zh-CN.md`](docs/STAGES.zh-CN.md)。
+
+### 常用命令
+
+```powershell
+python scripts\serve.py doctor                   # 环境体检：各角色的解释器、缺哪些依赖、能不能跑
+python cli\assetctl.py generate --prompt "..."   # 一条命令走完生图 → 3D
+python cli\assetctl.py images  --prompt "..."    # 只生参考图（便宜，先挑再做成 3D）
+python cli\assetctl.py make3d  --image-job <id> --candidate cand_00.png --start
+python cli\assetctl.py view    <job-id>          # 在本地 Blender 里带标注对比打开产物
+python cli\assetctl.py queue                     # 队列与显存状态
+python -m pytest -q tests                        # 测试（不需要 GPU 和模型）
+```
+
+### 一次实测（本机，仅供参考；换机器差异很大）
+
+| 环节 | 结果 |
 |---|---|
-| `master.glb` | The untouched high-detail model straight out of the 3D generator: up to 1 M triangles, 4096² PBR textures. Keep it for re-optimising later. |
-| `<name>.glb` | **The asset you ship.** Reduced to your triangle budget, with base colour, metallic-roughness and normal maps baked from the master. |
-| `<name>_LOD1.glb`, `<name>_LOD2.glb` | Lower-detail versions (50 % and 25 % by default), each with its own UVs and smaller bakes. |
-| `<name>_collision.glb` | A convex hull of a couple of hundred triangles for the physics engine. |
-| `previews/*.png` | Neutral-lit renders: four views of the asset, one of the master, and a contact sheet. |
-| `textures/*.png` | The baked maps as loose PNGs, in case you want them outside the GLB. |
-| `reference.png` | The reference image the asset was built from. |
-| `manifest.json` | What you asked for vs. what actually happened: settings, triangle counts, reduction error, warnings, timings, VRAM/RAM, sha256 of every file. |
+| 生 3D 主模型 | 394.9 s → 998,592 面 |
+| Blender 优化 | 36.4 s → 5,962 面（目标的 0.60%）、1024² 贴图、2 级 LOD、200 面碰撞体、校验 0 错误 |
+| 产物体积 | 成品 GLB 3.4 MB；主模型 GLB 64.7 MB |
 
-Units are metres, glTF Y-up, origin at the bottom centre — so a 2 m pump imports as a 2 m pump.
+更多实测见 [`docs/RESULTS.md`](docs/RESULTS.md) 与 [`BENCHMARKS.md`](BENCHMARKS.md)。
 
-## Requirements
+### 目录
+
+| 路径 | 是什么 |
+|---|---|
+| `config.example.toml` | 所有配置项都在这里带注释；复制成 `config.toml`（不进版本管理） |
+| `scripts/serve.py` | 跨平台启动器 + `doctor`：在本机跑某个角色 |
+| `scripts/bootstrap.py` | 按角色安装依赖（`requirements/<role>.txt`） |
+| `scripts/prefetch.py` | 在本机下载该角色需要的权重 |
+| `scripts/start.ps1` / `stop.ps1` / `logs.ps1` | Windows 上后台运行控制面 |
+| `services/studio/studio/` | FastAPI 应用（`api.py`）、编排器（`worker.py`）、流水线、任务库、预设、校验 |
+| `services/runner/runner.py` | 阶段服务本体：只用标准库的 HTTP 服务，一次跑一个阶段子进程 |
+| `services/studio/studio/runner_client.py` | 传输协议的控制面一侧（上传输入、取回产物包） |
+| `services/image_worker/` · `services/pixal3d_worker/` · `services/comfy_worker/` · `services/blender/` | 各阶段的实现 |
+| `web/` | React 工作台（创建 → 队列 → 素材库 → 3D 检视），由 API 托管 |
+| `cli/` · `mcp/` | 无依赖 CLI、以及同样动作的 MCP 封装 |
+| `presets/` | `styles.yaml`、`quality.yaml`（含 OOM 降级阶梯）、`workflows/` |
+| `docs/` | 部署、工作台、阶段服务、实测记录 |
+
+### 文档
+
+| 文档 | 内容 |
+|---|---|
+| [`README.en.md`](README.en.md) | 完整英文文档（本仓库 README 的英文原文） |
+| [`docs/STAGES.md`](docs/STAGES.md) · [`docs/STAGES.zh-CN.md`](docs/STAGES.zh-CN.md) | 阶段服务是什么、为什么存在、两条配置轴、故障排查（英 / 中） |
+| [`docs/DISTRIBUTED.md`](docs/DISTRIBUTED.md) | 跨机器部署：worker 机器怎么装、怎么连、token 与安全 |
+| [`docs/PORTAL.md`](docs/PORTAL.md) | 工作台功能与语言设置 |
+| [`docs/RESULTS.md`](docs/RESULTS.md) · [`BENCHMARKS.md`](BENCHMARKS.md) | 实测记录与性能 |
+
+---
+
+## English
+
+### What it is
+
+**Type one sentence, get a game-ready 3D asset.** Everything runs on your own machines: no accounts, no uploads, no
+cloud. Since 0.2 there is no Docker either — a FastAPI control plane calls **independently addressable stage
+services** over HTTP, so the image generator and the 3D generator can live on two different boxes, each with the
+environment and GPU it needs.
+
+You describe an object; asset-studio paints a reference image, turns it into a high-detail 3D master, optimizes that
+master down to the triangle budget you asked for, bakes the detail into textures, builds LODs and a collision hull,
+renders previews, and hands you a folder ready for Godot, Unity or Blender.
+
+### The pipeline (five stages)
+
+| Stage | What it does | Where it runs |
+|---|---|---|
+| `reference` | Reference image candidates + a technical score | `image` stage service |
+| `pixal3d` | Reference image → high-detail 3D master (GLB) | `pixal3d` stage service |
+| `blender` | Decimate to budget, bake maps, LODs, collision hull, previews | `blender` stage service (bpy 4.5) |
+| `validate` | GLB validation (triangles / textures / scale) | in the control-plane process |
+| `package` | Zip + `manifest.json` | in the control-plane process |
+
+### What this repository changes
+
+1. **No Docker.** One native Python environment per role (`requirements/<role>.txt`); files travel over HTTP
+   (inputs uploaded, result bundle downloaded), so no shared volume is needed.
+2. **Configurable machines.** Each stage in `[servers]` is `local` or a URL; `[python]` sets a per-role interpreter
+   (the Blender role must be Python 3.11 — bpy ships cp311 wheels only).
+3. **Bilingual portal** (~300 message keys, zh + en), following the system language, switchable in Settings.
+4. **Addresses configured and tested in the UI**, for both the generation backends (ComfyUI URL + workflow) and the
+   three stage services, with a Test button that probes the value in the box.
+5. **Readiness gate.** If a required server does not answer, new jobs are refused up front (HTTP 422 `not_ready`
+   with structured reasons) while the portal stays usable, so you can fix the address in place.
+6. **A real 3D inspector** (three.js): 7 display modes (shaded / shaded+wire / wireframe / **normals** / clay /
+   **UV check** / albedo), overlays (ground grid, axes, bounds, shadow), camera presets, **pick a part to isolate,
+   focus or hide it**, live triangle/vertex/mesh/material/texture/draw-call/FPS counts, a texture list and scene
+   tree, and screenshot export.
+7. **A rebuilt design system**: one token set, light and dark themes, skeletons and empty states, responsive,
+   keyboard reachable.
+8. **New docs**: [`docs/STAGES.md`](docs/STAGES.md) and [`docs/STAGES.zh-CN.md`](docs/STAGES.zh-CN.md).
+9. **3D generation starts immediately** by default.
+
+### Quick start (Windows first)
+
+Requires **Python 3.11**, **Node 18+** (only to build the portal) and optionally [uv](https://docs.astral.sh/uv/).
+
+```powershell
+copy config.example.toml config.toml          # config.toml is git-ignored: one per machine
+python scripts\bootstrap.py --role control    # the control plane
+python scripts\bootstrap.py --role blender    # only if this machine does the bpy post-processing
+python scripts\bootstrap.py --role comfy      # proxying to ComfyUI needs no torch at all
+cd web; npm install; npm run build; cd ..     # web/dist is not committed: build the portal once
+scripts\start.ps1                             # or: python scripts\serve.py all
+```
+
+Then open **http://127.0.0.1:8090**. On macOS/Linux use `scripts/bootstrap.sh` / `scripts/serve.sh`.
+
+### The two configuration axes
+
+| Axis | Lives in | Answers |
+|---|---|---|
+| `[servers]` | `config.toml` (or Settings, stored in SQLite) | **which process** runs that stage; `local` still means an HTTP worker on 127.0.0.1, not an in-process call |
+| generation backend | SQLite, edited in Settings | **which ComfyUI** that stage process talks to |
+
+Because `comfy_worker.*` are torch-free HTTP proxies, "2D and 3D on different servers" is satisfied by the *second*
+axis — a single-machine setup with all three `[servers]` set to `local` is normal and recommended.
+
+### Documentation
+
+[`README.en.md`](README.en.md) (full English documentation) · [`docs/STAGES.md`](docs/STAGES.md) ·
+[`docs/DISTRIBUTED.md`](docs/DISTRIBUTED.md) · [`docs/PORTAL.md`](docs/PORTAL.md) ·
+[`docs/RESULTS.md`](docs/RESULTS.md) · [`BENCHMARKS.md`](BENCHMARKS.md)
+
+---
+
+## 来源与致谢 / Provenance & credits
+
+### 出处 / Origin
 
 | | |
 |---|---|
-| OS | Windows 11 |
-| GPU | One NVIDIA RTX 5090 (32 GB). This is what the whole stack is built and tuned for. |
-| Docker | Docker Desktop with NVIDIA GPU support (WSL2 backend; the reference machine gives the VM 46 GiB RAM) |
-| Disk | About 105 GB of model weights land in a Docker volume — budget ~120 GB free |
-| Base image | `trellis2:rtx5090`, built once from the TRELLIS.2 `Dockerfile`. The 3D worker builds on top of it. |
+| **上游项目 / Upstream** | [`zorrobyte/asset-studio`](https://github.com/zorrobyte/asset-studio) —— 本仓库由它衍生而来。上游的提交历史、提交信息与作者信息都完整保留在本仓库的 git log 中；本仓库在其之上新增了前述改动。 |
+| **本仓库 / This fork** | `lovoror/ai-asset-studio`（当前仓库） |
+| **代码许可 / Code licence** | [BSD Zero Clause License (0BSD)](LICENSE) —— 两个仓库同为 0BSD：随便用，商用也行，不要求署名。`LICENSE` 文件沿用上游，署名行为 "Copyright (c) 2026 asset-studio contributors"。 |
+| **模型许可 / Model licences** | **模型有自己的许可，而且约束的是你用它们生成出来的东西。** 代码是 0BSD 不代表产物也是，发布资产前请逐一核对。 |
 
-Everything else (CUDA, PyTorch, Blender, the models) lives inside the containers. You do not install Python
-packages on the host; the CLI only needs a stock Python 3.
+本项目**下载并使用**的模型各有条款，以下为上游文档中的说明，请以各模型页面为准：
 
-## Quick start
+* **Apache-2.0**：Qwen-Image-2512、Z-Image Turbo、FLUX.2 Klein 4B
+* **FLUX 非商用许可**：FLUX.2 Klein 9B
+* **另有条款（见 Hugging Face 模型页）**：Pixal3D / TRELLIS.2、RMBG-2.0
+  （本项目默认使用开源的 BiRefNet 替代 gated 的 RMBG-2.0）
 
-```powershell
-scripts\bootstrap.ps1          # once: build images, download the weights, verify they load offline
-scripts\start.ps1              # start the service and wait for /health   (scripts\stop.ps1 to stop)
-python cli\assetctl.py doctor  # sanity check: GPU, volumes, containers   (--deep also loads the models)
-```
+### 致谢 / Credits
 
-Then open **http://127.0.0.1:8090**.
+asset-studio 本质是**围绕别人的模型和工具做编排**。真正的功劳属于这些项目：
 
-## Web portal
-
-The portal is the friendly way to use asset-studio; it is served by the same container as the API, at
-http://127.0.0.1:8090 once `scripts\start.ps1` finishes.
-
-1. **Describe an object.** Type a prompt or click one of the built-in examples (or "Surprise me"), pick a style,
-   and choose how many variations you want (4 by default).
-2. **Pick the images you like.** You get that many reference-image variations of your idea. Nothing has been built
-   in 3D yet, so this stage is cheap to iterate on — reroll, tweak the wording, try another style.
-3. **Send them to the queue.** Selected variations become 3D jobs. Image sessions and 3D jobs run in separate lanes,
-   so you can keep generating images while a 3D job is building; 3D jobs run one at a time on the GPU,
-   automatically, or you can park jobs on hold and release them when you want the card free.
-4. **Browse the library.** Finished assets show their previews, spin in an in-browser 3D viewer, and download as
-   single files or the whole folder. Re-optimise re-runs just the mesh step at a new triangle or texture budget —
-   no image or 3D regeneration, so it takes about a minute.
-
-Dark and light themes, and the whole thing is local — the API binds to `127.0.0.1` only.
-
-| Create | Session (pick variations) |
+| 项目 / Project | 用途 / Used for |
 |---|---|
-| <img src="docs/screenshots/create-dark.png" width="440"> | <img src="docs/screenshots/session-dark.png" width="440"> |
+| [Pixal3D](https://huggingface.co/TencentARC/Pixal3D) | 单图 / 多视图 → 3D |
+| [TRELLIS.2](https://github.com/microsoft/TRELLIS) | 图 → 3D 的基础环境（o-voxel、FlexGEMM、CuMesh、nvdiffrast） |
+| [Qwen-Image-2512](https://huggingface.co/Qwen/Qwen-Image-2512) | 参考图生成 |
+| [meshoptimizer](https://github.com/zeux/meshoptimizer) | 网格简化 |
+| [MoGe](https://github.com/microsoft/MoGe) | 单目几何 / 相机估计 |
+| [NAF](https://github.com/valeoai/NAF) · [BiRefNet](https://huggingface.co/ZhengPeng7/BiRefNet) | 条件控制 · 抠图 |
+| [Blender](https://www.blender.org/)（bpy） | 后处理、烘焙与预览渲染 |
+| [three.js](https://threejs.org/) | 工作台的 3D 检视器 |
+| [React](https://react.dev/) · [Vite](https://vite.dev/) · [lucide](https://lucide.dev/) | 工作台前端 |
+| [FastAPI](https://fastapi.tiangolo.com/) · [uvicorn](https://www.uvicorn.org/) | 控制面 HTTP 服务 |
+| [ComfyUI](https://github.com/comfyanonymous/ComfyUI) | 可选的生成后端 |
 
-| Queue | Library | Asset (3D viewer, stats, downloads) |
-|---|---|---|
-| <img src="docs/screenshots/queue-dark.png" width="290"> | <img src="docs/screenshots/library-dark.png" width="290"> | <img src="docs/screenshots/asset-dark.png" width="290"> |
-
-Light-theme captures of the same pages are in [`docs/screenshots/`](docs/screenshots/).
-
-### Image models
-
-The reference-image step is the cheap, iterative part, so you can pick the model per session on the Create page
-(and set a default in Settings). Everything runs inside the image-worker container with diffusers; the FLUX and
-Z-Image weights are read from an existing ComfyUI models folder (`STUDIO_EXTRA_MODELS_DIR` in `.env`) and never
-through ComfyUI itself. Times are per image on the RTX 5090 after the model is loaded once per job
-(measurements in [`docs/RESULTS.md`](docs/RESULTS.md)).
-
-| Model | Settings | Per image | Notes |
-|---|---|---|---|
-| **Qwen-Image-2512 Lightning 8** (default) | 1328², 8 steps, no CFG | ~8 s | Won the blind test: best prompt adherence and clean surfaces. fp8 weights fully on the GPU, official Lightning LoRA fused in. Apache-2.0. |
-| Qwen-Image-2512 Lightning 4 | 1328², 4 steps, no CFG | ~4 s | Same compositions, thinner detail. Rough iteration. |
-| Z-Image Turbo | 1536², 9 steps, guidance 0 | ~9 s | Chunkiest, cleanest silhouettes; second in the blind test. Apache-2.0. |
-| FLUX.2 Klein 4B | 1536², 4 steps, guidance 1.0 | ~2.5 s | Fastest. Apache-2.0. |
-| FLUX.2 Klein 9B | 1536², 4 steps, guidance 1.0 | ~5 s | FLUX non-commercial licence; gated text encoder downloaded once. |
-| Qwen-Image-2512 (50 steps) | 1328², 50 steps, CFG 4 | ~80 s | Undistilled sampling, kept as an option. Rated below Lightning by eye (waxier surfaces). |
-
-The Qwen transformer is built once into an fp8 cache (53 s, 20 GB in the models volume) from the bf16 weights, so the
-20B model runs resident on a 32 GB card instead of streaming half of it over PCIe every step (that path took ~5 min per
-image). The distilled FLUX models are step- and guidance-distilled, so 4 steps / guidance 1.0 are fixed by the vendor;
-resolution is their quality lever, and 1536² was chosen after a sweep. Blind-test details and per-model timings are in
-[`docs/RESULTS.md`](docs/RESULTS.md); the benchmark and blind-test scripts are in [`tools/bench/`](tools/bench/).
-
-## Command line
-
-```powershell
-python cli\assetctl.py generate "Stylized industrial water pump station with copper pipes" `
-   --style mobile_factory --quality quality --seed 12345 --height-m 2.0 --triangles 12000 --texture 2048 `
-   --wait --download out\pump
-```
-
-Open a finished job in your local Blender as a labelled comparison scene (front row textured: master, optimized,
-LODs, collision; back row the same meshes untextured):
-
-```powershell
-python cli\assetctl.py view <job_id>            # downloads to out\<job_id> first if needed
-python cli\assetctl.py generate "..." --open    # generate, wait, download and open in one go
-```
-
-Blender is found via `STUDIO_BLENDER`, `PATH`, or the newest install under `Program Files\Blender Foundation`.
-
-Re-optimise a finished job at a different budget without regenerating anything:
-
-```powershell
-python cli\assetctl.py retry <job_id> --from-stage blender --triangles 20000 --texture 2048 --wait
-```
-
-Other commands: `status`, `wait`, `download`, `cancel`, `logs`, `list`, `capabilities`, `health`, `doctor`.
-
-## HTTP API
-
-One-shot: prompt in, asset out (`examples/curl_example.sh` does the whole loop).
-
-```bash
-curl -X POST http://127.0.0.1:8090/v1/jobs -H 'Content-Type: application/json' -d @examples/pump_station.json
-# -> {"job_id": "...", "status": "queued", "status_url": "/v1/jobs/<id>", "artifacts_url": "/v1/jobs/<id>/artifacts"}
-curl http://127.0.0.1:8090/v1/jobs/<id>                       # status, stage, progress, warnings, settings, timings, events
-curl http://127.0.0.1:8090/v1/jobs/<id>/artifacts             # list what was produced
-curl -o asset.glb http://127.0.0.1:8090/v1/jobs/<id>/artifacts/<name>.glb
-curl -X POST http://127.0.0.1:8090/v1/jobs/<id>/cancel
-curl -X POST http://127.0.0.1:8090/v1/jobs/<id>/retry \
-     -H 'Content-Type: application/json' \
-     -d '{"from_stage":"blender","optimize":{"target_triangles":20000}}'   # re-optimise, no regeneration
-curl http://127.0.0.1:8090/health ; curl http://127.0.0.1:8090/capabilities
-```
-
-Two-step (what the portal uses): make images first, choose, then build 3D.
-
-```bash
-curl -X POST http://127.0.0.1:8090/v1/image-jobs -H 'Content-Type: application/json' \
-     -d '{"prompt":"stylized copper water tank","style":"mobile_factory","variations":4}'
-# poll /v1/jobs/<image_job_id> until completed, look at the candidates, then:
-curl -X POST http://127.0.0.1:8090/v1/asset-jobs -H 'Content-Type: application/json' \
-     -d '{"image_job_id":"<id>","candidate":"cand_02.png","hold":false}'   # hold=true parks it in the review queue
-```
-
-Ready-made request bodies: [`examples/pump_station.json`](examples/pump_station.json),
-[`examples/cargo_crate.json`](examples/cargo_crate.json), [`examples/mug.json`](examples/mug.json).
-`GET /capabilities` returns the full JSON schema of a request. To reach the API from another machine set
-`STUDIO_BIND` **and** `STUDIO_API_TOKEN` — the server refuses to start on a non-loopback address without a token.
-
-## MCP server (use it from an agent)
-
-```powershell
-pip install "mcp>=1.2"
-python mcp\server.py
-# Claude Code:  claude mcp add asset-studio -- python <path-to-repo>/mcp/server.py
-```
-
-Tools: `capabilities`, `generate`, `status`, `wait`, `artifacts`, `download`, `manifest`, `cancel`, `retry`,
-`open_in_blender`.
-
-## Styles and quality
-
-Styles ([`presets/styles.yaml`](presets/styles.yaml)) set the look and sensible budget defaults:
-
-| Style | Look | Default triangles / texture |
-|---|---|---|
-| `mobile_factory` | Chunky readable forms for a mobile factory-builder: strong silhouettes, painted metal, limited palette, no tiny greebles | 20,000 / 2048 |
-| `stylized_generic` | General stylized game asset, hand-painted PBR, moderate detail | 30,000 / 2048 |
-| `realistic` | Realistic prop, plausible materials and proportions | 40,000 / 2048 |
-| `lowpoly` | Flat-shaded facets, solid colours, simple forms | 6,000 / 1024 |
-| `clean_product` | Clean product-visualisation look, precise surfaces, white background | 30,000 / 2048 |
-| `scifi` | Hard-surface sci-fi: clean panel lines, machined metal, a few emissive accents | 30,000 / 2048 |
-| `fantasy` | Hand-crafted fantasy props: worn wood, forged iron, stone, leather, warm painted look | 30,000 / 2048 |
-
-Every style is editable in the portal: pick a card, press **Edit this style**, and change the look sentence, background,
-keep-out list and budgets. Edits are saved per style in the app's settings (SQLite) and sent with each job as
-`custom_style`; **Reset to preset** brings the original back. The dashed **Custom** card is a style written from scratch.
-The API takes the same thing: `"style": "custom"` with a `custom_style.style_clause`, or a preset id plus a partial
-`custom_style` to override only some fields.
-
-Quality ([`presets/quality.yaml`](presets/quality.yaml)) decides how much GPU time to spend:
-
-| Quality | Reference images | 3D resolution | Typical wall clock |
-|---|---|---|---|
-| `balanced` | 1 candidate | 1024 cascade | ~11 min |
-| `quality` | 2 candidates | 1536 cascade | ~16 min (about 20 min end to end with two candidates) |
-
-Both export a
-1 M-triangle / 4096² master; the image model is chosen separately (table above). You can always override `target_triangles`, `texture_size`, `height_m`, LOD fractions
-and collision budget per request.
-
-## How it works
-
-```
-prompt ─► reference image (Qwen-Image-2512) ─► 3D model (Pixal3D / TRELLIS.2) ─► master GLB
-      ─► Blender: scale, origin, cleanup, meshoptimizer reduction, bake from the untouched master,
-         LODs, collision hull, previews ─► validation ─► manifest.json
-```
-
-* **Reference image.** Your prompt is rewritten into a single-object, plain-background, three-quarter, soft-lit,
-  no-text prompt (plus a strong negative prompt) and rendered by Qwen-Image-2512. In `quality` mode two candidates
-  are made and scored by transparent technical checks — background plainness, framing margins, clipping, centring.
-* **3D model.** Pixal3D (TRELLIS.2 backbone) mattes and crops the image, estimates the camera, and generates the
-  mesh. The export is ours: your own decimation target and texture size, PNG textures instead of WebP.
-* **Blender.** Imports the master and never modifies it. Scales to `height_m`, puts the origin at the bottom
-  centre, removes loose debris, then reduces to your budget with **meshoptimizer** — the same simplifier behind
-  gltfpack and the Unity/Unreal plug-ins — within an error bound that is relaxed step by step only if the budget
-  cannot be met. The result gets fresh UVs, and colour/metallic/roughness/normal are baked from the untouched
-  master with Cycles, so detail you lose in geometry comes back in the maps. Then LODs, convex collision hull, and
-  Cycles preview renders.
-* **Validate and package.** Every GLB is inspected (primitives, triangle and vertex counts, UVs, normals, texture
-  slots and mime types, bounds, height, origin, budgets) and everything is written into `manifest.json` with a
-  sha256 per file.
-
-Practical behaviour worth knowing:
-
-* **Fully offline.** Weights are prefetched once into a Docker volume; the workers run with `HF_HUB_OFFLINE=1`
-  and have been verified with `docker run --network none`.
-* **One job at a time on the GPU.** Each stage is a fresh subprocess, so CUDA memory is always released between
-  stages (that is why a job pays ~52 s of model loading once).
-* **It shares the GPU politely.** If another application (ComfyUI, a Blender viewport, a game) is using the card,
-  the worker waits instead of killing anything, and on CUDA out-of-memory it waits for memory to free before it
-  touches your quality settings.
-* **Jobs are durable.** They live in SQLite; if the worker restarts, the job requeues and completed stages are
-  reused instead of re-run.
-
-## Benchmarks
-
-Measured on this machine (RTX 5090 32 GB, driver 616.92), from the sample manifests — full detail in
-**[BENCHMARKS.md](BENCHMARKS.md)** and the narrative in [`docs/RESULTS.md`](docs/RESULTS.md).
-
-| Asset | Preset | Reference | 3D | Blender | Total | Master tris → optimized | Error | LOD1 / LOD2 | Collision |
-|---|---|---|---|---|---|---|---|---|---|
-| crate | balanced (1024) | 339 s | 248 s | 78 s | 11.1 min | 954,901 → 7,998 (voxel proxy) | 1.4 % | 3,997 / 1,996 | 200 |
-| pump | quality (1536) | 631 s | 226 s | 80 s | 15.6 min | 997,520 → 19,803 | 2.3 % | 9,813 / 5,227 | 200 |
-| mug | balanced (1024) | 347 s | 250 s | 74 s | 11.2 min | 969,785 → 6,000 | 1.4 % | 3,088 / 1,500 | 254 |
-
-Most of the time is the reference image (5.7–6.0 s per step at full quality). Re-optimising an existing job at a new
-budget is a Blender-only run: about 80 seconds. All 15 produced GLBs pass the Khronos glTF validator with zero
-errors and import into headless Godot 4.7.2.
-
-## Tips
-
-* **No text or lettering.** Ask for a sign and you get garbled glyphs — the models cannot spell. The prompt builder
-  already forbids text; describe shapes and materials instead ("plain diagonal hazard stripe", not "a sign saying DANGER").
-* **One object per prompt.** The pipeline builds a single object on a plain background. A scene, a pair of things, or
-  an object on a base plate will confuse the matting step.
-* **Budgets:** 3,000–8,000 triangles is a comfortable mobile prop; 20,000 keeps visible mechanical detail; going much
-  higher mostly buys silhouette precision you will not see.
-* **`height_m` is real-world size** in metres, applied as a uniform scale with the origin at the bottom centre. Set it
-  and your asset imports at the right size in the engine.
-* **Re-optimise instead of regenerating.** Once you have a master you like, retry from the `blender` stage with a new
-  triangle or texture budget. It takes a minute and costs no image or 3D generation.
-* **Seeds are reproducible.** Same prompt, style, quality and seed gives you the same reference image again.
-* **Try `quality` when the silhouette matters.** The 1536 cascade keeps thin pipes and openings that 1024 rounds off.
-
-## Limitations
-
-* The output is an **optimized static prop**: automatic decimation topology, no rig, no animation-friendly edge flow.
-* Matting defaults to Pixal3D's upstream `briaai/RMBG-2.0`, which is gated: accept its license on Hugging Face and run the
-  prefetch with your token. Without access, set `STUDIO_REMBG_MODEL=ZhengPeng7/BiRefNet` (open drop-in replacement).
-* Multi-view input is implemented and statically validated, but the `*_mv` checkpoints (+17 GB) were never downloaded
-  and no multi-view job has been run. There is no automatic novel-view generation.
-* **Godot 4.7.2 import is tested**; Unity is not installed on this machine, so it is untested here (the GLBs are
-  standard, validator-clean glTF).
-* **LODs are best-effort for small budgets.** Below roughly 8,000 triangles the UV-preserving reducer often stops
-  10–40 % above the LOD1/LOD2 targets rather than distort the mesh; that is reported as a warning in the manifest, not
-  a failure (it used to fail the job: [issue #1](https://github.com/zorrobyte/asset-studio/issues/1)).
-
-## License
-
-The code in this repository is released under the [BSD Zero Clause License](LICENSE) (0BSD): use it for anything,
-commercial or not, with no attribution required. The models it downloads keep their own licences, which apply to what
-you generate with them: Qwen-Image-2512, Z-Image Turbo and FLUX.2 Klein 4B are Apache-2.0; FLUX.2 Klein 9B is under the
-FLUX non-commercial licence; Pixal3D / TRELLIS.2 and RMBG-2.0 have their own terms on Hugging Face. Check those before
-shipping assets from a given model.
-
-## Project layout
-
-| Path | What |
-|---|---|
-| `compose.yaml` | 5 services: `api`, `worker` (orchestrator, one GPU slot), `image-worker`, `pixal3d-worker`, `blender` |
-| `web/` | React web portal (create → queue → library), served by the API container |
-| `services/studio/studio/` | FastAPI app, SQLite job store, pipeline, prompt builder, presets, GLB validator, worker |
-| `services/runner/runner.py` | tiny stage runner: one subprocess per stage so CUDA memory is freed on exit |
-| `services/image_worker/` | Qwen-Image-2512 reference candidates + technical selection |
-| `services/pixal3d_worker/` | Pixal3D adapter (single-image + multi-view), prefetch/verify |
-| `services/blender/process_asset.py` | bpy 4.5 LTS post-processing |
-| `presets/` | `styles.yaml`, `quality.yaml` (incl. OOM fallback ladders) |
-| `cli/assetctl.py` | dependency-free CLI |
-| `mcp/server.py` | MCP wrapper with the same actions |
-| `scripts/` | `bootstrap.ps1`, `start.ps1`, `stop.ps1`, `prefetch.ps1` |
-| `examples/`, `samples/` | request bodies; outputs of real completed jobs |
-| `tests/` | `test_api_mock.py` (no GPU) and `acceptance_real.py` (real GPU runs) |
-| `docs/`, `BENCHMARKS.md` | measurements, notes, limitations |
-| `manifests/dependency-manifest.json` | pinned commits, model revisions, image ids, frozen packages |
-
-Tests:
-
-```powershell
-docker compose run --rm --no-deps -v ${PWD}:/src api python -m pytest -q /src/tests/test_api_mock.py
-python tests\acceptance_real.py --cancel-test --restart-test     # real GPU runs
-```
-
-## Credits
-
-asset-studio is orchestration around other people's models and tools:
-
-* [Pixal3D](https://huggingface.co/TencentARC/Pixal3D) and [TRELLIS.2](https://github.com/microsoft/TRELLIS) — image-to-3D
-* [Qwen-Image](https://huggingface.co/Qwen/Qwen-Image-2512) — reference image generation
-* [meshoptimizer](https://github.com/zeux/meshoptimizer) — the mesh simplifier
-* [MoGe](https://github.com/microsoft/MoGe) — monocular geometry / camera estimation
-* [NAF](https://github.com/valeoai/NAF) and [BiRefNet](https://huggingface.co/ZhengPeng7/BiRefNet) — conditioning and matting
-* [Blender](https://www.blender.org/) (bpy) — post-processing, baking and previews
-
-## Pinned versions
-
-Everything is pinned in `manifests/dependency-manifest.json`.
-
-| Image | Base | Key pins |
-|---|---|---|
-| `asset-studio/pixal3d-worker` | `trellis2:rtx5090` (nvidia/cuda 12.8.1, conda py3.11, nvcc 12.9, **torch 2.11.0+cu128**, flash-attn 2.8.3, nvdiffrast 0.4.0, CuMesh, FlexGEMM, o-voxel all built for sm_120) | Pixal3D `master` @ `f7cf384` (not the `paper` branch), **NATTEN 0.21.0** compiled with `NATTEN_CUDA_ARCH=12.0` (libnatten cutlass-fna verified on the 5090), utils3d 0.0.2 wheel specified by Pixal3D, MoGe @ `74fbce0`, transformers 4.57.3, diffusers 0.37.1 |
-| `asset-studio/image-worker` | python 3.11 slim | torch 2.11.0+cu128, diffusers 0.40.0, transformers 5.17.0, accelerate 1.15.0 |
-| `asset-studio/blender` | python 3.11 slim | bpy 4.5.13 (Blender 4.5 LTS), meshoptimizer 0.2.30a0 (bound with explicit argtypes), fast-simplification (fallback), trimesh, pygltflib |
-| `asset-studio/studio` | python 3.12 slim | fastapi, uvicorn, pydantic, httpx, pygltflib (no CUDA) |
-
-Models (Hugging Face, pinned revisions, cached in the `studio-models` volume): `Qwen/Qwen-Image-2512`,
-`TencentARC/Pixal3D` (single-view checkpoints; `*_mv` optional), `Ruicheng/moge-2-vitl`,
-`camenduru/dinov3-vitl16-pretrain-lvd1689m`, `briaai/RMBG-2.0` (gated) or `ZhengPeng7/BiRefNet`, plus `valeoai/NAF` (torch.hub, pinned commit).
+依赖的精确版本、模型 revision 与上游 commit 都记录在
+[`manifests/dependency-manifest.json`](manifests/dependency-manifest.json) 中。

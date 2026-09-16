@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="asset-studio — prompt to reference image to optimised, validated 3D asset." />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0d0f13" media="(prefers-color-scheme: dark)" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230f766e'/%3E%3Cpath d='M32 12 52 23v18L32 52 12 41V23z' fill='none' stroke='%23fff' stroke-width='4' stroke-linejoin='round'/%3E%3Cpath d='M32 12v40M12 23l20 11 20-11' fill='none' stroke='%23fff' stroke-width='4' stroke-linejoin='round'/%3E%3C/svg%3E" />
     <title>asset-studio</title>
     <script>
@@ -12,9 +15,56 @@
         if (t === "dark" || t === "light") document.documentElement.dataset.theme = t;
       } catch {}
     </script>
+    <style>
+      /* First paint: the shell below is replaced by the app as soon as the bundle runs, so the page never shows a
+         blank screen. Kept inline and tiny, and it uses the same tokens as theme.css. */
+      #boot {
+        position: fixed; inset: 0;
+        display: grid; place-items: center;
+        background: #f5f6f8;
+        color: #5a6272;
+        font: 13.5px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+      }
+      #boot .boot-mark {
+        width: 34px; height: 34px; margin: 0 auto 12px;
+        border-radius: 10px;
+        display: grid; place-items: center;
+        background: #0f766e;
+        color: #fff;
+      }
+      #boot .boot-ring {
+        width: 22px; height: 22px; margin: 14px auto 0;
+        border: 2px solid #ced4de;
+        border-right-color: #0f766e;
+        border-radius: 50%;
+        animation: boot-spin 0.8s linear infinite;
+      }
+      @keyframes boot-spin { to { transform: rotate(360deg); } }
+      @media (prefers-color-scheme: dark) {
+        html:not([data-theme="light"]) #boot { background: #0d0f13; color: #a1a9b8; }
+        html:not([data-theme="light"]) #boot .boot-ring { border-color: #333a47; border-right-color: #2dd4bf; }
+      }
+      html[data-theme="dark"] #boot { background: #0d0f13; color: #a1a9b8; }
+      html[data-theme="dark"] #boot .boot-ring { border-color: #333a47; border-right-color: #2dd4bf; }
+      @media (prefers-reduced-motion: reduce) { #boot .boot-ring { animation: none; } }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Inside #root on purpose: React clears the container's children on the first render, so the splash needs no
+         teardown code of its own. -->
+    <div id="root">
+      <div id="boot" aria-hidden="true">
+        <div>
+          <div class="boot-mark">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2 21 7v10l-9 5-9-5V7z" /><path d="M12 2v20M3 7l9 5 9-5" />
+            </svg>
+          </div>
+          <div style="text-align: center; font-weight: 600">asset-studio</div>
+          <div class="boot-ring"></div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

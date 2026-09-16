@@ -1,7 +1,11 @@
 # Benchmarks (RTX 5090, real jobs, 2026-09-12)
 
-Machine: Windows 11 Pro, one RTX 5090 32 GB (driver 616.92), Docker Desktop WSL2 VM with 46 GiB RAM. Every number comes from
+Machine: Windows 11 Pro, one RTX 5090 32 GB (driver 616.92), 46 GiB RAM available to the workers. Every number comes from
 `samples/<job>/manifest.json` (aggregated in `samples/acceptance_report.json`). No upstream H100 figures are used.
+
+> These runs were made on the earlier container layout. asset-studio now runs natively (see
+> [`docs/DISTRIBUTED.md`](docs/DISTRIBUTED.md)); the stage code, models and settings are unchanged, so the numbers
+> still describe the pipeline.
 
 ## Per-stage wall clock
 
@@ -60,4 +64,4 @@ copy was reduced instead. All maps (base colour, metallic, roughness, normal) ar
 * Worker restart mid-Pixal3D: job requeued, reference stage reused, completed.
 * Reprocess: `POST /v1/jobs/{id}/retry {"from_stage":"blender","optimize":{...}}` re-optimised all three assets without regenerating.
 * Khronos glTF validator: 0 errors on all 15 GLBs; headless Godot 4.7.2 import succeeded for all.
-* Offline: workers run with `HF_HUB_OFFLINE=1`; loaders verified with `docker run --network none`.
+* Offline: workers run with `HF_HUB_OFFLINE=1`; the loaders were verified with the network disabled.

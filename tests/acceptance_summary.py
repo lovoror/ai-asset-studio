@@ -1,9 +1,12 @@
 """Build samples/acceptance_report.json from the manifests of real completed jobs in samples/<name>/manifest.json.
-Records measured timings, VRAM (torch max_reserved + nvidia-smi peak), RSS, effective settings and validation."""
+Records measured timings, VRAM (torch max_reserved + nvidia-smi peak), RSS, effective settings and validation.
+
+The `host` string describes the machine the archived samples were produced on (the earlier container layout); it is
+kept as measured rather than rewritten when the samples are regenerated on a different setup."""
 import json, sys, time
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
-out = {"generated": time.strftime("%Y-%m-%d %H:%M:%S"), "host": "RTX 5090 32 GB, Docker Desktop WSL2 VM 46 GiB RAM", "jobs": []}
+out = {"generated": time.strftime("%Y-%m-%d %H:%M:%S"), "host": "RTX 5090 32 GB, 46 GiB RAM for the workers", "jobs": []}
 for d in sorted((ROOT / "samples").iterdir()):
     mp = d / "manifest.json"
     if not mp.exists() or d.name.startswith("_"):

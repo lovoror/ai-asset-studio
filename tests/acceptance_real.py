@@ -5,12 +5,13 @@ validates the results and writes samples/acceptance_report.json with measured ti
   python tests/acceptance_real.py                 # crate (balanced), pump (quality/1536, no fallback), mug (balanced)
   python tests/acceptance_real.py --only crate    # one job
   python tests/acceptance_real.py --cancel-test   # submit a job, cancel it mid-stage, expect status 'cancelled'
-  python tests/acceptance_real.py --restart-test  # submit a job, restart the worker container mid-stage, expect completion with stage reuse
+  python tests/acceptance_real.py --restart-test  # restart the orchestrator mid-stage (needs STUDIO_RESTART_CMD), expect completion with stage reuse
 """
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -113,19 +114,28 @@ def main():
         print("  cancel:", report["tests"]["cancel"])
     if a.restart_test:
         print("=== restart recovery test", flush=True)
-        job = submit({**JOBS["crate"], "seed": 5})
-        for _ in range(200):
-            j = assetctl._req("GET", f"/v1/jobs/{job}")
-            if j["status"] == "running" and j["stage"] == "pixal3d":
-                break
-            time.sleep(3)
-        time.sleep(15)
-        subprocess.run(["docker", "compose", "restart", "worker"], cwd=ROOT, check=True)
-        j = wait(job)
-        ev = [e["message"] for e in assetctl._req("GET", f"/v1/jobs/{job}?events=200")["events"]]
-        report["tests"]["restart_recovery"] = {"job_id": job, "final_status": j["status"], "attempt": j["attempt"],
-                                               "requeued": any("requeued" in m for m in ev), "reference_reused": any("reference stage already complete" in m for m in ev)}
-        print("  restart:", report["tests"]["restart_recovery"])
+        # There is no container to restart any more: the orchestrator is a process this script cannot reach
+        # directly (a supervisor owns it). Provide the command that restarts it on this machine, e.g. on Windows
+        #   $env:STUDIO_RESTART_CMD = "scripts\stop.ps1; scripts\start.ps1"
+        restart_cmd = os.environ.get("STUDIO_RESTART_CMD")
+        if not restart_cmd:
+            print("  restart: SKIPPED - set STUDIO_RESTART_CMD to a command that restarts the orchestrator "
+                  "(e.g. 'scripts\\stop.ps1; scripts\\start.ps1')", flush=True)
+            report["tests"]["restart_recovery"] = {"skipped": "STUDIO_RESTART_CMD is not set"}
+        else:
+            job = submit({**JOBS["crate"], "seed": 5})
+            for _ in range(200):
+                j = assetctl._req("GET", f"/v1/jobs/{job}")
+                if j["status"] == "running" and j["stage"] == "pixal3d":
+                    break
+                time.sleep(3)
+            time.sleep(15)
+            subprocess.run(restart_cmd, cwd=ROOT, shell=True, check=True)
+            j = wait(job)
+            ev = [e["message"] for e in assetctl._req("GET", f"/v1/jobs/{job}?events=200")["events"]]
+            report["tests"]["restart_recovery"] = {"job_id": job, "final_status": j["status"], "attempt": j["attempt"],
+                                                   "requeued": any("requeued" in m for m in ev), "reference_reused": any("reference stage already complete" in m for m in ev)}
+            print("  restart:", report["tests"]["restart_recovery"])
     report["finished"] = time.strftime("%Y-%m-%d %H:%M:%S")
     out.mkdir(parents=True, exist_ok=True)
     p = out / "acceptance_report.json"

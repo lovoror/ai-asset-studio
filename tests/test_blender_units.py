@@ -1,14 +1,17 @@
-"""Unit tests for the Blender stage helpers that do not need a GPU (run inside the blender image):
-fill_missed correctness, tri_count, and the UV-preserving LOD path on a synthetic textured mesh.
+"""Unit tests for the Blender stage helpers that do not need a GPU: fill_missed correctness, tri_count, and the
+UV-preserving LOD path on a synthetic textured mesh.
 
-  docker compose run --rm --no-deps -v ${PWD}:/src blender python -m pytest -q /src/tests/test_blender_units.py
+  python scripts/bootstrap.py --role blender        # once: installs bpy + meshoptimizer
+  python -m pytest -q tests/test_blender_units.py
+(bpy has no wheel for Python 3.13: use a 3.11 or 3.12 environment.)
 """
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
 
-sys.path.insert(0, "/app")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "services"))
 pa = pytest.importorskip("blender.process_asset")
 
 

@@ -1,0 +1,8 @@
+# A stage worker whose generation runs on a ComfyUI server: it needs no torch and no CUDA, only HTTP plus the
+# candidate scoring the image path shares with the local worker. Use this instead of image.txt / pixal3d.txt on a
+# machine that only proxies stages to ComfyUI (services/serve.py `image` / `pixal3d` roles).
+httpx>=0.27
+pillow>=10.3
+numpy>=1.26
+scipy>=1.11
+PyYAML>=6.0

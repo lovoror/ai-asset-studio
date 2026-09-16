@@ -4,6 +4,11 @@ Host: Windows 11 Pro, single RTX 5090 (32 GB, driver 616.92), 96 GB RAM of which
 All numbers below are from real jobs on this machine (`samples/*/manifest.json`, `samples/acceptance_report.json`).
 Nothing here is an upstream H100 figure.
 
+> The measurements below were taken on the original container layout. asset-studio now runs natively
+> (see [`DISTRIBUTED.md`](DISTRIBUTED.md)); the stage code, models and settings are unchanged, so the timings still
+> describe the pipeline, but the container-specific commands in the robustness notes have moved to
+> `scripts/serve.py` / `scripts/start.ps1` / `scripts/stop.ps1`.
+
 ## Acceptance jobs
 
 | Job | Preset | Reference (Qwen-Image-2512) | Pixal3D | Blender | Optimized result |
@@ -122,7 +127,7 @@ Lightning 4 vs 8 share seeds, so the compositions match and the difference is de
 ## Robustness tests (real, not mocked)
 
 * **Cancel:** cancelling mid-Blender stopped the stage subprocess within seconds; status `cancelled`.
-* **Restart recovery:** `docker compose restart worker` during the pump's Pixal3D stage → job requeued, reference stage reused
+* **Restart recovery:** restarting the orchestrator during the pump's Pixal3D stage → job requeued, reference stage reused
   (`reference stage already complete; reusing`), Pixal3D re-run, job completed. The orphaned stage process of the previous
   worker is now cancelled on startup (it initially just ran to completion while the new attempt waited).
 * **Retry / reprocess:** `POST /v1/jobs/{id}/retry` resumes failed jobs from completed stages;
@@ -132,11 +137,11 @@ Lightning 4 vs 8 share seeds, so the compositions match and the difference is de
   image session never waits behind a 4-minute 3D job. GPU stages start immediately; on CUDA OOM the stage waits for the
   other lane's GPU stage to finish and retries with the same settings (then one paused retry, then the quality ladder).
   Other GPU users (ComfyUI, host Blender viewports) are never killed.
-* **Restart re-attach:** each GPU/Blender stage records its runner run id in `stages/<stage>/run.json`; a restarted worker
-  re-attaches to a stage still running in the runner container instead of cancelling it (a worker rebuild used to cost a
+* **Restart re-attach:** each GPU/Blender stage records its runner run id in `stages/<stage>/run.json`; a restarted orchestrator
+  re-attaches to a stage still running on the worker instead of cancelling it (an orchestrator restart used to cost a
   full Pixal3D stage).
-* **Offline:** every worker runs with `HF_HUB_OFFLINE=1`; the Pixal3D and Qwen loaders were verified with
-  `docker run --network none`.
+* **Offline:** every worker runs with `HF_HUB_OFFLINE=1`; the Pixal3D and Qwen loaders were verified with the network
+  disabled.
 * **Mocked error paths:** `tests/test_api_mock.py` + `tests/test_portal_mock.py` (20 tests): invalid inputs, auth, cancel, artifact path confinement,
   orphan requeue, stage resume + OOM fallback policy, retry, prompt rules, GLB validation incl. WebP rejection.
 * **External checks:** Khronos glTF validator (`tools/validate_gltf.js`): 0 errors on all 15 produced GLBs (one info-level

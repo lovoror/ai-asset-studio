@@ -281,7 +281,8 @@ def cmd_health(a):
 
 
 def cmd_doctor(a):
-    """Environment and extension checks: host docker, images, volumes, API/runners, GPU, cached models, extensions."""
+    """Environment checks: API reachability, every worker server, GPU, cached models.
+    --deep additionally loads the models on each worker (slow, uses GPU memory)."""
     ok = True
 
     def check(label, cond, detail=""):
@@ -289,44 +290,51 @@ def cmd_doctor(a):
         ok = ok and bool(cond)
         print(f"[{'OK ' if cond else 'FAIL'}] {label}{(': ' + str(detail)) if detail else ''}")
 
-    def sh(cmd):
-        try:
-            return subprocess.run(cmd, capture_output=True, text=True, timeout=120).stdout.strip()
-        except Exception as e:  # noqa: BLE001
-            return f"error: {e}"
+    def note(label, detail=""):
+        print(f"[--  ] {label}{(': ' + str(detail)) if detail else ''}")
 
-    ver = sh(["docker", "version", "--format", "{{.Server.Version}}"])
-    check("docker daemon", ver and not ver.startswith("error"), ver)
-    imgs = sh(["docker", "images", "--format", "{{.Repository}}:{{.Tag}}"]).splitlines()
-    for im in ("asset-studio/studio:local", "asset-studio/image-worker:local", "asset-studio/pixal3d-worker:local", "asset-studio/blender:local"):
-        check(f"image {im}", im in imgs)
-    vols = sh(["docker", "volume", "ls", "--format", "{{.Name}}"]).splitlines()
-    for v in ("studio-models", "studio-jobs", "studio-data"):
-        check(f"volume {v}", v in vols)
+    print(f"api: {BASE}")
     try:
         h = _req("GET", "/health")
-        check("api health", h.get("ok"), json.dumps({k: v.get('ok') for k, v in h["runners"].items()}))
+    except SystemExit as e:
+        check("api reachable", False, str(e))
+        print("hint: start the control plane with scripts/serve.ps1 control (or scripts/start.ps1), then run "
+              "scripts/serve.ps1 doctor for the per-machine view")
+        print("doctor: some checks FAILED")
+        return 1
+
+    check("api reachable", True, f"version {h.get('version')}")
+    check("api healthy", h.get("ok"), f"db={h.get('db')} queue={h.get('queue')}")
+    for name, r in (h.get("runners") or {}).items():
+        if r.get("ok"):
+            check(f"{name} worker", True, f"{r.get('url')} roles={r.get('roles')} "
+                                          f"{'busy' if r.get('busy') else 'idle'} python={r.get('python')}")
+        else:
+            check(f"{name} worker", False, f"{r.get('url')} {r.get('error')}")
+    try:
         c = _req("GET", "/capabilities")
         g = c.get("gpu", {})
         if g.get("available"):
             gp = g["gpus"][0]
-            check("gpu visible to workers", True, f"{gp['name']} {gp['used_mib']}/{gp['total_mib']} MiB used, uuid {gp['uuid']}")
-            check("gpu uuid matches config", gp["uuid"] == c.get("gpu_uuid"), c.get("gpu_uuid"))
+            check("gpu visible to the 3D worker", True,
+                  f"{gp['name']} {gp['used_mib']}/{gp['total_mib']} MiB used, uuid {gp['uuid']}")
         else:
-            check("gpu visible to workers", False, g.get("error"))
+            # Not fatal: a worker may legitimately have no local card (CPU-only box, or a remote backend).
+            note("gpu visible to the 3D worker", g.get("error"))
         check("multi-view checkpoints cached", c["features"]["multiview_checkpoints_cached"] or True,
-              "yes" if c["features"]["multiview_checkpoints_cached"] else "no (optional; scripts/prefetch.ps1 -mv)")
+              "yes" if c["features"]["multiview_checkpoints_cached"] else
+              "no (optional; scripts/prefetch.ps1 pixal3d -MultiView on the 3D server)")
     except SystemExit as e:
-        check("api reachable", False, str(e))
+        check("capabilities", False, str(e))
     if a.deep:
-        print("--- deep checks (loads models on the GPU; several minutes) ---")
-        out = sh(["docker", "compose", "exec", "-T", "pixal3d-worker", "python", "-m", "pixal3d_worker.prefetch", "--verify"])
-        tail = out[-2500:]
-        check("pixal3d worker offline load + NAF/NATTEN forward", '"naf_forward"' in tail and "error" not in tail.lower(), tail.splitlines()[-1] if tail else "")
-        out = sh(["docker", "compose", "exec", "-T", "image-worker", "python", "-m", "image_worker.generate", "--selftest"])
-        check("image worker offline load", "selftest ok" in out, out.strip().splitlines()[-1] if out.strip() else "")
-        out = sh(["docker", "compose", "exec", "-T", "blender", "python", "-c", "import bpy;print('bpy',bpy.app.version_string)"])
-        check("blender (bpy)", out.startswith("bpy"), out)
+        print("--- deep checks (loads the models on each worker; several minutes, uses GPU memory) ---")
+        try:
+            res = _req("POST", "/v1/selftest", {}, timeout=2400)
+            for name, r in res.get("workers", {}).items():
+                detail = (r.get("detail") or "").strip().splitlines()
+                check(f"{name} worker loads its models", r.get("ok"), detail[-1] if detail else "")
+        except SystemExit as e:
+            check("deep checks", False, str(e))
     print("doctor:", "all checks passed" if ok else "some checks FAILED")
     return 0 if ok else 1
 

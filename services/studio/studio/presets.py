@@ -26,6 +26,18 @@ def style_ids() -> list[str]:
     return list(load_presets()["styles"].keys())
 
 
+def workflow_names() -> list[str]:
+    """The API-format workflow files available to the remote-ComfyUI backends on this machine.
+
+    A worker resolves a workflow name against *its own* presets dir, so a workflow used by a remote worker must
+    exist there too; this list is what the Settings page offers, plus what the connectivity test verifies.
+    """
+    d = config.PRESETS_DIR / "workflows" if config.PRESETS_DIR else None
+    if not d or not d.is_dir():
+        return []
+    return sorted(p.name for p in d.glob("*.json"))
+
+
 def custom_style_def(req: dict, presets: dict, base: dict | None) -> dict | None:
     """Apply `custom_style` on top of a preset (`base`), or build a style from scratch when the style id is 'custom'.
     Only the fields that are given override the preset; budgets fall back to the preset's (or the generic stylized)
@@ -51,8 +63,32 @@ def custom_style_def(req: dict, presets: dict, base: dict | None) -> dict | None
     return style
 
 
-def resolve_settings(req: dict) -> dict:
-    """Map the application-level request onto concrete backend settings (requested == effective at this point)."""
+def backend_config(global_settings: dict | None) -> dict:
+    """The generation-backend settings, normalised into the shape the stage request.json carries.
+
+    Snapshotted per job (see resolve_settings) so a finished job still records which server and workflow
+    produced it - the same reason style_def is copied rather than referenced. The pipeline falls back to
+    calling this with the live settings table for jobs created before the fields existed.
+    """
+    g = global_settings or {}
+    nodes = g.get("nodes") or {}
+    return {
+        "image": {"kind": g.get("image_kind") or "local", "url": (g.get("image_url") or "").rstrip("/"),
+                  "workflow": g.get("image_workflow") or ""},
+        "three_d": {"kind": g.get("three_d_kind") or "local", "url": (g.get("three_d_url") or "").rstrip("/"),
+                    "workflow": g.get("three_d_workflow") or "",
+                    "trellis2": bool(g.get("trellis2", True)),
+                    # node ids are strings in the API-format workflow JSON; accept ints from hand-edited settings
+                    "nodes": {k: str(v) for k, v in nodes.items() if v not in (None, "")}},
+    }
+
+
+def resolve_settings(req: dict, global_settings: dict | None = None) -> dict:
+    """Map the application-level request onto concrete backend settings (requested == effective at this point).
+
+    `global_settings` is the settings table (db.get_settings()); it supplies the generation-backend choice, which
+    is an installation-level setting rather than a per-request one.
+    """
     p = load_presets()
     base = None if req["style"] == "custom" else p["styles"].get(req["style"])
     if base is None and req["style"] != "custom":
@@ -66,7 +102,11 @@ def resolve_settings(req: dict) -> dict:
     if seed is None:
         seed = random.SystemRandom().randint(0, 2**31 - 1)
     ref = q["reference"]
-    model_id = req.get("model") or "qwen-image-2512-lightning-8"
+    # The request's model wins. Otherwise honour the installation default from the settings table: the portal
+    # always sends one explicitly, but the CLI/API may omit it, and hard-coding the local qwen model here would
+    # make such a request demand torch even on a deployment whose images come from a ComfyUI server.
+    model_id = (req.get("model") or (global_settings or {}).get("default_image_model")
+                or "qwen-image-2512-lightning-8")
     entry = p["image_models"].get(model_id)
     if entry is None:
         raise ValueError(f"unknown image model {model_id!r}; available: {', '.join(p['image_models'])}")
@@ -74,6 +114,21 @@ def resolve_settings(req: dict) -> dict:
     ref["model"] = model_id
     ref["family"] = entry.get("family", "qwen")
     ref["est_s"] = entry.get("est_s")
+    backend = backend_config(global_settings)
+    if ref["family"] == "comfyui":
+        # The registry family outranks the settings switch: a comfyui model has no local implementation, so
+        # honouring image_kind="local" here would only produce "unknown family comfyui" from the GPU worker.
+        backend["image"]["kind"] = "comfyui"
+    # Fail at submission rather than three minutes into the stage: a remote backend with no address cannot work.
+    # Only checked when this job will actually run the reference stage - JobRun.run() generates references only for
+    # input_mode "text" (a job from a picked candidate or a supplied image copies one instead). The 3D lane is never
+    # checked here: it is legitimately configured after the images exist, so stage_pixal3d validates it lazily.
+    generates_reference = not (req.get("multiview") or req.get("reference_image_b64") or req.get("image_job_id"))
+    if backend["image"]["kind"] == "comfyui" and generates_reference:
+        for key, what in (("url", "server address"), ("workflow", "workflow file")):
+            if not backend["image"][key]:
+                raise ValueError(f"the ComfyUI image backend is selected but no {what} is configured "
+                                 f"(Settings -> Generation backends)")
     if req.get("reference_candidates"):
         ref["candidates"] = int(req["reference_candidates"])
     if req.get("variations"):
@@ -108,5 +163,7 @@ def resolve_settings(req: dict) -> dict:
         "allow_quality_fallback": bool(req.get("allow_quality_fallback", True)),
         "input_mode": "multiview" if req.get("multiview") else ("reference_image" if req.get("reference_image_b64") else
                       ("image_job" if req.get("image_job_id") else "text")),
+        # Which server generates what. Snapshotted here (like style_def) so the job stays reproducible.
+        "backend": backend,
     }
     return settings

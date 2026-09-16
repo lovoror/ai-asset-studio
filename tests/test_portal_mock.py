@@ -21,6 +21,8 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("STUDIO_WEB_DIST", str(tmp_path / "nodist"))
     for name in ("STUDIO_IMAGE_RUNNER", "STUDIO_PIXAL3D_RUNNER", "STUDIO_BLENDER_RUNNER"):
         monkeypatch.setenv(name, "http://127.0.0.1:1")
+    # these tests submit work against deliberately dead stage servers; the readiness gate has its own test
+    monkeypatch.setenv("STUDIO_REQUIRE_READY", "0")
     for m in list(sys.modules):
         if m.startswith("studio"):
             del sys.modules[m]
@@ -132,10 +134,10 @@ def test_library_settings_examples_zip_patch_delete(env):
     assert client.get("/v1/library?kind=asset").json()["items"] == []
     assert client.get("/v1/library?q=crate").json()["items"][0]["id"] == jid
     assert client.get("/v1/library?q=zeppelin").json()["items"] == []
-    # settings round trip + validation
+    # settings round trip + validation. auto_process defaults to on: choosing variations starts the 3D job.
     s = client.get("/v1/settings").json()
-    assert s["auto_process"] is False and s["default_variations"] == 4
-    assert client.put("/v1/settings", json={"auto_process": True, "default_variations": 6}).json()["default_variations"] == 6
+    assert s["auto_process"] is True and s["default_variations"] == 4
+    assert client.put("/v1/settings", json={"auto_process": False, "default_variations": 6}).json()["default_variations"] == 6
     assert client.put("/v1/settings", json={"default_style": "nope"}).status_code == 422
     assert client.put("/v1/settings", json={"default_variations": 99}).status_code == 422
     # examples
@@ -169,10 +171,19 @@ def test_stage_files_only_images_and_confined(env):
     assert client.get(f"/v1/jobs/{jid}/stage-files/..%2Fartifacts%2Fmanifest.json").status_code in (400, 404)
 
 
-def test_spa_not_mounted_without_dist(env):
+def test_spa_without_dist_explains_how_to_build(env):
+    """No web/dist: the portal route is still registered and says how to build it, rather than 404ing.
+
+    It used to be gated on index.html at import time, which made "build the portal, then restart the API" an
+    ordering requirement (a build alone left / 404ing) and disagreed with /capabilities, whose web_portal flag
+    reads the same directory on every request.
+    """
     client, api, _ = env
-    assert client.get("/").status_code == 404
+    r = client.get("/")
+    assert r.status_code == 503
+    assert "npm run build" in r.text
     assert client.get("/health").status_code == 200
+    assert client.get("/v1/jobs/nope").status_code == 404      # API routes are unaffected
 
 
 def test_spa_serves_asset_routes(tmp_path, monkeypatch):

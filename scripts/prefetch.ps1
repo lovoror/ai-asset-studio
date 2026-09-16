@@ -1,7 +1,12 @@
-# Download every inference weight into the studio-models volume at the pinned revisions (needs network once).
-param([switch]$MultiView)
+# Download the weights this machine needs (thin wrapper around scripts/prefetch.py).
+#   .\scripts\prefetch.ps1 image
+#   .\scripts\prefetch.ps1 pixal3d -MultiView
+param(
+  [Parameter(Position = 0)][ValidateSet("image", "pixal3d", "all")][string]$Role = "all",
+  [string]$Python = "python",
+  [switch]$MultiView
+)
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path $PSScriptRoot -Parent)
-$scripts = (Resolve-Path "scripts").Path
-docker run --rm -v studio-models:/models -v "${scripts}:/scripts:ro" -e HF_HOME=/models/hf python:3.11-slim bash -c "pip install -q 'huggingface_hub[hf_xet]==1.31.0' && python /scripts/prefetch_hf.py $(if ($MultiView) {'--mv'})"
-docker compose run --rm -e HF_HUB_OFFLINE=0 -e TRANSFORMERS_OFFLINE=0 pixal3d-worker python -m pixal3d_worker.prefetch $(if ($MultiView) {'--mv'})
+& $Python "scripts/prefetch.py" --role $Role $(if ($MultiView) { "--mv" })
+exit $LASTEXITCODE

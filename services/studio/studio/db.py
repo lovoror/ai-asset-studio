@@ -1,4 +1,5 @@
-"""Durable job state in SQLite (WAL). Shared by the API and the worker container through the /data volume."""
+"""Durable job state in SQLite (WAL). Shared by the API process and the orchestrator worker on the control
+machine through STUDIO_DATA_DIR; it is never shared across machines."""
 import json
 import sqlite3
 import threading
@@ -58,7 +59,7 @@ MIGRATIONS = [
 ]
 
 DEFAULT_SETTINGS = {
-    "auto_process": False,       # selected images start 3D generation immediately (else they are held for review)
+    "auto_process": True,        # selecting variations starts the 3D job at once; turn it off to park jobs for review
     "default_variations": 4,
     "default_image_model": "qwen-image-2512-lightning-8",
     "default_quality": "balanced",
@@ -67,6 +68,23 @@ DEFAULT_SETTINGS = {
     "default_texture_size": 2048,
     "style_edits": {},           # per style id: {label, style_clause, background, negative_extra, target_triangles, texture_size};
                                  # key "custom" is the user's own style. Sent as custom_style with jobs by the portal.
+    # Generation backends. "local" = the in-container diffusers / Pixal3D path (original behaviour);
+    # "comfyui" = a remote ComfyUI server reached by the proxy worker. resolve_settings() snapshots these
+    # into each job's settings["backend"] so a job stays reproducible after the user repoints them.
+    # NOTE: put_settings() silently drops any key that is not in this dict, so new settings MUST be added here.
+    "image_kind": "local",
+    "image_url": "",             # ComfyUI base URL, e.g. http://192.168.1.20:8188 (no trailing slash needed)
+    "image_workflow": "",        # API-format workflow filename under presets/workflows/
+    "three_d_kind": "local",
+    "three_d_url": "",
+    "three_d_workflow": "",
+    "trellis2": True,            # value written into the branch-switch node: true = TRELLIS.2, false = Pixal3D
+    "nodes": {},                 # 3D lane only: {branch, seed, resolution, decimate, texture, normal, image,
+                                 # output} -> ComfyUI node id, optionally "<id>:<input key>". See BackendNodes.
+    # Stage worker addresses, overriding config.toml [servers] ({image,pixal3d,blender} -> "local" or a URL).
+    # Read on every Runner construction, so a change applies to the next job; only starting/stopping the local
+    # worker processes needs a restart (scripts/serve.py decides that at boot).
+    "worker_endpoints": {},
 }
 
 

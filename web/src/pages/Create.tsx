@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Dice5, Sparkles, ChevronDown, ChevronUp, Wand2, PenLine } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { AlertTriangle, Dice5, Sparkles, ChevronDown, ChevronUp, Wand2, PenLine } from "lucide-react";
 import { api, Example, ImageModel, StyleEditRecord } from "../api";
+import { useReadiness } from "../hooks";
+import { useFmt, useGate, useT } from "../i18n";
 import { useStore } from "../store";
+import { Spinner } from "../components/ui";
 
 interface StyleInfo {
   label: string; description?: string; best_for?: string; style_clause?: string; background?: string; negative_extra?: string;
@@ -13,6 +16,8 @@ interface StyleEdit { label: string; style_clause: string; background: string; n
 // Every style is editable: the editor is prefilled from the preset and edits are saved per style in the app's settings
 // table (SQLite), so they survive browser resets and are shared with the API/CLI. localStorage is only a fallback.
 const EDITS_KEY = "as-style-edits";
+// The custom style's starting label is stored data (it goes into the settings table), so it is deliberately not
+// translated here; the editor's placeholder shows the localised suggestion instead.
 const CUSTOM_BASE: StyleEdit = { label: "My style", style_clause: "", background: "plain flat light grey studio background", negative_extra: "", target_triangles: "30000", texture_size: "2048" };
 function presetEdit(id: string, s?: StyleInfo): StyleEdit {
   if (id === "custom" || !s) return CUSTOM_BASE;
@@ -55,6 +60,11 @@ function sameEdit(a: StyleEdit, b: StyleEdit) {
 export default function Create() {
   const nav = useNavigate();
   const { settings, saveSettings, toast } = useStore();
+  const t = useT();
+  const { dur } = useFmt();
+  const gate = useGate();
+  const { readiness } = useReadiness();
+  const blocked = !!readiness && !readiness.create_image.ready;
   const [examples, setExamples] = useState<Example[]>([]);
   const [styles, setStyles] = useState<Record<string, StyleInfo>>({});
   const [models, setModels] = useState<ImageModel[]>([]);
@@ -89,7 +99,7 @@ export default function Create() {
       for (const [id, e] of Object.entries(next)) {
         if (id === "custom" ? e.style_clause.trim() : !sameEdit(e, presetEdit(id, styles[id]))) clean[id] = e;
       }
-      saveSettings({ style_edits: toRecords(clean) }).catch((err: any) => toast("Could not save style edits: " + (err.message || err), true));
+      saveSettings({ style_edits: toRecords(clean) }).catch((err: any) => toast(t("create.errSaveEdits", { msg: err.message || err }), true));
     }, 600);
   };
   const setEdit = (patch: Partial<StyleEdit>) => persist({ ...edits, [style]: { ...curEdit, ...patch } });
@@ -119,16 +129,12 @@ export default function Create() {
   };
   const surprise = () => examples.length && apply(examples[Math.floor(Math.random() * examples.length)]);
   const cur = models.find((m) => m.id === model);
-  const est = useMemo(() => {
-    const per = cur?.est_s ?? 290;
-    const s = variations * per + (cur?.family === "qwen" ? 40 : 20); // + one-time model load
-    return s < 120 ? `${Math.round(s)} s` : `${Math.round(s / 60)} min`;
-  }, [variations, cur]);
+  const estSeconds = variations * (cur?.est_s ?? 290) + (cur?.family === "qwen" ? 40 : 20); // + one-time model load
 
   const submit = async () => {
-    if (prompt.trim().length < 3) return toast("Describe the object first", true);
-    if (style === "custom" && curEdit.style_clause.trim().length < 10) return toast("Describe your custom style first (at least a short sentence)", true);
-    if (edited && curEdit.style_clause.trim().length < 10) return toast("The style description is too short", true);
+    if (prompt.trim().length < 3) return toast(t("create.errPrompt"), true);
+    if (style === "custom" && curEdit.style_clause.trim().length < 10) return toast(t("create.errCustomStyle"), true);
+    if (edited && curEdit.style_clause.trim().length < 10) return toast(t("create.errStyleShort"), true);
     setBusy(true);
     try {
       const body: Record<string, unknown> = { prompt: prompt.trim(), style, variations, model, title: title || undefined };
@@ -158,128 +164,146 @@ export default function Create() {
     <>
       <div className="page-head">
         <div>
-          <h1>Create</h1>
-          <p>Describe one object. You'll get {variations} image variation{variations > 1 ? "s" : ""} to choose from before anything is built in 3D.</p>
+          <h1>{t("create.title")}</h1>
+          <p>{t("create.subtitle", { n: variations })}</p>
         </div>
       </div>
-      <div className="grid" style={{ gridTemplateColumns: "minmax(0, 2fr) minmax(280px, 1fr)", alignItems: "start" }}>
-        <div className="card pad stack" style={{ gap: 16 }}>
+      <div className="split create">
+        <div className="card pad stack loose">
           <div className="field">
-            <label>Prompt</label>
+            <label>{t("create.prompt")}</label>
             <textarea
               className="input"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Stylized industrial water pump station for a mobile factory game, chunky readable silhouette, painted teal metal, copper pipes, small concrete foundation"
+              placeholder={t("create.promptPlaceholder")}
               onKeyDown={(e) => (e.ctrlKey || e.metaKey) && e.key === "Enter" && submit()}
             />
-            <div className="small faint">Single object, no text or lettering (models garble it). The pipeline adds framing, lighting and background rules for you. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to generate.</div>
+            <div className="hint">{t("create.promptHint", { kbd: "Ctrl+Enter" })}</div>
           </div>
+
           <div className="field">
-            <label>Examples</label>
+            <label>{t("create.examples")}</label>
             <div className="examples">
-              <button onClick={surprise} title="Random example"><Dice5 size={14} style={{ verticalAlign: -2 }} /> Surprise me</button>
+              <button onClick={surprise} title={t("create.surpriseTitle")}><Dice5 size={14} /> {t("create.surprise")}</button>
               {examples.map((ex) => <button key={ex.id} onClick={() => apply(ex)}>{ex.title}</button>)}
             </div>
           </div>
+
           <div className="field">
-            <label>Image model</label>
+            <label>{t("create.imageModel")}</label>
             <div className="styles">
               {models.map((m) => (
                 <button key={m.id} className={"style-card" + (model === m.id ? " active" : "")} disabled={m.available === false}
                         onClick={() => setModel(m.id)} title={m.available === false ? m.reason : m.description}>
-                  <b>{m.label} <span className={"chip " + (m.tier === "fast" ? "accent" : "")} style={{ marginLeft: 4 }}>{m.tier === "fast" ? "fast" : "quality"}</span></b>
-                  <span>{m.est_s < 60 ? `~${m.est_s} s` : `~${Math.round(m.est_s / 60)} min`} / image · {m.params?.steps} steps · {m.params?.width}px{m.available === false ? " · unavailable" : ""}</span>
+                  <b>{m.label} <span className={"chip " + (m.tier === "fast" ? "accent" : "")}>{m.tier === "fast" ? t("create.fast") : t("create.quality")}</span></b>
+                  <span>{t("create.modelMeta", { time: m.est_s < 60 ? `~${m.est_s} s` : `~${Math.round(m.est_s / 60)} min`, steps: m.params?.steps, w: m.params?.width })}{m.available === false ? t("settings.unavailableSuffix") : ""}</span>
                 </button>
               ))}
             </div>
-            {cur && <div className="small faint">{cur.description}</div>}
+            {cur && <div className="hint">{cur.description}</div>}
           </div>
+
           <div className="field">
-            <label>Style</label>
+            <label>{t("create.style")}</label>
             <div className="styles">
               {Object.entries(styles).map(([id, s]) => {
                 const e = edits[id];
                 const isEdited = !!e && !sameEdit(e, presetEdit(id, s));
                 return (
                   <button key={id} className={"style-card" + (style === id ? " active" : "")} onClick={() => setStyle(id)} title={s.best_for}>
-                    <b>{isEdited ? e.label || s.label : s.label || id}{isEdited && <span className="chip accent" style={{ marginLeft: 6 }}>edited</span>}</b>
+                    <b>{isEdited ? e.label || s.label : s.label || id}{isEdited && <span className="chip accent">{t("create.edited")}</span>}</b>
                     <span>{isEdited ? e.style_clause.slice(0, 110) + (e.style_clause.length > 110 ? "…" : "") : s.description}</span>
                     {s.optimize_defaults && (
-                      <span className="budget">{Number(isEdited ? e.target_triangles : s.optimize_defaults.target_triangles).toLocaleString()} tris · {isEdited ? e.texture_size : s.optimize_defaults.texture_size} px default</span>
+                      <span className="budget">{t("create.budget", { tris: Number(isEdited ? e.target_triangles : s.optimize_defaults.target_triangles).toLocaleString(), tex: isEdited ? e.texture_size : s.optimize_defaults.texture_size })}</span>
                     )}
                   </button>
                 );
               })}
-              <button className={"style-card custom" + (style === "custom" ? " active" : "")} onClick={() => { setStyle("custom"); setEditing(true); }} title="Write your own style">
-                <b><PenLine size={14} style={{ verticalAlign: -2, marginRight: 6 }} />{edits.custom?.style_clause?.trim() ? edits.custom.label || "Custom" : "Custom"}</b>
-                <span>{edits.custom?.style_clause?.trim() ? edits.custom.style_clause.slice(0, 110) + (edits.custom.style_clause.length > 110 ? "…" : "") : "Describe the look yourself. Saved with your settings."}</span>
-                <span className="budget">{Number(edits.custom?.target_triangles || 30000).toLocaleString()} tris · {edits.custom?.texture_size || 2048} px default</span>
+              <button className={"style-card custom" + (style === "custom" ? " active" : "")} onClick={() => { setStyle("custom"); setEditing(true); }} title={t("create.customHint")}>
+                <b><PenLine size={14} />{edits.custom?.style_clause?.trim() ? edits.custom.label || t("create.custom") : t("create.custom")}</b>
+                <span>{edits.custom?.style_clause?.trim() ? edits.custom.style_clause.slice(0, 110) + (edits.custom.style_clause.length > 110 ? "…" : "") : t("create.customHint")}</span>
+                <span className="budget">{t("create.budget", { tris: Number(edits.custom?.target_triangles || 30000).toLocaleString(), tex: edits.custom?.texture_size || 2048 })}</span>
               </button>
             </div>
-            <div className="row" style={{ gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              {style !== "custom" && styles[style]?.best_for && <div className="small faint">Good for: {styles[style].best_for}</div>}
-              <button className="btn ghost sm" onClick={() => setEditing(!editing)}>
-                <PenLine size={13} /> {editing ? "Hide editor" : edited ? "Edit this style (edited)" : "Edit this style"}
-              </button>
-              {edited && style !== "custom" && <button className="btn ghost sm" onClick={resetEdit}>Reset to preset</button>}
+            <div className="row tight">
+              {style !== "custom" && styles[style]?.best_for && <div className="hint">{t("create.goodFor", { v: styles[style].best_for })}</div>}
+              <div className="row tight" style={{ marginLeft: "auto" }}>
+                <button className="btn ghost sm" onClick={() => setEditing(!editing)}>
+                  <PenLine size={13} /> {editing ? t("create.hideEditor") : edited ? t("create.editThisStyleEdited") : t("create.editThisStyle")}
+                </button>
+                {edited && style !== "custom" && <button className="btn ghost sm" onClick={resetEdit}>{t("create.resetToPreset")}</button>}
+              </div>
             </div>
             {(editing || style === "custom") && (
-              <div className="card pad stack custom-style" style={{ gap: 12 }}>
-                <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                  <div className="field"><label>Style name</label><input className="input" value={curEdit.label} maxLength={40} onChange={(e) => setEdit({ label: e.target.value })} placeholder="My style" /></div>
-                  <div className="field"><label>Background</label><input className="input" value={curEdit.background} maxLength={120} onChange={(e) => setEdit({ background: e.target.value })} placeholder="plain flat light grey studio background" /></div>
+              <div className="card pad custom-style stack">
+                <div className="grid cols-2">
+                  <div className="field"><label>{t("create.styleName")}</label><input className="input" value={curEdit.label} maxLength={40} onChange={(e) => setEdit({ label: e.target.value })} placeholder={t("create.myStyle")} /></div>
+                  <div className="field"><label>{t("create.background")}</label><input className="input" value={curEdit.background} maxLength={120} onChange={(e) => setEdit({ background: e.target.value })} placeholder={t("create.backgroundPlaceholder")} /></div>
                 </div>
                 <div className="field">
-                  <label>How it should look</label>
+                  <label>{t("create.howItLooks")}</label>
                   <textarea className="input" value={curEdit.style_clause} maxLength={600} onChange={(e) => setEdit({ style_clause: e.target.value })}
-                    placeholder="e.g. chunky voxel-style game asset, blocky cubic forms, flat solid colours with slight shading, no rounded edges, readable silhouette" />
-                  <div className="small faint">This sentence goes into the image prompt as the style. Keep it about the look, not the object; framing, lighting and the no-text rule are added automatically. Edits are saved in the app's settings.</div>
+                    placeholder={t("create.howItLooksPlaceholder")} />
+                  <div className="hint">{t("create.howItLooksHint")}</div>
                 </div>
-                <div className="grid" style={{ gridTemplateColumns: "2fr 1fr 1fr", gap: 12 }}>
-                  <div className="field"><label>Keep out</label><input className="input" value={curEdit.negative_extra} maxLength={300} onChange={(e) => setEdit({ negative_extra: e.target.value })} placeholder="e.g. photorealistic grime, tiny greebles" /></div>
-                  <div className="field"><label>Triangle budget</label><input className="input" value={curEdit.target_triangles} inputMode="numeric" onChange={(e) => setEdit({ target_triangles: e.target.value.replace(/\D/g, "") })} placeholder="30000" /></div>
-                  <div className="field"><label>Texture</label>
+                <div className="grid" style={{ gridTemplateColumns: "2fr 1fr 1fr" }}>
+                  <div className="field"><label>{t("create.keepOut")}</label><input className="input" value={curEdit.negative_extra} maxLength={300} onChange={(e) => setEdit({ negative_extra: e.target.value })} placeholder={t("create.keepOutPlaceholder")} /></div>
+                  <div className="field"><label>{t("create.triangleBudget")}</label><input className="input num" value={curEdit.target_triangles} inputMode="numeric" onChange={(e) => setEdit({ target_triangles: e.target.value.replace(/\D/g, "") })} placeholder="30000" /></div>
+                  <div className="field"><label>{t("create.texture")}</label>
                     <select className="input" value={curEdit.texture_size} onChange={(e) => setEdit({ texture_size: e.target.value })}>
-                      {[512, 1024, 2048, 4096].map((t) => <option key={t} value={String(t)}>{t} px</option>)}
+                      {[512, 1024, 2048, 4096].map((n) => <option key={n} value={String(n)}>{t("common.px", { n })}</option>)}
                     </select>
                   </div>
                 </div>
               </div>
             )}
           </div>
-          <button className="btn ghost sm" onClick={() => setAdvanced(!advanced)} style={{ alignSelf: "flex-start" }}>
-            {advanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />} Advanced
-          </button>
-          {advanced && (
-            <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <div className="field"><label>Materials</label><input className="input" value={materials} onChange={(e) => setMaterials(e.target.value)} placeholder="painted metal, brushed copper" /></div>
-              <div className="field"><label>Palette (comma separated)</label><input className="input" value={palette} onChange={(e) => setPalette(e.target.value)} placeholder="teal, copper, warm grey" /></div>
-              <div className="field"><label>Avoid</label><input className="input" value={negative} onChange={(e) => setNegative(e.target.value)} placeholder="extra things to keep out of the image" /></div>
-              <div className="field"><label>Approx. height (m)</label><input className="input" value={height} onChange={(e) => setHeight(e.target.value)} placeholder="2.0" inputMode="decimal" /></div>
-              <div className="field"><label>Seed (blank = random)</label><input className="input" value={seed} onChange={(e) => setSeed(e.target.value.replace(/\D/g, ""))} placeholder="random" /></div>
-              <div className="field"><label>Title</label><input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Shown in the library" /></div>
-            </div>
-          )}
+
+          <div>
+            <button className="btn ghost sm" onClick={() => setAdvanced(!advanced)}>
+              {advanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {t("create.advanced")}
+            </button>
+            {advanced && (
+              <div className="grid cols-2" style={{ marginTop: 12 }}>
+                <div className="field"><label>{t("create.materials")}</label><input className="input" value={materials} onChange={(e) => setMaterials(e.target.value)} placeholder={t("create.materialsPlaceholder")} /></div>
+                <div className="field"><label>{t("create.palette")}</label><input className="input" value={palette} onChange={(e) => setPalette(e.target.value)} placeholder={t("create.palettePlaceholder")} /></div>
+                <div className="field"><label>{t("create.avoid")}</label><input className="input" value={negative} onChange={(e) => setNegative(e.target.value)} placeholder={t("create.avoidPlaceholder")} /></div>
+                <div className="field"><label>{t("create.height")}</label><input className="input num" value={height} onChange={(e) => setHeight(e.target.value)} placeholder="2.0" inputMode="decimal" /></div>
+                <div className="field"><label>{t("create.seed")}</label><input className="input num" value={seed} onChange={(e) => setSeed(e.target.value.replace(/\D/g, ""))} placeholder={t("create.seedPlaceholder")} /></div>
+                <div className="field"><label>{t("create.titleField")}</label><input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("create.titlePlaceholder")} /></div>
+              </div>
+            )}
+          </div>
         </div>
-        <div className="card pad stack" style={{ gap: 14, position: "sticky", top: 24 }}>
+
+        <div className="card pad stack sticky-col">
           <div className="field">
-            <label>Variations</label>
-            <div className="row" style={{ gap: 6 }}>
+            <label>{t("create.variationsLabel")}</label>
+            <div className="segmented">
               {[1, 2, 3, 4, 6, 8].map((n) => (
-                <button key={n} className={"btn sm" + (variations === n ? " primary" : "")} onClick={() => setVariations(n)}>{n}</button>
+                <button key={n} className={variations === n ? "active" : ""} onClick={() => setVariations(n)}>{n}</button>
               ))}
             </div>
-            <div className="small muted">≈ {est} on the GPU with {cur?.label || "the selected model"}. Pick your favourites afterwards.</div>
+            <div className="hint">{t("create.variationsHint", { est: dur(estSeconds), model: cur?.label || t("create.imageModel") })}</div>
           </div>
           <div className="sep" />
-          <div className="small muted stack" style={{ gap: 4 }}>
-            <div><Wand2 size={13} style={{ verticalAlign: -2 }} /> Each variation uses a different seed.</div>
-            <div>Framing checks flag clipping or busy backgrounds as hints; you decide.</div>
-            <div>Nothing is turned into 3D until you select an image.</div>
+          {blocked && (
+            <div className="callout danger">
+              <div className="callout-title"><AlertTriangle size={14} /> {t("gate.blockedTitle")}</div>
+              <ul>
+                {gate(readiness.create_image.problems).map((s, i) => <li key={i}>{s}</li>)}
+              </ul>
+              <Link className="link small" to="/settings">{t("settings.backends")} →</Link>
+            </div>
+          )}
+          <div className="stack tight small muted">
+            <div><Wand2 size={13} style={{ verticalAlign: -2 }} /> {t("create.tipSeed")}</div>
+            <div>{t("create.tipFraming")}</div>
+            <div>{t("create.tipNo3d")}</div>
           </div>
-          <button className="btn primary" style={{ justifyContent: "center", padding: "11px 14px" }} disabled={busy} onClick={submit}>
-            <Sparkles size={16} /> {busy ? "Submitting…" : "Generate variations"}
+          <button className="btn primary lg block" disabled={busy || blocked} onClick={submit}>
+            {busy ? <Spinner /> : <Sparkles size={16} />} {busy ? t("common.submitting") : t("create.generate")}
           </button>
         </div>
       </div>

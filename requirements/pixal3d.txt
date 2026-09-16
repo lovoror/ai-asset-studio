@@ -1,0 +1,50 @@
+# 3D server: Pixal3D (TRELLIS.2 backbone) image-to-3D.
+#
+# Unlike the other roles this one is NOT a plain pip install. The CUDA extensions have to be compiled for this
+# machine's GPU (sm_120 on an RTX 50-series), so the environment must already provide:
+#
+#   * CUDA 12.8 toolkit + nvcc
+#   * torch 2.11.0+cu128 and torchvision 0.26.0
+#   * flash-attn 2.8.3
+#   * nvdiffrast 0.4.0, CuMesh, FlexGEMM, o-voxel  (TRELLIS.2's rendering/mesh/voxel backends)
+#   * NATTEN 0.21.0 built with NATTEN_CUDA_ARCH=12.0
+#
+# Build that base once by following TRELLIS.2's own installation instructions, then run this file to add the
+# Pixal3D side. `scripts/bootstrap.py --role pixal3d` checks these are importable and tells you what is missing.
+#
+#   git clone https://github.com/TencentARC/Pixal3D.git <somewhere>   # pinned commit f7cf384
+#   set STUDIO_PIXAL3D_LOCAL=<somewhere>
+#
+# NATTEN is the long pole (it compiles cutlass); build it first, on its own:
+#   set NATTEN_CUDA_ARCH=12.0
+#   python -m pip install cmake==4.1.0 && python -m pip install natten==0.21.0 --no-build-isolation
+natten==0.21.0
+
+# Pixal3D requirements (upstream requirements.txt minus gradio/MoGe, which are pinned explicitly below)
+pillow==12.0.0
+imageio==2.37.2
+imageio-ffmpeg==0.6.0
+tqdm==4.67.1
+easydict==1.13
+opencv-python-headless==4.12.0.88
+trimesh==4.10.1
+transformers==4.57.3
+zstandard==0.25.0
+kornia==0.8.2
+timm==1.0.22
+diffusers==0.37.1
+accelerate==1.13.0
+plyfile==1.1.3
+einops
+psutil
+click
+scipy
+matplotlib
+
+# MoGe-2 (camera estimation) and its pinned git dependencies. Installed with --no-deps so the compiled
+# FlexGEMM from the base environment is not replaced by a pip wheel.
+#   python -m pip install --no-deps "git+https://github.com/EasternJournalist/utils3d-moge.git@62f09d58"
+#   python -m pip install --no-deps "git+https://github.com/EasternJournalist/pipeline.git@1c511390"
+#   python -m pip install --no-deps "git+https://github.com/microsoft/MoGe.git@74fbce05"
+# utils3d 0.0.2 wheel specified by Pixal3D:
+#   python -m pip install https://github.com/LDYang694/Storages/releases/download/20260430/utils3d-0.0.2-py3-none-any.whl

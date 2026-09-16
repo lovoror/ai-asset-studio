@@ -1,0 +1,20 @@
+# 2D server: reference images with diffusers (Qwen-Image-2512 / FLUX.2 Klein / Z-Image Turbo).
+# Install the CUDA build of torch first, matching this machine's driver, then the rest:
+#   python -m pip install -r requirements/image.txt
+#   (torch 2.11.0+cu128 is what the pipeline is tuned for; see the --extra-index-url below)
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.11.0
+torchvision==0.26.0
+diffusers==0.40.0
+transformers==5.17.0
+accelerate==1.15.0
+safetensors
+huggingface_hub[hf_xet]
+peft
+pillow==12.0.0
+numpy
+scipy
+sentencepiece
+protobuf
+psutil
+PyYAML

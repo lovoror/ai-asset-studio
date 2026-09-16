@@ -16,6 +16,8 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
+import worker_paths
+
 PINS = {
     "TencentARC/Pixal3D": "b0cb2e1b794cab9aa0ac38a95d794a4d9337437f",
     "Ruicheng/moge-2-vitl": "39c4d5e957afe587e04eec59dc2bcc3be5ecd968",
@@ -30,13 +32,13 @@ NAF_WEIGHTS_SHA256 = None  # filled into the dependency manifest after first dow
 
 def pin_ref_main(repo: str, sha: str):
     """Make `from_pretrained(repo)` (revision 'main') resolve offline to the pinned snapshot."""
-    root = Path(os.environ.get("HF_HOME", "/models/hf")) / "hub" / ("models--" + repo.replace("/", "--")) / "refs"
+    root = worker_paths.hub_dir() / ("models--" + repo.replace("/", "--")) / "refs"
     root.mkdir(parents=True, exist_ok=True)
     (root / "main").write_text(sha)
 
 
 def torch_hub_dir() -> Path:
-    return Path(os.environ.get("TORCH_HOME", "/models/torch")) / "hub"
+    return worker_paths.torch_home() / "hub"
 
 
 def prefetch(mv: bool):

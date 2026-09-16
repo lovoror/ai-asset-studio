@@ -1,4 +1,6 @@
 .env
+config.toml
+.venv*/
 __pycache__/
 *.pyc
 samples/_*
@@ -9,3 +11,14 @@ tools/package-lock.json
 samples/*/master.glb
 web/node_modules/
 web/dist/
+
+# runtime state and scratch (jobs, SQLite database, worker transfer directories)
+var/
+
+# local end-to-end scratch (studio.api run outside docker)
+.e2e/
+.pytest-tmp/
+
+# pytest scratch (the documented --basetemp) and tsc incremental build info
+tests/.tmp/
+*.tsbuildinfo

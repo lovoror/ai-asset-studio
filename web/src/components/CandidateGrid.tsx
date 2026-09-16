@@ -1,5 +1,6 @@
 import { Check, Box } from "lucide-react";
 import { Candidate, Job, withToken } from "../api";
+import { useFmt, useT } from "../i18n";
 
 interface Props {
   job: Job;
@@ -11,6 +12,8 @@ interface Props {
 
 /** Variations grid: placeholders while generating, selectable cards when ready, badges for ones already turned into 3D. */
 export default function CandidateGrid({ job, selected, onToggle, expected, onOpen }: Props) {
+  const t = useT();
+  const { status: statusText } = useFmt();
   const cands = job.candidates || [];
   const made = new Map<string, Job>();
   (job.children || []).forEach((c) => c.candidate && made.set(c.candidate, c));
@@ -27,6 +30,7 @@ export default function CandidateGrid({ job, selected, onToggle, expected, onOpe
             className={"cand" + (sel ? " selected" : "")}
             role="checkbox"
             aria-checked={sel}
+            aria-label={t("cand.variation", { n: c.file.replace(".png", "").replace("cand_", "") })}
             tabIndex={0}
             onClick={() => !c.partial && onToggle(c.file)}
             onKeyDown={(e) => {
@@ -40,15 +44,15 @@ export default function CandidateGrid({ job, selected, onToggle, expected, onOpe
             <img src={withToken(c.thumb || c.url)} alt={c.file} loading="lazy" />
             <span className="check">{sel && <Check size={16} />}</span>
             {child && (
-              <span className={"chip made " + (child.status === "completed" ? "ok" : child.status === "failed" ? "danger" : "info")}>
-                <Box size={12} /> {child.status === "completed" ? "3D ready" : child.status === "held" ? "in review" : child.status}
+              <span className={"chip sm made " + (child.status === "completed" ? "ok" : child.status === "failed" ? "danger" : "info")}>
+                <Box size={12} /> {child.status === "completed" ? t("cand.ready") : child.status === "held" ? t("cand.inReview") : statusText(child.status)}
               </span>
             )}
             <div className="meta">
-              <span>{c.file.replace(".png", "").replace("cand_", "variation ")}{c.seed != null ? ` · seed ${c.seed}` : ""}</span>
+              <span>{t("cand.variation", { n: c.file.replace(".png", "").replace("cand_", "") })}{c.seed != null ? t("cand.seed", { n: c.seed }) : ""}</span>
               {c.score != null && (
-                <span className={"chip " + (c.score >= 0.8 ? "ok" : c.score >= 0.5 ? "warn" : "danger")} title={Array.isArray(c.reasons) ? c.reasons.join("; ") : String(c.reasons || "framing checks passed")}>
-                  framing {Math.round(c.score * 100)}%
+                <span className={"chip " + (c.score >= 0.8 ? "ok" : c.score >= 0.5 ? "warn" : "danger")} title={Array.isArray(c.reasons) ? c.reasons.join("; ") : String(c.reasons || t("cand.framingPassed"))}>
+                  {t("cand.framing", { n: Math.round(c.score * 100) })}
                 </span>
               )}
             </div>
@@ -59,9 +63,9 @@ export default function CandidateGrid({ job, selected, onToggle, expected, onOpe
         Array.from({ length: placeholders }).map((_, i) => (
           <div key={"ph" + i} className="cand" style={{ cursor: "default" }}>
             <div className="ph skeleton" style={{ borderRadius: 0 }}>
-              <span className="small">{cands.length + i === cands.length ? "generating…" : "queued"}</span>
+              <span className="small">{cands.length + i === cands.length ? t("cand.generating") : t("cand.queued")}</span>
             </div>
-            <div className="meta"><span>variation {cands.length + i}</span></div>
+            <div className="meta"><span>{t("cand.variation", { n: cands.length + i })}</span></div>
           </div>
         ))}
     </div>

@@ -1,0 +1,27 @@
+# Blender post-processing worker (CPU only).
+#
+# Python version: bpy ships ONE interpreter tag per release and there is no cp312 build at all.
+#   bpy 4.5.x / 5.0.x -> cp311        (this project is written against 4.5 LTS: use Python 3.11)
+#   bpy 5.1.x / 5.2.x -> cp313
+# So the Blender worker usually cannot share the control plane's interpreter. Provision one without touching the
+# system python (uv is a single binary, no admin needed):
+#
+#   uv python install 3.11
+#   uv venv --python 3.11 .venv-blender
+#   uv pip install --python .venv-blender/Scripts/python.exe -r requirements/blender.txt   # Windows
+#   uv pip install --python .venv-blender/bin/python          -r requirements/blender.txt   # macOS/Linux
+#
+# then tell asset-studio to use it (config.toml):
+#
+#   [python]
+#   blender = ".venv-blender/Scripts/python.exe"    # Windows; .venv-blender/bin/python on macOS/Linux
+#
+# numpy is pinned below 2: bpy 4.5 expects the 1.x ABI, and the validated environment this project was measured
+# on used numpy 1.26.4.
+bpy==4.5.13
+numpy==1.26.4
+pillow
+trimesh==4.10.1
+pygltflib
+fast-simplification==0.2.0
+meshoptimizer==0.2.30a0

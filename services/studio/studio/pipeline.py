@@ -1,8 +1,9 @@
 """Job pipeline: text -> reference image -> Pixal3D master GLB -> Blender optimisation/previews -> validation -> manifest.
 
-Every stage writes its outputs into /jobs/<id>/stages/<stage>/ and finishes by atomically writing result.json.
-A stage whose result.json exists with status "ok" is reused on restart (resume). Stage subprocesses run in their
-own worker containers through the stage runners, so CUDA memory is released when each stage process exits.
+Every stage writes its outputs into <jobs>/<id>/stages/<stage>/ and finishes by atomically writing result.json.
+A stage whose result.json exists with status "ok" is reused on restart (resume). Stage subprocesses run on the
+worker servers through the stage runners, so CUDA memory is released when each stage process exits; the control
+plane ships each stage's inputs out and its outputs back (see runner_client.py).
 """
 from __future__ import annotations
 
@@ -15,7 +16,7 @@ import time
 from pathlib import Path
 
 from . import config
-from .presets import load_presets
+from .presets import backend_config, load_presets
 from .promptbuilder import build_reference_prompt
 from .runner_client import Runner, StageCancelled, StageFailed
 from .validate import validate_glb
@@ -106,8 +107,22 @@ class JobRun:
         atomic_write_json(self.dir / "request.json", self.request)
         self.runners = {k: Runner(k) for k in ("image", "pixal3d", "blender")}
         self.lane = "image" if job.get("kind") == "image" else "asset"
+        # Which server generates what. resolve_settings snapshots this into the job so a re-run keeps using the
+        # backend the job was created with (same reason style_def is a copy); jobs created before the fields
+        # existed have no snapshot and fall back to the live settings table.
+        self.backend = self.settings.get("backend") or backend_config(self.store.get_settings())
 
     # ---- helpers -----------------------------------------------------------
+    def remote(self, lane: str) -> dict | None:
+        """The lane's backend config when it points at a remote ComfyUI server, else None.
+
+        `lane` is "image" or "three_d". Remote lanes run a different module in the runner, carry their config in
+        request.json (the runner's env is empty - see runner_client.Runner.run), and cannot use the local-only
+        rungs of the OOM fallback ladder.
+        """
+        b = self.backend.get(lane) or {}
+        return b if b.get("kind") == "comfyui" else None
+
     def log(self, msg: str, level: str = "info"):
         self.store.event(self.id, level, msg)
 
@@ -170,6 +185,15 @@ class JobRun:
             if fb.get("quality_loss") and not self.settings.get("allow_quality_fallback", True):
                 self.warn(f"OOM in {stage_key}: fallback {fb['set']} would reduce quality and allow_quality_fallback=false")
                 continue
+            # A rung marked local_only tunes something only the in-container backend reads (gpu_resident_blocks,
+            # max_num_tokens, low_vram, attn_backend). Re-running the whole stage on a remote ComfyUI server with
+            # those changed would burn a full generation and change nothing, so drop the rung instead. Marking it
+            # applied keeps the warning to one line rather than one per retry.
+            if fb.get("local_only") and self.remote("image" if stage_key == "reference" else "three_d"):
+                applied.append(i)
+                self.warn(f"OOM in {stage_key}: skipping fallback {fb['set']} - those settings are read only by the "
+                          f"local backend and this stage is running on a remote ComfyUI server")
+                continue
             target = self.settings[stage_key]
             before = {k: target.get(k) for k in fb["set"]}
             target.setdefault("_requested", {}).update({k: v for k, v in before.items() if k not in target.get("_requested", {})})
@@ -180,7 +204,8 @@ class JobRun:
             return True
         return False
 
-    def _run_gpu_stage(self, runner_name: str, stage: str, cmd: list[str], log_path: Path, fallback_keys: list[str]):
+    def _run_gpu_stage(self, runner_name: str, stage: str, module: str, stage_dir: Path, log_path: Path,
+                       fallback_keys: list[str]):
         """Run a GPU stage. No VRAM thresholds: the stage starts right away (other lanes and other apps share the card).
         On CUDA OOM: (1) if the other lane is in a GPU stage, wait for it to finish and retry with the same settings,
         (2) otherwise retry once after a short pause (another app may release memory), (3) then apply the preset's
@@ -197,7 +222,9 @@ class JobRun:
                 f.write(f"\n===== attempt {attempts} at {time.strftime('%Y-%m-%d %H:%M:%S')} =====\n")
             LANES.enter(lane, stage)
             try:
-                return r.run(cmd, str(log_path), should_cancel=self.cancelled, run_file=str(run_file), log=self.log)
+                return r.run_stage(job_id=self.id, stage=stage, module=module, request_path=stage_dir / "request.json",
+                                   stage_dir=stage_dir, log_path=log_path, should_cancel=self.cancelled,
+                                   run_file=str(run_file), log=self.log)
             except StageCancelled:
                 raise JobCancelled()
             except StageFailed as e:
@@ -271,7 +298,10 @@ class JobRun:
             "lightning_lora": ref.get("lightning_lora"), "config_repo": ref.get("config_repo"), "config_revision": ref.get("config_revision"),
             "transformer_file": ref.get("transformer_file"), "text_encoder_file": ref.get("text_encoder_file"),
             "seeds": [(self.settings["seed"] + i) % (2**31 - 1) for i in range(ref["candidates"])],
-            "out_dir": str(d), "evaluator_url": os.environ.get("STUDIO_VISION_EVALUATOR_URL", ""),
+            "out_dir": str(d), "evaluator_url": config.VISION_EVALUATOR_URL,
+            # The runner spawns this stage with an empty env (runner_client passes env=None -> {}), so per-job
+            # configuration has to travel in the request rather than the environment. Ignored by the local worker.
+            "backend": self.backend.get("image") or {"kind": "local"},
         }
         for k, v in ref.items():  # every registry parameter of the chosen model reaches the worker (distilled, sequential, ...)
             req.setdefault(k, v)
@@ -279,8 +309,8 @@ class JobRun:
         log_path = d / "log.txt"
         self.log(f"generating {ref['candidates']} reference candidate(s) with {ref.get('model', 'qwen-image-2512')} ({ref['steps']} steps)")
         # the request may be re-written by fallbacks; the worker re-reads it on each attempt
-        run = self._run_gpu_stage("image", name, ["python", "-m", "image_worker.generate", "--request", str(d / "request.json")],
-                                  log_path, ["reference"])
+        module = "comfy_worker.image_generate" if self.remote("image") else "image_worker.generate"
+        run = self._run_gpu_stage("image", name, module, d, log_path, ["reference"])
         out = json.loads((d / "output.json").read_text(encoding="utf-8"))
         cands = self.art / "reference_candidates"
         cands.mkdir(exist_ok=True)
@@ -376,14 +406,32 @@ class JobRun:
             "attn_backend": px.get("attn_backend", "flash_attn"),
             "export": {"decimation_target": master["decimation_target"], "texture_size": master["texture_size"],
                        "remesh": master["remesh"], "remesh_band": master["remesh_band"], "remesh_project": master["remesh_project"]},
-            "rembg_model": os.environ.get("STUDIO_REMBG_MODEL", "briaai/RMBG-2.0"),
+            "rembg_model": config.REMBG_MODEL,
+            # See stage_reference: the runner's env is empty, so per-job configuration travels in the request.
+            "backend": self.backend.get("three_d") or {"kind": "local"},
         }
+        remote3d = self.remote("three_d")
+        if remote3d:
+            # Validated here rather than at submission: the 3D backend is legitimately configured after the
+            # reference images already exist (generate variations, pick one, then make an asset).
+            for key, what in (("url", "server address"), ("workflow", "workflow file")):
+                if not remote3d.get(key):
+                    raise JobFailed(name, f"the ComfyUI 3D backend is selected but no {what} is configured "
+                                          f"(Settings -> Generation backends)")
+            if req["mode"] == "multiview":
+                raise JobFailed(name, "multiview input needs the local Pixal3D backend: the ComfyUI image-to-model "
+                                      "workflow takes a single reference image")
         atomic_write_json(d / "request.json", req)
         log_path = d / "log.txt"
-        self.log(f"Pixal3D {req['mode']} generation at {px['resolution']} (low_vram={px['low_vram']}), master export "
-                 f"{master['decimation_target']} tris / {master['texture_size']}px")
-        run = self._run_gpu_stage("pixal3d", name, ["python", "-m", "pixal3d_worker.generate", "--request", str(d / "request.json")],
-                                  log_path, ["pixal3d", "master"])
+        if remote3d:
+            self.log(f"ComfyUI 3D generation from {remote3d['url']} ({remote3d['workflow']}, "
+                     f"{'TRELLIS.2' if remote3d.get('trellis2', True) else 'Pixal3D'} branch), master export "
+                     f"{master['decimation_target']} tris / {master['texture_size']}px")
+        else:
+            self.log(f"Pixal3D {req['mode']} generation at {px['resolution']} (low_vram={px['low_vram']}), master export "
+                     f"{master['decimation_target']} tris / {master['texture_size']}px")
+        module = "comfy_worker.three_d_generate" if remote3d else "pixal3d_worker.generate"
+        run = self._run_gpu_stage("pixal3d", name, module, d, log_path, ["pixal3d", "master"])
         out = json.loads((d / "output.json").read_text(encoding="utf-8"))
         shutil.copy2(d / out["master_glb"], self.art / "master.glb")
         if out.get("preprocessed_png"):
@@ -411,8 +459,10 @@ class JobRun:
         self.log(f"Blender optimisation: {opt['target_triangles']} tris, {opt['texture_size']}px, lods={opt['generate_lods']}, "
                  f"collision={opt['generate_collision']}")
         try:
-            run = self.runners["blender"].run(["python", "-m", "blender.process_asset", "--request", str(d / "request.json")],
-                                              str(log_path), should_cancel=self.cancelled, run_file=str(log_path.with_name("run.json")), log=self.log)
+            run = self.runners["blender"].run_stage(
+                job_id=self.id, stage=name, module="blender.process_asset", request_path=d / "request.json",
+                stage_dir=d, log_path=log_path, should_cancel=self.cancelled,
+                run_file=str(log_path.with_name("run.json")), log=self.log)
         except StageCancelled:
             raise JobCancelled()
         except StageFailed as e:

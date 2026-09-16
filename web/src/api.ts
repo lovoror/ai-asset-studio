@@ -87,6 +87,39 @@ export interface Settings {
   default_target_triangles: number;
   default_texture_size: number;
   style_edits?: Record<string, StyleEditRecord>;
+  // generation backends (which engine each GPU stage uses)
+  image_kind: "local" | "comfyui";
+  image_url: string;
+  image_workflow: string;
+  three_d_kind: "local" | "comfyui";
+  three_d_url: string;
+  three_d_workflow: string;
+  trellis2: boolean;
+  nodes: Record<string, string>;
+  // stage worker addresses, overriding config.toml [servers]
+  worker_endpoints: Record<string, string>;
+}
+
+/** One reason new work cannot start, as returned by /v1/readiness and the 422 from a refused submission. */
+export interface GateProblem {
+  code: "worker_unreachable" | "backend_unreachable" | "backend_not_configured" | string;
+  role?: string;
+  lane?: string;
+  url?: string;
+  missing?: string;
+  detail?: string;
+}
+
+export interface GateState { ready: boolean; problems: GateProblem[] }
+
+export interface ProbeResult {
+  ok: boolean;
+  target: "worker" | "comfyui";
+  role?: string;
+  url?: string;
+  detail?: string;
+  elapsed_ms?: number;
+  cached?: boolean;
 }
 
 export interface StyleEditRecord {
@@ -103,6 +136,10 @@ export interface Example {
 }
 
 export const TOKEN_KEY = "as-token";
+export type Lang = "en" | "zh";
+/** Where the UI language is remembered. Owned here because api.ts is the shared leaf module (it imports
+    nothing itself), so both the store and i18n.ts can use it without an import cycle. */
+export const LANG_KEY = "as-lang";
 export const token = () => {
   try {
     return localStorage.getItem(TOKEN_KEY) || "";
@@ -146,6 +183,11 @@ export const api = {
   examples: () => req<{ items: Example[] }>("GET", "/v1/examples"),
   settings: () => req<Settings>("GET", "/v1/settings"),
   putSettings: (s: Partial<Settings>) => req<Settings>("PUT", "/v1/settings", s),
+  readiness: () => req<{ workers: Record<string, ProbeResult>; endpoints: Record<string, string>;
+                         backends: Record<string, ProbeResult>; create_image: GateState; create_asset: GateState }>(
+    "GET", "/v1/readiness"),
+  testBackend: (body: { target: "worker" | "comfyui"; role: string; url?: string; workflow?: string }) =>
+    req<ProbeResult>("POST", "/v1/backends/test", body),
   createImageJob: (body: Record<string, unknown>) => req<{ job_id: string; status: string }>("POST", "/v1/image-jobs", body),
   createAssetJob: (body: Record<string, unknown>) => req<{ job_id: string; status: string }>("POST", "/v1/asset-jobs", body),
   job: (id: string, events = 30) => req<Job>("GET", `/v1/jobs/${id}?events=${events}`),
@@ -170,28 +212,5 @@ export const api = {
   artifacts: (id: string) => req<{ artifacts: { name: string; bytes: number; url: string }[] }>("GET", `/v1/jobs/${id}/artifacts`),
 };
 
-export const fmtDuration = (s?: number | null) => {
-  if (s == null) return "–";
-  if (s < 90) return `${Math.round(s)} s`;
-  const m = Math.floor(s / 60);
-  return `${m} min ${Math.round(s - m * 60)} s`;
-};
-export const fmtAgo = (ts: number) => {
-  const d = Date.now() / 1000 - ts;
-  if (d < 60) return "just now";
-  if (d < 3600) return `${Math.floor(d / 60)} min ago`;
-  if (d < 86400) return `${Math.floor(d / 3600)} h ago`;
-  return new Date(ts * 1000).toLocaleDateString();
-};
 export const fmtInt = (n?: number | null) => (n == null ? "–" : n.toLocaleString());
-export const stageLabel: Record<string, string> = {
-  queued: "Queued",
-  held: "Held for review",
-  reference: "Generating image",
-  pixal3d: "Building 3D model",
-  blender: "Optimising & baking",
-  validate: "Validating",
-  package: "Packaging",
-  done: "Done",
-  cancelled: "Cancelled",
-};
+// fmtAgo / fmtDuration / stageLabel moved to i18n.ts: they are presentation text and need the current language.

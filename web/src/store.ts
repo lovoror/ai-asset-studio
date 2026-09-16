@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { api, Settings, withToken } from "./api";
+import { api, LANG_KEY, Lang, Settings, withToken } from "./api";
 
 type Theme = "system" | "light" | "dark";
 interface Toast { id: number; text: string; err?: boolean }
@@ -7,6 +7,8 @@ interface Toast { id: number; text: string; err?: boolean }
 interface State {
   theme: Theme;
   setTheme: (t: Theme) => void;
+  lang: Lang;
+  setLang: (l: Lang) => void;
   toasts: Toast[];
   toast: (text: string, err?: boolean) => void;
   settings: Settings | null;
@@ -39,6 +41,23 @@ export const useStore = create<State>((set, get) => ({
     if (t === "system") delete document.documentElement.dataset.theme;
     else document.documentElement.dataset.theme = t;
     set({ theme: t });
+  },
+  lang: ((): Lang => {
+    try {
+      const stored = localStorage.getItem(LANG_KEY);
+      if (stored === "zh" || stored === "en") return stored;
+      // first visit: follow the browser, so a Chinese browser opens in Chinese
+      return (navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en";
+    } catch {
+      return "en";
+    }
+  })(),
+  setLang: (l) => {
+    try {
+      localStorage.setItem(LANG_KEY, l);
+    } catch {}
+    document.documentElement.lang = l === "zh" ? "zh-CN" : "en";
+    set({ lang: l });
   },
   toasts: [],
   toast: (text, err) => {

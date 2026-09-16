@@ -1,14 +1,35 @@
-# One-time bootstrap: build images, create volumes, prefetch all weights (~105 GB), verify offline loading.
-# Prerequisites: Docker Desktop (WSL2 backend) with NVIDIA GPU support, the trellis2:rtx5090 base image
-# (built from C:\Users\Zorro\TRELLIS.2\Dockerfile), and a .env with STUDIO_GPU_UUID (see .env.example).
-param([switch]$MultiView)
+# One-time bootstrap, native (no Docker): install the control-plane dependencies, prefetch the weights the
+# workers on this machine need, then report readiness.
+#
+#   .\scripts\bootstrap.ps1                      control machine
+#   .\scripts\bootstrap.ps1 -Role image          the 2D server
+#   .\scripts\bootstrap.ps1 -Role pixal3d -MultiView
+#
+# Weights are per machine now: run this on each worker machine so it has its own model cache (config.toml
+# [paths] models decides where). The control role needs Python 3.11+. The blender role needs its OWN interpreter:
+# bpy has no cp312 build (4.5/5.0 are cp311), so provision one with uv and set [python] blender in config.toml -
+# see requirements/blender.txt.
+param(
+  [ValidateSet("control", "image", "pixal3d", "blender", "all")][string]$Role = "control",
+  [string]$Python = "python",
+  [switch]$MultiView,
+  [switch]$SkipPrefetch
+)
 $ErrorActionPreference = "Stop"
-Set-Location (Split-Path $PSScriptRoot -Parent)
-if (-not (Test-Path .env)) { Copy-Item .env.example .env }
-foreach ($v in "studio-models","studio-jobs","studio-data") { docker volume create $v | Out-Null }
-docker compose build
-& "$PSScriptRoot\prefetch.ps1" @PSBoundParameters
-docker compose up -d
-docker compose exec -T pixal3d-worker python -m pixal3d_worker.prefetch --verify
-docker compose exec -T image-worker python -m image_worker.generate --selftest
-python cli\assetctl.py doctor
+$root = Split-Path $PSScriptRoot -Parent
+Set-Location $root
+
+if (-not (Test-Path "config.toml")) {
+  Copy-Item "config.example.toml" "config.toml"
+  Write-Host "created config.toml from config.example.toml - edit it to point at your worker machines"
+}
+
+$roles = if ($Role -eq "all") { @("control", "image", "pixal3d", "blender") } else { @($Role) }
+foreach ($r in $roles) { & $Python "scripts/bootstrap.py" --role $r }
+
+if (-not $SkipPrefetch) {
+  if ($roles -contains "image") { & $Python "scripts/prefetch.py" --role image }
+  if ($roles -contains "pixal3d") { & $Python "scripts/prefetch.py" --role pixal3d $(if ($MultiView) { "--mv" }) }
+}
+
+& $Python "scripts/serve.py" doctor

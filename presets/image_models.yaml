@@ -1,9 +1,9 @@
-# Selectable reference-image models. All run inside the image-worker container with diffusers (no external service).
+# Selectable reference-image models. All run on the image worker with diffusers (no external service).
 #   family qwen   : Qwen-Image-2512, whole transformer GPU-resident as fp8 storage / bf16 compute (mode fp8_resident;
-#                   built once from the HF bf16 weights with the Lightning LoRA fused in bf16, cached in the models volume).
+#                   built once from the HF bf16 weights with the Lightning LoRA fused in bf16, cached under <models>/hf).
 #                   mode bf16_split (bf16 with block offload, ~4x slower) remains available as a manual setting.
 #   family klein  : FLUX.2 Klein 4B, transformer + Qwen3-4B text encoder loaded from the files already on disk in the
-#                   ComfyUI models folder (mounted read-only at /extra-models); configs/VAE/tokenizer from the HF repo.
+#                   ComfyUI models folder ([paths] extra_models); configs/VAE/tokenizer from the HF repo.
 #   family zimage : Z-Image Turbo, same approach (bf16 single file + Qwen3-4B from the ComfyUI folder).
 # `est_s` is the rough wall clock per image on the RTX 5090 (model load is paid once per job and amortised).
 # Fast-model settings follow the vendors' reference configs and were checked on this card (docs/RESULTS.md):
@@ -67,3 +67,27 @@
   est_s: 85
   description: Undistilled 50-step sampling with CFG 4, fp8 weights on the GPU (~80 s per image). Rated below the Lightning output in the blind test (waxier, lower-contrast surfaces); kept as an option.
   params: {steps: 50, true_cfg_scale: 4.0, width: 1328, height: 1328, mode: fp8_resident}
+
+#   family comfyui : runs on a remote ComfyUI server instead of in this container. The server address and the
+#                   API-format workflow come from Settings -> Generation backends (settings table), not from here;
+#                   the entry only supplies the sampling parameters. The proxy worker derives the prompt / negative /
+#                   latent / sampler nodes from the workflow graph (KSampler's positive, negative and latent_image
+#                   links), so nothing about node ids needs to be configured for the image side.
+#                   Availability cannot be checked statically - the weights live on the other machine - so
+#                   backends.available() reports these as present and real failures surface from /prompt's node_errors.
+- id: krea2-turbo
+  label: KREA-2 Turbo (ComfyUI)
+  tier: fast
+  family: comfyui
+  est_s: 20
+  description: KREA-2-TURBO on a remote ComfyUI server (Q4 GGUF UNet + Qwen3-VL text encoder, 8-step euler). Needs Settings -> Generation backends pointed at the server and an API-format workflow.
+  # width/height are deliberately pinned to 1024: presets.py does ref.update(entry.params), so these override the
+  # quality preset's 1328x1328, which does not fit in 8 GB of VRAM for this model.
+  params: {steps: 8, cfg: 1.0, width: 1024, height: 1024, sampler_name: euler, scheduler: simple}
+- id: krea2-turbo-1536
+  label: KREA-2 Turbo 1536² (ComfyUI)
+  tier: quality
+  family: comfyui
+  est_s: 45
+  description: Same model at 1536² for finer material detail. Only pick this if the ComfyUI server has the VRAM for it; 8 GB cards OOM here.
+  params: {steps: 8, cfg: 1.0, width: 1536, height: 1536, sampler_name: euler, scheduler: simple}

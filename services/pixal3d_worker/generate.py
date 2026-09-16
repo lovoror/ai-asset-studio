@@ -16,9 +16,11 @@ import time
 import traceback
 from pathlib import Path
 
+import worker_paths
+
 PIXAL3D_REPO = "TencentARC/Pixal3D"
 PIXAL3D_REVISION = "b0cb2e1b794cab9aa0ac38a95d794a4d9337437f"
-LOCAL_PIPELINE_DIR = Path(os.environ.get("STUDIO_PIXAL3D_LOCAL", "/models/pixal3d-local"))
+LOCAL_PIPELINE_DIR = worker_paths.pixal3d_local()
 
 
 def phase(name: str):

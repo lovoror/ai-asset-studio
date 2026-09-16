@@ -188,6 +188,11 @@ class AssetFromCandidateRequest(BaseModel):
     generate_collision: bool = True
     collision_triangles: Optional[int] = Field(None, ge=12, le=5000)
     allow_quality_fallback: bool = True
+    # The 3D generator's own budget, before Blender reduces from it. The one-shot /v1/jobs request has always
+    # accepted these; the two-step (image job -> asset job) path, which is what the portal uses, did not, so the
+    # master budget could not be controlled there at all.
+    master_texture_size: Optional[Literal[1024, 2048, 4096]] = None
+    master_triangles: Optional[int] = Field(None, ge=10000, le=2_000_000)
     title: Optional[str] = Field(None, max_length=120)
 
     _lods = field_validator("lod_fractions")(JobRequest._lods.__func__)
@@ -201,6 +206,28 @@ class JobPatch(BaseModel):
     priority: Optional[int] = Field(None, ge=-100, le=100)
 
 
+class BackendNodes(BaseModel):
+    """ComfyUI node-id mapping for the 3D lane. These are node IDs, not values: the value each node receives
+    comes from the job (resolution <- the quality preset, face count <- the master budget, texture size <-
+    master.texture_size, seed <- the job seed) and the proxy worker patches it in just before submitting.
+
+    A field left None is not patched, so the workflow's own value stays in effect. Each role also accepts an
+    explicit input key as "<node id>:<input key>" for when the default guess is wrong.
+
+    Sent as a whole object - a partial one replaces the whole map. The image lane needs none of this: its
+    prompt / negative / latent / sampler nodes are derived from the workflow graph instead (see
+    comfy_worker.comfy_client.derive_sampler_graph).
+    """
+    branch: Optional[str] = Field(None, max_length=32, pattern=r"^\d{1,8}(:[\w.\-]+)?$", description="PrimitiveBoolean switching TRELLIS.2 / Pixal3D")
+    seed: Optional[str] = Field(None, max_length=32, pattern=r"^\d{1,8}(:[\w.\-]+)?$", description="seed node; without it a retry is not reproducible")
+    resolution: Optional[str] = Field(None, max_length=32, pattern=r"^\d{1,8}(:[\w.\-]+)?$", description="Trellis2UpsampleStage.target_resolution")
+    decimate: Optional[str] = Field(None, max_length=32, pattern=r"^\d{1,8}(:[\w.\-]+)?$", description="DecimateMesh.target_face_count")
+    texture: Optional[str] = Field(None, max_length=32, pattern=r"^\d{1,8}(:[\w.\-]+)?$", description="PrimitiveInt feeding the master texture bake")
+    normal: Optional[str] = Field(None, max_length=32, pattern=r"^\d{1,8}(:[\w.\-]+)?$", description="BakeNormalMapFromMesh.resolution")
+    image: Optional[str] = Field(None, max_length=32, pattern=r"^\d{1,8}(:[\w.\-]+)?$", description="LoadImage receiving the reference; only needed if there are several")
+    output: Optional[str] = Field(None, max_length=32, pattern=r"^\d{1,8}(:[\w.\-]+)?$", description="the Save3DAdvanced whose file is the deliverable")
+
+
 class SettingsPatch(BaseModel):
     auto_process: Optional[bool] = None
     default_image_model: Optional[str] = Field(None, pattern=r"^[a-z0-9\-_.]{2,60}$")
@@ -210,6 +237,62 @@ class SettingsPatch(BaseModel):
     default_target_triangles: Optional[int] = Field(None, ge=200, le=2_000_000)
     default_texture_size: Optional[Literal[256, 512, 1024, 2048, 4096]] = None
     style_edits: Optional[dict[str, CustomStyle]] = Field(None, description="whole map; keys are style ids or 'custom'. Send {} to clear.")
+    # Generation backends. Every key here must also exist in db.DEFAULT_SETTINGS or put_settings() drops it silently.
+    image_kind: Optional[Literal["local", "comfyui"]] = None
+    image_url: Optional[str] = Field(None, max_length=300)
+    image_workflow: Optional[str] = Field(None, max_length=200, pattern=r"^([\w.\-]+\.json)?$")
+    three_d_kind: Optional[Literal["local", "comfyui"]] = None
+    three_d_url: Optional[str] = Field(None, max_length=300)
+    three_d_workflow: Optional[str] = Field(None, max_length=200, pattern=r"^([\w.\-]+\.json)?$")
+    trellis2: Optional[bool] = None
+    nodes: Optional[BackendNodes] = None
+    # Stage worker addresses, overriding config.toml [servers]. Send {} to fall back to config.toml.
+    worker_endpoints: Optional[dict[str, str]] = Field(None, description="{image,pixal3d,blender} -> 'local' or a URL")
+
+    @field_validator("worker_endpoints")
+    @classmethod
+    def _worker_endpoints(cls, v):
+        if v is None:
+            return v
+        allowed = {"image", "pixal3d", "blender"}
+        if set(v) - allowed:
+            raise ValueError(f"unknown stage(s): {', '.join(sorted(set(v) - allowed))}; expected {', '.join(sorted(allowed))}")
+        out = {}
+        for role, raw in v.items():
+            s = " ".join(str(raw).split())
+            if len(s) > 300:
+                raise ValueError(f"{role}: address is too long")
+            if s and s.lower() not in ("local", "-"):
+                m = re.match(r"^(?:https?://)?([^/:?#\s]+)(?::(\d{1,5}))?(?:/.*)?$", s)
+                if not m:
+                    raise ValueError(f"{role}: must be 'local', 'host:port' or an http(s) URL")
+                if m.group(2) and not 1 <= int(m.group(2)) <= 65535:
+                    raise ValueError(f"{role}: port out of range")
+            out[role] = s
+        return out
+
+    @field_validator("image_url", "three_d_url")
+    @classmethod
+    def _backend_url(cls, v):
+        # None must stay None: api.py dumps with exclude_none=True, so returning "" here would write an empty
+        # string over the stored address whenever a client omits the field. "" is only produced when the
+        # caller explicitly sends an empty string, which means "clear it".
+        if v is None:
+            return None
+        v = v.strip().rstrip("/")
+        if not v:
+            return ""
+        m = re.match(r"^https?://([^/:?#]+)(?::(\d{1,5}))?(?:/.*)?$", v)
+        if not m:
+            raise ValueError("must look like http://host:port")
+        host, port = m.group(1), m.group(2)
+        if port and not 1 <= int(port) <= 65535:
+            raise ValueError("port out of range")
+        # Not a security boundary - whoever can PUT /v1/settings is already authenticated and can submit jobs.
+        # This just stops the worker container from being pointed at the cloud metadata endpoint by accident.
+        if host.lower().startswith("169.254.") or host.lower() in ("metadata.google.internal", "metadata"):
+            raise ValueError("link-local / metadata addresses are not allowed")
+        return v
 
     @field_validator("style_edits")
     @classmethod
@@ -229,3 +312,28 @@ class JobCreated(BaseModel):
     status: str
     status_url: str
     artifacts_url: str
+
+
+class BackendTest(BaseModel):
+    """Connectivity test for one address. `target` picks what is being probed:
+
+    * `worker`  - a stage worker (`role`), i.e. the process that runs the stage.
+    * `comfyui` - a ComfyUI server reached *through* that stage's worker, because that worker is what will talk
+      to it. The values are the ones currently in the form, so an address can be tested before it is saved.
+    """
+    target: Literal["worker", "comfyui"]
+    role: Literal["image", "pixal3d", "blender"] = "image"
+    url: Optional[str] = Field(None, max_length=300)
+    workflow: Optional[str] = Field(None, max_length=200)
+
+    @field_validator("url")
+    @classmethod
+    def _url(cls, v):
+        if v is None:
+            return v
+        v = v.strip()
+        if not v:
+            return ""
+        if not re.match(r"^(?:https?://)?[^/:?#\s]+(?::\d{1,5})?(?:/.*)?$", v):
+            raise ValueError("must look like http://host:port")
+        return v

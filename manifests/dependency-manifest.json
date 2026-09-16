@@ -11,7 +11,7 @@
       "url": "https://github.com/microsoft/TRELLIS.2",
       "branch": "main",
       "commit": "75fbf0183001ed9876c8dbb35de6b68552ee08bd",
-      "note": "base image trellis2:rtx5090 built from C:/Users/Zorro/TRELLIS.2/Dockerfile"
+      "note": "3D base environment (CUDA 12.8.1 toolkit, torch 2.11.0+cu128, flash-attn 2.8.3, nvdiffrast, CuMesh, FlexGEMM, o-voxel) built for the RTX 5090 per TRELLIS.2's installation instructions; see requirements/pixal3d.txt"
     },
     "microsoft/MoGe": {
       "commit": "74fbce054ebed49800de42d0ad0e83495065719a",
@@ -26,7 +26,7 @@
     "valeoai/NAF": {
       "commit": "37f2dfc180f2de53d98bd601109c0da0dd6b0f43",
       "weights": "https://github.com/valeoai/NAF/releases/download/model/naf_release.pth",
-      "note": "torch.hub cache pinned to this commit under /models/torch/hub/valeoai_NAF_main"
+      "note": "torch.hub cache pinned to this commit under <TORCH_HOME>/hub/valeoai_NAF_main"
     },
     "utils3d (Pixal3D-specified wheel)": {
       "url": "https://github.com/LDYang694/Storages/releases/download/20260430/utils3d-0.0.2-py3-none-any.whl"
@@ -67,13 +67,71 @@
     "os": "Windows 11 Pro 26200",
     "gpu": "NVIDIA GeForce RTX 5090 32 GB, GPU-52b50765-57a3-0ed4-78c9-4fa54276f65d",
     "driver": "616.92",
-    "docker": "Docker Desktop (WSL2 backend), nvidia runtime",
-    "docker_vm_ram_gib": 46
+    "layout": "native (no containers): a control plane (api + orchestrator + local Blender worker) plus separately addressable image and pixal3d worker servers, see config.example.toml",
+    "measured_under": "Docker Desktop (WSL2 backend, 46 GiB VM RAM) - the container layout these pins were taken from"
   },
-  "images": {
-    "studio": {
-      "image": "asset-studio/studio:local",
-      "id": "sha256:3f7dfdce7dca667eee616a8042beeb2ae1b262ca3bdf3593c9e121103b07d843",
+  "summary": {
+    "control": {
+      "trimesh": "4.10.1",
+      "pillow": "12.3.0",
+      "fastapi": "0.141.1",
+      "uvicorn": "0.52.4",
+      "pydantic": "2.13.5",
+      "pygltflib": "1.16.5",
+      "numpy": "2.5.3"
+    },
+    "image": {
+      "torch": "2.11.0+cu128",
+      "torchvision": "0.26.0+cu128",
+      "triton": "3.6.0",
+      "diffusers": "0.40.0",
+      "transformers": "5.17.0",
+      "accelerate": "1.15.0",
+      "huggingface_hub": "1.31.0",
+      "safetensors": "0.8.0",
+      "pillow": "12.0.0",
+      "numpy": "2.4.6"
+    },
+    "pixal3d": {
+      "torch": "2.11.0+cu128",
+      "torchvision": "0.26.0+cu128",
+      "triton": "3.6.0",
+      "diffusers": "0.37.1",
+      "transformers": "4.57.3",
+      "accelerate": "1.13.0",
+      "huggingface_hub": "0.36.2",
+      "safetensors": "0.8.0",
+      "natten": "0.21.0",
+      "flash_attn": "2.8.3",
+      "nvdiffrast": "file:///tmp/nvdiffrast",
+      "o_voxel": "file:///workspace/o-voxel",
+      "cumesh": "file:///tmp/cumesh",
+      "flex_gemm": "file:///tmp/flexgemm",
+      "utils3d": "git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8",
+      "utils3d_moge": "git+https://github.com/EasternJournalist/utils3d-moge.git@62f09d58509485564e24d5d9f6aac9ee9ebc0c37",
+      "moge": "git+https://github.com/microsoft/MoGe.git@74fbce054ebed49800de42d0ad0e83495065719a",
+      "kornia": "0.8.2",
+      "timm": "1.0.22",
+      "trimesh": "4.10.1",
+      "pillow": "12.0.0",
+      "opencv-python-headless": "4.12.0.88",
+      "fastapi": "0.141.1",
+      "uvicorn": "0.52.4",
+      "pydantic": "2.12.4",
+      "numpy": "2.2.6",
+      "einops": "0.8.2"
+    },
+    "blender": {
+      "trimesh": "4.10.1",
+      "pillow": "12.3.0",
+      "bpy": "4.5.13",
+      "pygltflib": "1.16.5",
+      "numpy": "1.26.4"
+    }
+  },
+  "note": "Package sets below were captured from the original container build and remain the reference pins. asset-studio no longer runs in containers: each role is a native environment installed from requirements/<role>.txt, and scripts/write_manifest.py records the local interpreter of this machine.",
+  "environments": {
+    "control": {
       "key_packages": {
         "trimesh": "4.10.1",
         "pillow": "12.3.0",
@@ -121,11 +179,10 @@
         "watchfiles": "1.2.0",
         "websockets": "17.1",
         "wrapt": "2.4.1"
-      }
+      },
+      "installed_from": "requirements/control.txt"
     },
-    "image-worker": {
-      "image": "asset-studio/image-worker:local",
-      "id": "sha256:eecae9d1cf1798b507a9bc13e92500ce2b7684067b44dfea74b4432bec248dda",
+    "image": {
       "key_packages": {
         "torch": "2.11.0+cu128",
         "torchvision": "0.26.0+cu128",
@@ -204,11 +261,10 @@
         "typing_extensions": "4.16.0",
         "urllib3": "2.7.0",
         "zipp": "4.1.0"
-      }
+      },
+      "installed_from": "requirements/image.txt"
     },
-    "pixal3d-worker": {
-      "image": "asset-studio/pixal3d-worker:local",
-      "id": "sha256:41cb6f7a3ae365c0170c1e74eb77194089a79a3bbd18afdc7ce3434ccd44521f",
+    "pixal3d": {
       "key_packages": {
         "torch": "2.11.0+cu128",
         "torchvision": "0.26.0+cu128",
@@ -366,11 +422,10 @@
         "werkzeug": "3.1.8",
         "zipp": "4.1.0",
         "zstandard": "0.25.0"
-      }
+      },
+      "installed_from": "requirements/pixal3d.txt"
     },
     "blender": {
-      "image": "asset-studio/blender:local",
-      "id": "sha256:72618240b1055f7a2b114fba1c34b8c5c386fb736fbc1cfdd1d03f62e55a9b79",
       "key_packages": {
         "trimesh": "4.10.1",
         "pillow": "12.3.0",
@@ -402,66 +457,8 @@
         "urllib3": "2.7.0",
         "wrapt": "2.4.1",
         "zstandard": "0.25.0"
-      }
-    }
-  },
-  "summary": {
-    "studio": {
-      "trimesh": "4.10.1",
-      "pillow": "12.3.0",
-      "fastapi": "0.141.1",
-      "uvicorn": "0.52.4",
-      "pydantic": "2.13.5",
-      "pygltflib": "1.16.5",
-      "numpy": "2.5.3"
-    },
-    "image-worker": {
-      "torch": "2.11.0+cu128",
-      "torchvision": "0.26.0+cu128",
-      "triton": "3.6.0",
-      "diffusers": "0.40.0",
-      "transformers": "5.17.0",
-      "accelerate": "1.15.0",
-      "huggingface_hub": "1.31.0",
-      "safetensors": "0.8.0",
-      "pillow": "12.0.0",
-      "numpy": "2.4.6"
-    },
-    "pixal3d-worker": {
-      "torch": "2.11.0+cu128",
-      "torchvision": "0.26.0+cu128",
-      "triton": "3.6.0",
-      "diffusers": "0.37.1",
-      "transformers": "4.57.3",
-      "accelerate": "1.13.0",
-      "huggingface_hub": "0.36.2",
-      "safetensors": "0.8.0",
-      "natten": "0.21.0",
-      "flash_attn": "2.8.3",
-      "nvdiffrast": "file:///tmp/nvdiffrast",
-      "o_voxel": "file:///workspace/o-voxel",
-      "cumesh": "file:///tmp/cumesh",
-      "flex_gemm": "file:///tmp/flexgemm",
-      "utils3d": "git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8",
-      "utils3d_moge": "git+https://github.com/EasternJournalist/utils3d-moge.git@62f09d58509485564e24d5d9f6aac9ee9ebc0c37",
-      "moge": "git+https://github.com/microsoft/MoGe.git@74fbce054ebed49800de42d0ad0e83495065719a",
-      "kornia": "0.8.2",
-      "timm": "1.0.22",
-      "trimesh": "4.10.1",
-      "pillow": "12.0.0",
-      "opencv-python-headless": "4.12.0.88",
-      "fastapi": "0.141.1",
-      "uvicorn": "0.52.4",
-      "pydantic": "2.12.4",
-      "numpy": "2.2.6",
-      "einops": "0.8.2"
-    },
-    "blender": {
-      "trimesh": "4.10.1",
-      "pillow": "12.3.0",
-      "bpy": "4.5.13",
-      "pygltflib": "1.16.5",
-      "numpy": "1.26.4"
+      },
+      "installed_from": "requirements/blender.txt"
     }
   }
 }
