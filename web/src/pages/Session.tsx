@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, Box, Images, RefreshCw, Star, StarOff, Trash2, X } from "lucide-react";
-import { api, Candidate, withToken } from "../api";
+import { api, withToken } from "../api";
 import { useJob } from "../hooks";
 import { useFmt, useT } from "../i18n";
 import { useStore } from "../store";
 import CandidateGrid from "../components/CandidateGrid";
 import JobProgress from "../components/JobProgress";
+import Lightbox, { LightboxItem } from "../components/Lightbox";
 import MakeAssetDialog from "../components/MakeAssetDialog";
-import { Modal, Skeleton, StatusChip } from "../components/ui";
+import { Skeleton, StatusChip } from "../components/ui";
 
 export default function Session() {
   const { id } = useParams();
@@ -19,8 +20,20 @@ export default function Session() {
   const { ago } = useFmt();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [dialog, setDialog] = useState(false);
-  const [zoom, setZoom] = useState<Candidate | null>(null);
+  const [zoomAt, setZoomAt] = useState<number | null>(null);
   const expected = job?.settings?.reference?.candidates || job?.request?.variations || 4;
+  // The lightbox browses whatever the grid is showing, in the same order.
+  const candidateList = job?.candidates || [];
+  const candidateItems: LightboxItem[] = candidateList.map((c) => ({
+    // full resolution: the grid uses the small thumb, the lightbox is where you look closely
+    url: withToken(c.url),
+    preview: c.thumb ? withToken(c.thumb) : undefined,
+    caption: c.file,
+    note: [
+      c.seed != null ? t("session.seedLabel", { n: c.seed }) : "",
+      Array.isArray(c.reasons) && c.reasons.length ? c.reasons.join("; ") : t("cand.framingPassed"),
+    ].filter(Boolean).join(" · "),
+  }));
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -98,13 +111,13 @@ export default function Session() {
           </div>
         </div>
       ) : (
-        <CandidateGrid job={job} selected={selected} onToggle={toggle} expected={expected} onOpen={setZoom} />
+        <CandidateGrid job={job} selected={selected} onToggle={toggle} expected={expected} onOpen={setZoomAt} />
       )}
 
       {(job.candidates?.length || 0) > 0 && (
         <div className="card sticky-bar">
           <div className="muted small">
-            {selected.size ? t("session.selectedCount", { n: selected.size }) : t("session.selectPrompt")} · <kbd>Ctrl</kbd>+<kbd>A</kbd> {t("session.all")} · <kbd>Enter</kbd> {t("session.zoom")}
+            {selected.size ? t("session.selectedCount", { n: selected.size }) : t("session.selectPrompt")} · <kbd>Ctrl</kbd>+<kbd>A</kbd> {t("session.all")} · {t("cand.open")}
           </div>
           <div className="row tight">
             {selected.size > 0 && <button className="btn sm" onClick={() => setSelected(new Set())}>{t("common.clear")}</button>}
@@ -135,14 +148,22 @@ export default function Session() {
       {dialog && (
         <MakeAssetDialog job={job} files={[...selected]} onClose={() => setDialog(false)} onDone={() => { setDialog(false); setSelected(new Set()); reload(); }} />
       )}
-      {zoom && (
-        <Modal title={zoom.file} onClose={() => setZoom(null)} width={960}>
-          <img src={withToken(zoom.url)} alt={zoom.file} style={{ width: "100%", borderRadius: 10 }} />
-          <div className="row between" style={{ marginTop: 12 }}>
-            <span className="small muted">{t("session.seedLabel", { n: zoom.seed ?? "?" })} · {Array.isArray(zoom.reasons) && zoom.reasons.length ? zoom.reasons.join("; ") : t("cand.framingPassed")}</span>
-            <button className="btn primary sm" onClick={() => { toggle(zoom.file); setZoom(null); }}>{selected.has(zoom.file) ? t("common.deselect") : t("common.select")}</button>
-          </div>
-        </Modal>
+      {zoomAt !== null && (
+        <Lightbox
+          items={candidateItems}
+          index={zoomAt}
+          onIndex={setZoomAt}
+          onClose={() => setZoomAt(null)}
+          action={(i) => {
+            const c = candidateList[i];
+            if (!c || c.partial) return null;
+            return (
+              <button className="btn sm" onClick={() => toggle(c.file)}>
+                {selected.has(c.file) ? t("common.deselect") : t("common.select")}
+              </button>
+            );
+          }}
+        />
       )}
     </>
   );

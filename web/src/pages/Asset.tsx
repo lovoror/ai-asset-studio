@@ -6,6 +6,7 @@ import { useJob } from "../hooks";
 import { useFmt, useT } from "../i18n";
 import { useStore } from "../store";
 import JobProgress from "../components/JobProgress";
+import Lightbox, { LightboxItem } from "../components/Lightbox";
 import ModelViewer, { ViewerMap } from "../components/ModelViewer";
 import { CardHead, Modal, Skeleton, StatusChip } from "../components/ui";
 
@@ -29,7 +30,7 @@ export default function Asset() {
   const [reopt, setReopt] = useState(false);
   const [tris, setTris] = useState(20000);
   const [tex, setTex] = useState(2048);
-  const [zoom, setZoom] = useState<string | null>(null);
+  const [zoom, setZoom] = useState<{ items: LightboxItem[]; index: number } | null>(null);
 
   useEffect(() => {
     if (job?.asset?.optimized && !variant) setVariant(job.asset.optimized);
@@ -55,6 +56,16 @@ export default function Asset() {
     textureMaps.push({ name: path.split("/").pop() || key, url: art(path), note: String(state) });
   }
   const showLog = async (stage: string) => setLog({ stage, text: await api.log(job.id, stage) });
+  // Everything clickable opens in one lightbox list, so the previews can be browsed with ←/→.
+  const previewFiles = [
+    ...(a?.previews || []).filter((p) => !p.endsWith("contact_sheet.png")),
+    "reference.png",
+  ];
+  const previewItems: LightboxItem[] = previewFiles.map((p) => ({
+    url: art(p),
+    caption: p.endsWith("reference.png") ? t("asset.referenceImage") : p.split("/").pop() || p,
+  }));
+  const textureItems: LightboxItem[] = textureMaps.map((m) => ({ url: m.url, caption: m.name, note: m.note }));
   const act = async (fn: () => Promise<unknown>, msg?: string) => {
     try {
       await fn();
@@ -120,14 +131,14 @@ export default function Asset() {
               onSelectVariant={setVariant}
               urlFor={art}
               maps={textureMaps}
-              onOpenImage={(url, name) => setZoom(url)}
+              onOpenImage={(url) => setZoom({ items: textureItems, index: Math.max(0, textureItems.findIndex((m) => m.url === url)) })}
             />
-            {a.previews && a.previews.length > 0 && (
+            {previewItems.length > 0 && (
               <div className="previews">
-                {a.previews.filter((p) => !p.endsWith("contact_sheet.png")).map((p) => (
-                  <img key={p} src={art(p)} alt={p} loading="lazy" onClick={() => setZoom(art(p))} />
+                {previewItems.map((item, i) => (
+                  <img key={item.url} src={item.url} alt={item.caption || ""} title={item.caption}
+                       loading="lazy" onClick={() => setZoom({ items: previewItems, index: i })} />
                 ))}
-                <img src={art("reference.png")} alt="reference" loading="lazy" onClick={() => setZoom(art("reference.png"))} title={t("asset.referenceImage")} />
               </div>
             )}
           </div>
@@ -181,7 +192,14 @@ export default function Asset() {
           <pre className="log">{log.text || t("common.emptyOutput")}</pre>
         </Modal>
       )}
-      {zoom && <Modal title={t("asset.preview")} onClose={() => setZoom(null)} width={1000}><img src={zoom} alt="" style={{ width: "100%", borderRadius: 10 }} /></Modal>}
+      {zoom && (
+        <Lightbox
+          items={zoom.items}
+          index={zoom.index}
+          onIndex={(i) => setZoom({ items: zoom.items, index: i })}
+          onClose={() => setZoom(null)}
+        />
+      )}
       {reopt && (
         <Modal
           title={t("asset.reoptTitle")}

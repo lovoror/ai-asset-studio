@@ -544,6 +544,63 @@ select.input {
 .toast.err svg { color: var(--danger); }
 @keyframes toast-in { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: none; } }
 
+/* lightbox: for actually looking at a picture, so the picture gets the whole window */
+.lightbox {
+  position: fixed; inset: 0; z-index: 70;
+  display: grid; place-items: center;
+  padding: 20px 20px 62px;
+  background: rgba(8, 10, 14, 0.9);
+  backdrop-filter: blur(6px);
+  animation: fade-in 0.15s var(--ease);
+}
+.lightbox-stage {
+  display: grid; place-items: center;
+  max-width: 96vw;
+  /* the low-res copy sits behind the full one, so browsing never flashes an empty frame */
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+.lightbox-img {
+  max-width: min(96vw, 1900px);
+  max-height: calc(100vh - 92px);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  background: var(--bg-sunken);
+  cursor: default;
+}
+.lightbox-btn {
+  display: grid; place-items: center;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+}
+.lightbox-btn:hover { background: rgba(255, 255, 255, 0.22); }
+.lightbox-btn:active { transform: scale(0.96); }
+.lightbox-close { position: absolute; top: 14px; right: 14px; width: 38px; height: 38px; }
+.lightbox-nav { position: absolute; top: 50%; width: 46px; height: 46px; margin-top: -23px; }
+.lightbox-nav.prev { left: 16px; }
+.lightbox-nav.next { right: 16px; }
+.lightbox-bar {
+  position: absolute; left: 20px; right: 20px; bottom: 16px;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  color: rgba(255, 255, 255, 0.84);
+  font-size: var(--fs-sm);
+}
+.lightbox-caption { font-weight: 600; overflow-wrap: anywhere; }
+.lightbox-count { margin-left: auto; font-variant-numeric: tabular-nums; }
+.lightbox-hint { color: rgba(255, 255, 255, 0.5); }
+@media (max-width: 620px) {
+  .lightbox { padding: 12px 12px 76px; }
+  .lightbox-nav { width: 40px; height: 40px; margin-top: -20px; }
+  .lightbox-nav.prev { left: 8px; }
+  .lightbox-nav.next { right: 8px; }
+  .lightbox-hint { display: none; }
+}
+
 /* modal ----------------------------------------------------------------------------------------------------- */
 .modal-bg {
   position: fixed; inset: 0; z-index: 50;
@@ -786,6 +843,23 @@ kbd {
 .cand.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow-md); }
 .cand img { width: 100%; aspect-ratio: 1; object-fit: cover; background: var(--bg-sunken); transition: transform 0.35s var(--ease); }
 .cand:hover img { transform: scale(1.025); }
+/* the picture is the "look at it" target; the box in the corner is the "pick it" target */
+.cand-open { position: relative; display: block; width: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.cand-zoom {
+  position: absolute; right: 8px; bottom: 8px;
+  display: grid; place-items: center;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--bg-elev) 80%, transparent);
+  backdrop-filter: blur(6px);
+  color: var(--fg-muted);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--t) var(--ease);
+}
+.cand:hover .cand-zoom { opacity: 1; }
+.cand-label { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+.cand-label:hover { color: var(--accent); }
 .cand .ph { display: grid; place-items: center; width: 100%; aspect-ratio: 1; color: var(--fg-faint); }
 .cand .meta {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
@@ -798,14 +872,18 @@ kbd {
 .cand .check {
   position: absolute; top: 10px; left: 10px;
   display: grid; place-items: center;
-  width: 24px; height: 24px;
+  width: 26px; height: 26px;
+  padding: 0;
   border: 1px solid var(--border-strong);
   border-radius: 7px;
   background: color-mix(in srgb, var(--bg-elev) 82%, transparent);
   backdrop-filter: blur(6px);
   color: transparent;
+  cursor: pointer;
   transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
 }
+.cand .check:disabled { cursor: not-allowed; opacity: 0.45; }
+.cand .check:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .cand:hover .check { border-color: var(--accent); }
 .cand.selected .check { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
 .cand .made { position: absolute; top: 10px; right: 10px; box-shadow: var(--shadow-sm); }
