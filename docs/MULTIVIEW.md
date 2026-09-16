@@ -21,7 +21,7 @@ ships in the official `3d_pixal3d_multi_views` template. The local (torch) lane 
   "name": "rusty-car",
   "style": "mobile_factory",
   "quality": "balanced",
-  "lod_fractions": [0.7],
+  "lod_fractions": [0.5, 0.25],
   "multiview": {
     "camera_angle_x": 0.6912,           // horizontal FOV in RADIANS (39.60° here)
     "camera_source": "rig",             // "measured" | "rig" | "approximate"

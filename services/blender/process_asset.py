@@ -31,6 +31,12 @@ import bmesh
 import numpy as np
 from mathutils import Vector
 
+try:  # how the stage worker runs this: python -m blender.process_asset
+    from blender.lod_policy import DEFAULT_LOD_FRACTIONS, lod_verdict
+except ImportError:  # ...and a plain `python services/blender/process_asset.py` has no package on the path
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from lod_policy import DEFAULT_LOD_FRACTIONS, lod_verdict
+
 WARN: list[str] = []
 STATS: dict = {}
 T: dict = {}
@@ -662,10 +668,10 @@ def mo_decimate(obj, target: int, error_ladder=(0.01, 0.03, 0.05)) -> dict:
 # The attribute weight makes no difference at all (10.0 and 0.0 give the same result). The limit is
 # meshoptimizer's border lock - it never collapses an edge on a mesh border, and after UV-splitting every atlas
 # seam is one. Only reducing a *welded* mesh breaks through (5,732 measured), which costs the UV layout and
-# therefore needs its own unwrap and bake. Consequences for lod_fractions: anything below ~0.7 is unreachable and
-# is reported as an overshoot, and a chained second level stalls near 0.65 - so two levels buy a few percent of
-# triangles for another full copy of the textures. If a project needs true LOD budgets, the LODs have to be built
-# and baked separately.
+# therefore needs its own unwrap and bake. All of this is why an LOD overshoot is a property of the mesh rather
+# than a tuning mistake, and why the decision of what to do about one lives in lod_policy.py rather than here: ask
+# for the chain you want and let the policy drop the levels that came out redundant. If a project needs true LOD
+# budgets, the LODs have to be built and baked separately.
 def lod_from_asset(asset, target: int, error_ladder=(0.01, 0.03, 0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0)) -> dict:
     """Simplify the optimized asset while preserving its UV layout (meshoptimizer with UV+normal attributes on the
     UV-split vertex set), so LODs reuse LOD0's textures and material: no re-unwrap, no re-bake, one texture set."""
@@ -1059,13 +1065,26 @@ def main():
 
     # ---- LODs ------------------------------------------------------------------------------------
     outputs["lods"] = []
+    outputs["lods_skipped"] = []
     if opt.get("generate_lods"):
         t0 = time.time()
         prev = asset  # LODs form a chain (docs: simplifying the previous LOD is cheaper and gives smoother transitions)
-        for i, frac in enumerate(opt.get("lod_fractions", [0.7]), start=1):
+        prev_count = got
+        for i, frac in enumerate(opt.get("lod_fractions", DEFAULT_LOD_FRACTIONS), start=1):
             lod_target = max(12, int(got * frac))
             info = lod_from_asset(prev, lod_target)
             lod = info.pop("object")
+            n = info["triangles"]
+            verdict, why = lod_verdict(n, lod_target, prev_count)
+            if verdict == "skip":
+                # Recorded, not warned about: it is a property of this mesh's UV layout, not a mistake the
+                # caller made, and there is no point handing them a second copy of the same textures.
+                log(f"[lod] LOD{i} skipped: {n} triangles (budget {lod_target}) - {why}")
+                outputs["lods_skipped"].append({
+                    "fraction": frac, "target_triangles": lod_target, "triangles": n, "level_above": prev_count,
+                    "reason": why})
+                bpy.data.objects.remove(lod, do_unlink=True)
+                continue
             lod.name = f"{name}_LOD{i}"
             renormalise(lod, opt)
             p = out_dir / f"{name}_LOD{i}.glb"
@@ -1073,12 +1092,12 @@ def main():
             files.append(p.name)
             outputs["lods"].append({"file": p.name, "fraction": frac, "target_triangles": lod_target,
                                     "maps": "shared_with_asset (UVs preserved)", "reduction": info, **mesh_report(lod)})
-            if info["triangles"] > lod_target * 1.1:
-                WARN.append(f"LOD{i} stopped at {info['triangles']} triangles (budget {lod_target}): further UV-preserving "
-                            f"collapse would collapse the mesh (small budgets: LODs are best-effort)")
+            if why:
+                WARN.append(f"LOD{i} stopped at {n} triangles (budget {lod_target}): {why}")
             if prev is not asset:
                 bpy.data.objects.remove(prev, do_unlink=True)
             prev = lod
+            prev_count = n
         if prev is not asset:
             bpy.data.objects.remove(prev, do_unlink=True)
         tick("lods_s", t0)

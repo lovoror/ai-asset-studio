@@ -517,8 +517,10 @@ class JobRun:
             "require_basecolor": True, "height_m": opt.get("height_m"), "max_texture": opt["texture_size"],
             "require_bottom_origin": True})
         for i, lod in enumerate(outputs.get("lods", [])):
-            reports[f"lod{i+1}"] = validate_glb(self.art / lod["file"], {"soft_max_triangles": int(lod["target_triangles"] * 1.1),
-                                                                        "require_uv": True, "require_material": True})
+            # Deliberately no soft LOD budget here. The Blender stage already reports an overshoot, once per
+            # level and only when the miss is large, with the reducer's own numbers (process_asset LOD policy);
+            # asking the validator for the same judgement reported every stall twice.
+            reports[f"lod{i+1}"] = validate_glb(self.art / lod["file"], {"require_uv": True, "require_material": True})
         if outputs.get("collision_glb"):
             reports["collision"] = validate_glb(self.art / outputs["collision_glb"], {"max_triangles": int(opt["collision_triangles"] * 1.2)})
         atomic_write_json(d / "validation.json", reports)
@@ -607,6 +609,9 @@ class JobRun:
                 "master": "master.glb (untouched Pixal3D export, PNG textures)",
                 "optimized": bl["outputs"].get("asset_glb") if bl else None,
                 "lods": bl["outputs"].get("lods") if bl else None,
+                # Levels the reducer could not take meaningfully below the one above them: recorded, never
+                # exported (and never in `lods`, so the portal's variant list stays a list of real files).
+                "lods_skipped": bl["outputs"].get("lods_skipped") if bl else None,
                 "collision": bl["outputs"].get("collision_glb") if bl else None,
                 "previews": bl["outputs"].get("previews") if bl else None,
                 "units": "metres, glTF Y-up, origin at bottom centre",

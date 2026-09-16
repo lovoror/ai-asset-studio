@@ -159,7 +159,7 @@ def resolve_settings(req: dict, global_settings: dict | None = None) -> dict:
             "target_triangles": int(req.get("target_triangles") or od.get("target_triangles", 12000)),
             "texture_size": int(req.get("texture_size") or od.get("texture_size", 2048)),
             "generate_lods": bool(req.get("generate_lods", True)),
-            "lod_fractions": list(req.get("lod_fractions") or od.get("lod_fractions", [0.7])),
+            "lod_fractions": list(req.get("lod_fractions") or od.get("lod_fractions", [0.5, 0.25])),
             "generate_collision": bool(req.get("generate_collision", True)),
             "collision_triangles": int(req.get("collision_triangles") or od.get("collision_triangles", 200)),
             "height_m": req.get("height_m"),

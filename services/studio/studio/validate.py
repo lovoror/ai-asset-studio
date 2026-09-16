@@ -159,8 +159,10 @@ def validate_glb(path: str | Path, expect: dict | None = None) -> dict:
     if "max_triangles" in expect and tri_total > expect["max_triangles"]:
         rep["errors"].append(f"triangles {tri_total} exceed budget {expect['max_triangles']}")
     if "soft_max_triangles" in expect and tri_total > expect["soft_max_triangles"]:
-        # LODs: the reducer stops before the target when further UV-preserving collapse would distort the mesh;
-        # that is reported, not fatal (the LOD0 asset itself is held to its budget strictly)
+        # A budget that is reported rather than enforced - the LOD0 asset itself is held to its budget strictly.
+        # The pipeline no longer passes one for LODs: the Blender stage reports an LOD overshoot itself, once per
+        # level and only when the miss is large, because it has the reducer's numbers (see the LOD policy comment
+        # in process_asset.py). Kept as a generic expectation.
         rep["warnings"].append(f"triangles {tri_total} exceed budget {expect['soft_max_triangles']} (reducer stopped early)")
     if expect.get("require_uv") and any(not m["has_uv"] for m in meshes):
         rep["errors"].append("a primitive has no TEXCOORD_0")

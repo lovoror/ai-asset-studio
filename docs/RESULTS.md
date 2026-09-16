@@ -170,12 +170,14 @@ Lightning 4 vs 8 share seeds, so the compositions match and the difference is de
 * LOD budgets: LODs reuse LOD0's texture set, so they have to keep its UV layout, and meshoptimizer never collapses an edge
   on a UV border - after an atlas bake every UV seam is one. That puts a floor under how far an LOD can be reduced, and the
   floor is a property of the mesh's seams, not of the requested fraction. Measured with `var/lod_fractions_sweep.py` on a
-  19,415-triangle atlas-baked asset: the reducer could not go below ~13,100 triangles (0.67) for a 0.5 target, and a
-  chained second level stalled at ~12,500. Two assets in `var/jobs` both hit that: LOD1 stopped 12 % and 15 % over budget
-  and LOD2 108 % and 113 % over. The shipped default is therefore a single level at `[0.7]` (`presets/styles.yaml`), which
-  is reached exactly; `lod_fractions` is still settable per request or per style. Two levels measured `[0.7, 0.6]` for the
-  same asset, both inside budget but the second with under 2 % margin - and each extra level is another ~9 MB copy of the
-  same textures, so the triangle count is not what it buys.
+  19,415-triangle atlas-baked car: the reducer could not go below ~13,100 triangles (0.67 of LOD0) for a 0.5 target, and a
+  chained second level stalled at ~12,500, so both levels of the shipped 0.5/0.25 chain came back 12-113 % over budget. Two
+  assets in `var/jobs` behaved the same way. The default chain is unchanged (0.5/0.25: ask for the LODs a game wants) but
+  `services/blender/lod_policy.py` now decides what to do with the answer - a level landing within 10 % of the level above it
+  is not exported at all (recorded under `lods_skipped`, since it would be a near-duplicate ~9 MB copy of the same textures
+  for a few percent of triangles) and only a miss of more than 25 % is warned about. Re-running the same job's master through
+  the real stage gives one LOD of 11,197 triangles, no LOD2 file, and no LOD warning. `lod_fractions` stays settable per
+  request or per style; an over-budget LOD never fails the job.
 * No quantised Qwen mode yet (BF16 with block offload only); a faster mode would need a quality comparison first.
 * Output is an optimized static asset: automatic decimation topology, no rig, not animation-ready.
 * Text/lettering: models garble it; the prompt builder forbids text on the object.

@@ -43,7 +43,7 @@ One job produces a folder like this:
 |---|---|
 | `master.glb` | The untouched high-detail model straight out of the 3D generator: up to 1 M triangles, 4096² PBR textures. Keep it for re-optimising later. |
 | `<name>.glb` | **The asset you ship.** Reduced to your triangle budget, with base colour, metallic-roughness and normal maps baked from the master. |
-| `<name>_LOD1.glb` | A lower-detail version (70 % of the budget by default) that **reuses LOD0's UVs and textures** — one texture set for every level. |
+| `<name>_LOD1.glb`, `<name>_LOD2.glb` | Lower-detail versions (50 % and 25 % of the budget by default) that **reuse LOD0's UVs and textures** — one texture set for every level. A level the reducer cannot take meaningfully below the one above it is left out rather than shipped as a near-duplicate (see Limitations). |
 | `<name>_collision.glb` | A convex hull of a couple of hundred triangles for the physics engine. |
 | `previews/*.png` | Neutral-lit renders: four views of the asset, one of the master, and a contact sheet. |
 | `textures/*.png` | The baked maps as loose PNGs, in case you want them outside the GLB. |
@@ -428,12 +428,14 @@ errors and import into headless Godot 4.7.2.
   standard, validator-clean glTF).
 * **LOD budgets are capped by the UV layout, not by the fraction you ask for.** LODs share LOD0's texture set, so they
   have to keep its UV layout, and meshoptimizer never collapses an edge lying on a UV border — after an atlas bake every
-  seam is one. Measured on a 19,415-triangle atlas-baked asset (`var/lod_fractions_sweep.py`): nothing below ~67 % was
-  reachable at all, and a chained second level stalled at ~65 %, so `[0.5, 0.25]` was not merely missed, it was
-  unreachable, and both levels were reported 12–113 % over budget. The default is therefore one level at `[0.7]`, which
-  is reached exactly; `lod_fractions` is still settable per request or per style. Asking for more levels is allowed — it
-  just comes back as a warning in the manifest, not a failure (it used to fail the job:
-  [issue #1](https://github.com/zorrobyte/asset-studio/issues/1)).
+  seam is one. Measured on a 19,415-triangle atlas-baked asset (`var/lod_fractions_sweep.py`): nothing below ~67 % of
+  LOD0 was reachable at all, and a chained second level stalled at ~65 %. The default still asks for the chain a game
+  wants (0.5 and 0.25) and the pipeline copes with what comes back: a level that lands within 10 % of the level above it
+  is **not written at all** — it would be a near-duplicate copy of the same textures (~9 MB) for a few percent of
+  triangles, so it is recorded under `lods_skipped` in the manifest instead — and only a level missing its budget by more
+  than 25 % is reported as a warning. On that car asset the result is one LOD at 11,197 triangles and no warning at all.
+  `lod_fractions` is settable per request or per style, and an over-budget LOD never fails the job
+  ([issue #1](https://github.com/zorrobyte/asset-studio/issues/1)).
 * **The 3D environment is not pip-installable.** TRELLIS.2's CUDA extensions must be compiled for the GPU in the 3D
   server; `scripts/bootstrap.py --role pixal3d` checks what is present and tells you what is missing.
 

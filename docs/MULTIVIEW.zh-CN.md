@@ -19,7 +19,7 @@ ComfyUI 侧用 `Pixal3DMultiViewConditioning` 实现（2026-09-08 进入 ComfyUI
   "name": "rusty-car",
   "style": "mobile_factory",
   "quality": "balanced",
-  "lod_fractions": [0.7],
+  "lod_fractions": [0.5, 0.25],
   "multiview": {
     "camera_angle_x": 0.6912,           // 水平 FOV，单位是弧度（这里是 39.60°）
     "camera_source": "rig",             // "measured" | "rig" | "approximate"
