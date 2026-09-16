@@ -46,7 +46,7 @@
    测的是输入框里的值（未保存也能测）。
 5. **就绪门禁**：任何必需的服务不通，**新任务直接被拒绝**（HTTP 422 `not_ready` + 结构化原因），
    但工作台本身照常可用 —— 方便你就地修地址，而不是排队几分钟后才失败。
-6. **3D 检视器重做**（three.js）：7 种显示模式（着色 / 着色+网格 / 线框 / **法线** / 素模 / **UV 检查** / 反照率）、
+6. **3D 检视器重做**（three.js）：8 种显示模式（着色 / 着色+网格 / 线框 / **法线** / 素模 / **卡通（色阶分级 + 描边）** / **UV 检查** / 反照率）、
    叠加层（网格地面 / 坐标轴 / 包围盒 / 阴影）、视角预设、**点选部件并可隔离 / 聚焦 / 隐藏**、
    实时面数·顶点·网格·材质·贴图·绘制批次·帧率、贴图清单与场景树、一键截图。
 7. **界面设计系统重做**：统一 token、明暗双主题、骨架屏与空态、响应式、键盘可达。
@@ -176,10 +176,10 @@ renders previews, and hands you a folder ready for Godot, Unity or Blender.
    three stage services, with a Test button that probes the value in the box.
 5. **Readiness gate.** If a required server does not answer, new jobs are refused up front (HTTP 422 `not_ready`
    with structured reasons) while the portal stays usable, so you can fix the address in place.
-6. **A real 3D inspector** (three.js): 7 display modes (shaded / shaded+wire / wireframe / **normals** / clay /
-   **UV check** / albedo), overlays (ground grid, axes, bounds, shadow), camera presets, **pick a part to isolate,
-   focus or hide it**, live triangle/vertex/mesh/material/texture/draw-call/FPS counts, a texture list and scene
-   tree, and screenshot export.
+6. **A real 3D inspector** (three.js): 8 display modes (shaded / shaded+wire / wireframe / **normals** / clay /
+   **toon (banded ramp + outline)** / **UV check** / albedo), overlays (ground grid, axes, bounds, shadow), camera
+   presets, **pick a part to isolate, focus or hide it**, live triangle/vertex/mesh/material/texture/draw-call/FPS
+   counts, a texture list and scene tree, and screenshot export.
 7. **A rebuilt design system**: one token set, light and dark themes, skeletons and empty states, responsive,
    keyboard reachable.
 8. **New docs**: [`docs/STAGES.md`](docs/STAGES.md) and [`docs/STAGES.zh-CN.md`](docs/STAGES.zh-CN.md).

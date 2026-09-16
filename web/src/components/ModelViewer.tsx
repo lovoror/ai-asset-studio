@@ -17,7 +17,7 @@ import { useT } from "../i18n";
    React owns the settings; the scene lives in refs and is never rebuilt by a re-render.
    =============================================================================================================== */
 
-export type ViewMode = "shaded" | "shadedWire" | "wire" | "normals" | "matte" | "uv" | "unlit";
+export type ViewMode = "shaded" | "shadedWire" | "wire" | "normals" | "matte" | "toon" | "uv" | "unlit";
 type ViewKey = "persp" | "front" | "back" | "left" | "right" | "top" | "bottom";
 type BgKey = "light" | "dark" | "studio";
 type OverlayKey = "grid" | "axes" | "bounds" | "shadow";
@@ -30,14 +30,14 @@ interface LiveStats {
   draws: number; fps: number; size: [number, number, number] | null;
 }
 
-const MODES: ViewMode[] = ["shaded", "shadedWire", "wire", "normals", "matte", "uv", "unlit"];
+const MODES: ViewMode[] = ["shaded", "shadedWire", "wire", "normals", "matte", "toon", "uv", "unlit"];
 const VIEWS: ViewKey[] = ["persp", "front", "back", "left", "right", "top", "bottom"];
 const BGS: BgKey[] = ["studio", "light", "dark"];
 const OVERLAYS: OverlayKey[] = ["grid", "axes", "bounds", "shadow"];
 
 const MODE_LABEL = {
   shaded: "viewer.shaded", shadedWire: "viewer.shadedWire", wire: "viewer.wireframe", normals: "viewer.normals",
-  matte: "viewer.matte", uv: "viewer.uv", unlit: "viewer.unlit",
+  matte: "viewer.matte", toon: "viewer.toon", uv: "viewer.uv", unlit: "viewer.unlit",
 } as const;
 const VIEW_LABEL = {
   persp: "viewer.persp", front: "viewer.front", back: "viewer.back", left: "viewer.left",
@@ -84,6 +84,18 @@ function uvChecker(size = 2048, cells = 64): THREE.Texture {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.anisotropy = 4;
+  return tex;
+}
+
+/** The ramp `MeshToonMaterial` samples instead of a smooth falloff: hard bands are the whole point of cel shading,
+ * and Nearest filtering is what keeps the steps hard. */
+function toonGradient(steps = 4): THREE.DataTexture {
+  const data = new Uint8Array(steps);
+  for (let i = 0; i < steps; i++) data[i] = Math.round(255 * (0.45 + (0.55 * i) / (steps - 1)));
+  const tex = new THREE.DataTexture(data, steps, 1, THREE.RedFormat);
+  tex.minFilter = tex.magFilter = THREE.NearestFilter;
+  tex.generateMipmaps = false;
+  tex.needsUpdate = true;
   return tex;
 }
 
@@ -239,11 +251,37 @@ export default function ModelViewer({ variants, file, onSelectVariant, urlFor, m
     const flatMat = new THREE.MeshBasicMaterial({ color: 0xd2d7de });
     const unlitCache = new Map<string, THREE.MeshBasicMaterial>();
 
+    // Toon: a stepped ramp for the shading, plus an inverted-hull outline (below). Together they read as cel.
+    const toonRamp = toonGradient();
+    const toonCache = new Map<string, THREE.MeshToonMaterial>();
+    const toonFlatMat = new THREE.MeshToonMaterial({ color: 0xccd1d9, gradientMap: toonRamp });
+    // Back faces of the same geometry pushed out along their normals: the standard way to get an even outline. A
+    // uniformly scaled copy would be thicker on the far side of the model, which reads as a mistake.
+    const outlineMat = new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      uniforms: { uColor: { value: new THREE.Color(0x1b1f27) }, uWidth: { value: 0.003 } },
+      vertexShader: `
+        uniform float uWidth;
+        void main() {
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position + normal * uWidth, 1.0);
+        }`,
+      fragmentShader: `
+        uniform vec3 uColor;
+        void main() { gl_FragColor = vec4(uColor, 1.0); }`,
+    });
+    function toonMaterialFor(map: THREE.Texture | null): THREE.MeshToonMaterial {
+      if (!map) return toonFlatMat;
+      let mat = toonCache.get(map.uuid);
+      if (!mat) { mat = new THREE.MeshToonMaterial({ map, gradientMap: toonRamp }); toonCache.set(map.uuid, mat); }
+      return mat;
+    }
+
     let root: THREE.Object3D | null = null;
     let originals = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
     let partMeshes: { id: string; mesh: THREE.Mesh }[] = [];
     const hidden = new Map<string, boolean>();
     let wireOverlays: THREE.Mesh[] = [];
+    let outlineMeshes: THREE.Mesh[] = [];
     let raf = 0;
     let disposed = false;
     let fps = 0;
@@ -315,6 +353,7 @@ export default function ModelViewer({ variants, file, onSelectVariant, urlFor, m
       const iso = prefs.current.isolateId;
       for (const { id, mesh } of partMeshes) mesh.visible = hidden.get(id) !== false && (!iso || iso === id);
       for (const w of wireOverlays) w.visible = w.userData.wanted === true && (w.userData.mesh as THREE.Mesh | undefined)?.visible === true;
+      for (const o of outlineMeshes) o.visible = o.userData.wanted === true && (o.userData.mesh as THREE.Mesh | undefined)?.visible === true;
     }
 
     function applyMode() {
@@ -330,6 +369,9 @@ export default function ModelViewer({ variants, file, onSelectVariant, urlFor, m
           mesh.material = clayMat;
         } else if (m === "uv") {
           mesh.material = checkerMat;
+        } else if (m === "toon") {
+          const orig = materialsOf(originals.get(mesh))[0] as THREE.MeshStandardMaterial | undefined;
+          mesh.material = toonMaterialFor(orig?.map ?? null);
         } else {
           // The base colour comes from the *original* material: reading it from the current one would inherit
           // whatever the previous mode swapped in (the UV checker, most obviously).
@@ -345,6 +387,7 @@ export default function ModelViewer({ variants, file, onSelectVariant, urlFor, m
         }
       }
       for (const w of wireOverlays) w.userData.wanted = m === "shadedWire";
+      for (const o of outlineMeshes) o.userData.wanted = m === "toon";
       applyVisibility();
       pushStats();
     }
@@ -362,6 +405,8 @@ export default function ModelViewer({ variants, file, onSelectVariant, urlFor, m
       const b = prefs.current.bg;
       scene.background = new THREE.Color(BG_COLOR[b]);
       scene.environmentIntensity = ENV_INTENSITY[b];
+      // a near-black outline disappears against the dark backdrop, so it flips with it
+      (outlineMat.uniforms.uColor.value as THREE.Color).set(b === "dark" ? 0xe9ebf0 : 0x1b1f27);
     }
 
     function applySelection() {
@@ -398,6 +443,8 @@ export default function ModelViewer({ variants, file, onSelectVariant, urlFor, m
       ground.position.set(center.x, box3.min.y - cell * 0.002, center.z);
       axes.scale.setScalar(Math.max(span * 0.6, 0.02));
       axes.position.set(box3.min.x, box3.min.y, box3.min.z);
+      // the outline is a constant fraction of the model, so it stays proportional when a variant is swapped
+      outlineMat.uniforms.uWidth.value = Math.max(span * 0.0035, 1e-5);
       key.target.position.copy(center);
       key.position.set(center.x + span * 1.3, box3.max.y + span * 1.6, center.z + span * 1.5);
       key.shadow.camera.left = -span * 1.5;
@@ -436,6 +483,8 @@ export default function ModelViewer({ variants, file, onSelectVariant, urlFor, m
       }
       for (const w of wireOverlays) w.removeFromParent();
       wireOverlays = [];
+      for (const o of outlineMeshes) o.removeFromParent();
+      outlineMeshes = [];
       originals = new Map();
       hidden.clear();
       root = model;
@@ -464,6 +513,16 @@ export default function ModelViewer({ variants, file, onSelectVariant, urlFor, m
         w.userData.partId = id;
         wireOverlays.push(w);
         scene.add(w);
+      }
+      // the cel outline rides the same transform as the wireframe copy, but only shows in toon mode
+      for (const { id, mesh } of partMeshes) {
+        const o = new THREE.Mesh(mesh.geometry, outlineMat);
+        o.matrixAutoUpdate = false;
+        o.matrix.copy(mesh.matrixWorld);
+        o.userData.mesh = mesh;
+        o.userData.partId = id;
+        outlineMeshes.push(o);
+        scene.add(o);
       }
 
       frame(undefined, DIRS[prefs.current.view]);
@@ -561,8 +620,12 @@ export default function ModelViewer({ variants, file, onSelectVariant, urlFor, m
       controls.dispose();
       if (root) disposeTree(root);
       for (const w of wireOverlays) w.removeFromParent();
-      for (const mat of [wireOverlayMat, wireOnlyMat, normalMat, clayMat, checkerMat, flatMat]) mat.dispose();
+      for (const o of outlineMeshes) o.removeFromParent();
+      for (const mat of [wireOverlayMat, wireOnlyMat, normalMat, clayMat, checkerMat, flatMat, toonFlatMat]) mat.dispose();
       for (const mat of unlitCache.values()) mat.dispose();
+      for (const mat of toonCache.values()) mat.dispose();
+      toonRamp.dispose();
+      outlineMat.dispose();
       checkerTex.dispose();
       envMap.dispose();
       pmrem.dispose();

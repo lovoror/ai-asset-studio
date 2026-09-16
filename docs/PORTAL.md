@@ -9,27 +9,34 @@ Open **http://127.0.0.1:8090** after `scripts\start.ps1`. The portal is a React 
    (materials, palette, avoid-list, height, seed, title), pick how many variations (default 4, ~5 min each) →
    *Generate variations*. Only images are made at this point.
 2. **Session** – variations appear as they finish. Each shows its seed and a *framing* score (technical hints only:
-   clipping, margins, background plainness). Click to select (⌘/Ctrl+A selects all, Enter zooms) → *Make 3D*.
-   The dialog sets quality (balanced 1024 / quality 1536), height, triangle budget, texture size, LODs, collision, and
-   **Start now / Hold for review**. Your choice is remembered as the *process automatically* setting.
+   clipping, margins, background plainness). Click a picture to open it full-screen and browse the batch (arrow keys;
+   Esc closes); the box in its corner selects it (⌘/Ctrl+A selects all) → *Make 3D*.
+   The dialog sets quality (balanced 1024 / quality 1536), height, triangle budget, texture size, LODs and collision;
+   submitting queues the job straight away, and whether it starts immediately or waits for *Process* follows the
+   *process automatically* setting (Settings or the Queue page).
    *More variations* re-runs the same prompt with new seeds.
 3. **Queue** – running / held / queued / recently failed. Held items wait until *Process* (or *Process all*); queued
    items can be put back on hold; anything can be cancelled; failed jobs can be retried. GPU usage is shown live.
 4. **Library** – every session and asset with thumbnails, search, favourites, archive/restore. Asset page: in-browser
-   3D viewer (optimized / LODs / collision / master), preview renders, stats (triangles, maps, reduction error,
-   timings, VRAM), warnings, manifest, per-file and zip downloads, stage logs, *Re-optimise* (new budget without
-   regenerating), delete.
+   3D inspector (optimized / LODs / collision / master) with eight display modes (shaded, shaded+wire, wireframe,
+   normals, clay, toon, UV check, albedo), overlays (ground grid, axes, bounds, shadow), camera presets,
+   click-to-select parts with isolate/focus/hide, live triangle/vertex/draw-call/FPS counts, a texture list and scene
+   tree, and screenshot export; preview renders (click to enlarge and browse), stats (triangles, maps, reduction
+   error, timings, VRAM), warnings, manifest, per-file and zip downloads, stage logs, *Re-optimise* (new budget
+   without regenerating), delete.
 5. **Settings** – auto-process, default variations/quality/style/budget/texture, theme, API token, service health.
 
 ## Manual checklist (used for acceptance)
 
 - [ ] Create page renders in light and dark; examples load; Ctrl+Enter submits.
-- [ ] Session page shows placeholders, then images with framing chips; selection + Make 3D dialog works.
-- [ ] Hold for review → item appears in Queue as held; Process → runs; asset page shows viewer + stats.
-- [ ] Start now (toggle on) → job goes straight to queued.
+- [ ] Session page shows placeholders, then images with framing chips; clicking a picture enlarges it and ←/→ browses
+      the batch; the corner box selects; the Make 3D dialog works.
+- [ ] With *process automatically* on (the default) a submitted 3D job goes straight to queued; with it off the item
+      appears in Queue as waiting to start and *Process* runs it. The asset page then shows the inspector + stats.
 - [ ] Library lists sessions and assets; search/favourite/archive/restore/purge work.
 - [ ] Zip download contains GLBs, previews, textures, manifest (master excluded unless `?include_master=true`).
 - [ ] Re-optimise re-runs only the Blender stage.
+- [ ] The asset inspector switches between all eight display modes without console errors.
 - [ ] `python -m pytest tests/test_portal_mock.py` passes.
 
 ## Dev
