@@ -53,6 +53,15 @@
 8. **新增文档**：[`docs/STAGES.md`](docs/STAGES.md)（英文）与 [`docs/STAGES.zh-CN.md`](docs/STAGES.zh-CN.md)（中文），
    专门讲清"阶段服务是什么、为什么存在、两条配置轴怎么区分、坏了怎么查"。
 9. **生成 3D 默认直接开始**，不再先进"待审核"。
+10. **多视角输入打通**（2～12 张图 → 一个资产）：ComfyUI 侧用 `Pixal3DMultiViewConditioning`（要求 3D 服务器上
+    **ComfyUI ≥ 0.35**），本地侧走 Pixal3D 的 `inference_mv`。控制面按帧名、相机方位角、输入顺序三级依据把每张图
+    映射到 `front/left/back/right` 槽位，并决定水平 FOV 是钉死调用方的值还是交给 MoGe 从前视图测量。详见
+    [`docs/MULTIVIEW.md`](docs/MULTIVIEW.md)（英）· [`docs/MULTIVIEW.zh-CN.md`](docs/MULTIVIEW.zh-CN.md)（中）。
+    还没做的：门户里的多选界面、自动补视角。
+11. **LOD 默认降为单级 `[0.7]`**：LOD 复用 LOD0 的贴图，就必须保留同一套 UV，而 meshoptimizer 不会折叠落在 UV 边界上的
+    边——图集烘焙之后每条接缝都是这种边。实测（`var/lod_fractions_sweep.py`，19,415 面的图集资产）：根本降不到 67% 以下，
+    链式第二级卡在 65%，所以 `[0.5, 0.25]` 不是"没打到"而是"打不到"，两级都会报超出预算 12%～113%。默认改成单级 `[0.7]`
+    后能精确命中；每次请求或每个风格仍可自行指定 `lod_fractions`，只是请求得越深，越可能带回一条告警而不是失败。
 
 ### 快速开始（Windows 优先）
 
@@ -136,6 +145,7 @@ python -m pytest -q tests                        # 测试（不需要 GPU 和模
 |---|---|
 | [`README.en.md`](README.en.md) | 完整英文文档（本仓库 README 的英文原文） |
 | [`docs/STAGES.md`](docs/STAGES.md) · [`docs/STAGES.zh-CN.md`](docs/STAGES.zh-CN.md) | 阶段服务是什么、为什么存在、两条配置轴、故障排查（英 / 中） |
+| [`docs/MULTIVIEW.md`](docs/MULTIVIEW.md) · [`docs/MULTIVIEW.zh-CN.md`](docs/MULTIVIEW.zh-CN.md) | 多视角输入：接口、槽位映射、FOV、工作流怎么生成、ComfyUI 版本要求（英 / 中） |
 | [`docs/DISTRIBUTED.md`](docs/DISTRIBUTED.md) | 跨机器部署：worker 机器怎么装、怎么连、token 与安全 |
 | [`docs/PORTAL.md`](docs/PORTAL.md) | 工作台功能与语言设置 |
 | [`docs/RESULTS.md`](docs/RESULTS.md) · [`BENCHMARKS.md`](BENCHMARKS.md) | 实测记录与性能 |

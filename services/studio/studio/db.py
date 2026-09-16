@@ -78,6 +78,7 @@ DEFAULT_SETTINGS = {
     "three_d_kind": "local",
     "three_d_url": "",
     "three_d_workflow": "",
+    "three_d_multiview_workflow": "",  # API-format workflow for multi-view jobs; "" = presets.MULTIVIEW_WORKFLOW
     "trellis2": True,            # value written into the branch-switch node: true = TRELLIS.2, false = Pixal3D
     "nodes": {},                 # 3D lane only: {branch, seed, resolution, decimate, texture, normal, image,
                                  # output} -> ComfyUI node id, optionally "<id>:<input key>". See BackendNodes.

@@ -51,6 +51,11 @@ ROLE_KEYS = {
 # asset, so an explicit `output` setting wins; otherwise the first of these classes found is used.
 OUTPUT_CLASSES = ("Save3DAdvanced", "Save3D", "SaveGLB", "SaveMesh3D")
 IMAGE_CLASSES = ("LoadImage",)
+# Pixal3D's multi-view conditioning takes four named views instead of the single reference image. Which
+# LoadImage feeds which slot is read off the graph rather than configured, so the workflow stays the single
+# source of truth for its own wiring.
+MULTIVIEW_CLASS = "Pixal3DMultiViewConditioning"
+VIEW_SLOTS = ("front", "left", "back", "right")
 
 
 # ----------------------------------------------------------------------------------------------- glb summary
@@ -237,6 +242,73 @@ def patch_image_input(wf: dict, server: str, image_path: Path, nodes: dict, warn
     log(f"[comfy] uploaded {image_path.name} as {name!r}; patched LoadImage {loaders}")
 
 
+def multiview_node(wf: dict) -> str | None:
+    """The multi-view conditioning node, if this workflow has one."""
+    found = find_nodes(wf, MULTIVIEW_CLASS)
+    return found[0] if found else None
+
+
+def upstream_loader(wf: dict, node_id: str, seen: frozenset = frozenset()) -> str | None:
+    """The LoadImage a node's image input ultimately comes from, walking back through the preprocessing."""
+    node = wf.get(str(node_id))
+    if node is None or str(node_id) in seen:
+        return None
+    if node.get("class_type") in IMAGE_CLASSES:
+        return str(node_id)
+    for val in (node.get("inputs") or {}).values():
+        if isinstance(val, list) and len(val) == 2 and isinstance(val[0], str):
+            found = upstream_loader(wf, val[0], seen | {str(node_id)})
+            if found:
+                return found
+    return None
+
+
+def view_loaders(wf: dict, mv_id: str) -> dict[str, str]:
+    """{slot: LoadImage node id} for the view slots this workflow actually wired up."""
+    out: dict[str, str] = {}
+    for slot in VIEW_SLOTS:
+        ref = (wf[mv_id].get("inputs") or {}).get(slot)
+        if isinstance(ref, list) and len(ref) == 2 and isinstance(ref[0], str):
+            loader = upstream_loader(wf, ref[0])
+            if loader:
+                out[slot] = loader
+    return out
+
+
+def patch_multiview_input(wf: dict, server: str, views: dict, fov: float | None, warnings: list) -> None:
+    """Upload every view and point the multi-view conditioning node's slots at them.
+
+    `views` is {slot: local path}; the control plane owns the frame -> slot mapping (see studio.multiview),
+    because that mapping depends on the caller's camera matrices rather than on the workflow. Node ids are
+    deliberately not configured here: each slot is followed back through the graph to the LoadImage that
+    feeds it, so editing the workflow does not silently break the wiring.
+    """
+    phase("preprocess")
+    mv_id = multiview_node(wf)
+    if mv_id is None:
+        raise ComfyError(f"the workflow has no {MULTIVIEW_CLASS} node, so it cannot take multi-view input")
+    loaders = view_loaders(wf, mv_id)
+    if not loaders:
+        raise ComfyError(f"the {MULTIVIEW_CLASS} node ({mv_id}) has no view wired to a LoadImage")
+    missing = [s for s in (views or {}) if s not in loaders]
+    if missing:
+        warnings.append(f"the workflow does not wire the {', '.join(missing)} view(s); they were ignored")
+    for slot in VIEW_SLOTS:
+        path = (views or {}).get(slot)
+        if not path or slot not in loaders:
+            continue
+        name = upload_image(server, Path(path))
+        set_node_input(wf, loaders[slot], "image", name)
+        log(f"[comfy] {slot} view: uploaded {Path(path).name} as {name!r} -> LoadImage {loaders[slot]}")
+    if fov is not None:
+        # A literal here replaces the workflow's MoGeGeometryToFOV link: the caller stated the FOV, so there
+        # is nothing to measure.
+        if set_node_input(wf, mv_id, "fov", float(fov)):
+            log(f"[comfy] {MULTIVIEW_CLASS} {mv_id}.fov = {float(fov):.2f}   [caller-declared]")
+        else:
+            warnings.append(f"{MULTIVIEW_CLASS} has no fov input; the declared FOV was ignored")
+
+
 # ----------------------------------------------------------------------------------------------- stage
 
 def run(req: dict) -> None:
@@ -253,8 +325,15 @@ def run(req: dict) -> None:
     nodes = backend.get("nodes") or {}
     exp = req.get("export") or {}
 
+    # A multi-view job carries the four named views instead of one reference image.
+    multiview = req.get("mode") == "multiview"
+    views = req.get("views") or {}
     image_path = req.get("image_path")
-    if not image_path or not Path(image_path).is_file():
+    if multiview:
+        if not views:
+            raise ComfyError("request.json has mode=multiview but carries no views: the control plane maps the "
+                             "frames onto the front/left/back/right slots before starting the stage")
+    elif not image_path or not Path(image_path).is_file():
         raise ComfyError(f"reference image not found: {image_path!r}. The control plane uploads the stage's "
                          f"inputs before starting it; this usually means the request carried a path outside "
                          f"the job directory, which cannot be transferred to a worker on another machine.")
@@ -270,16 +349,25 @@ def run(req: dict) -> None:
         warnings.append(f"could not read {server}/system_stats ({e}); continuing anyway")
 
     template = load_workflow(find_workflow_file(backend["workflow"]))
+    is_multiview = multiview_node(template) is not None
+    if multiview and not is_multiview:
+        raise ComfyError(f"{backend['workflow']} has no {MULTIVIEW_CLASS} node, so it cannot generate from "
+                         f"multiple views; set the multi-view workflow in Settings -> Generation backends")
     log(f"[comfy] 3D workflow {backend['workflow']}: {len(template)} nodes, "
-        f"{'TRELLIS.2' if backend.get('trellis2', True) else 'Pixal3D'} branch")
+        f"{'Pixal3D multi-view' if is_multiview else ('TRELLIS.2' if backend.get('trellis2', True) else 'Pixal3D')}")
     timings["load_s"] = round(time.time() - t0, 2)
 
     wf = copy.deepcopy(template)
-    patch_image_input(wf, server, Path(image_path), nodes, warnings)
+    if is_multiview:
+        patch_multiview_input(wf, server, views, req.get("view_fov_degrees"), warnings)
+    else:
+        patch_image_input(wf, server, Path(image_path), nodes, warnings)
 
     # The knobs. Each is optional: an unconfigured role leaves the workflow's own value alone.
     phase("generate")
-    patch_role(wf, server, "branch", nodes.get("branch"), bool(backend.get("trellis2", True)), warnings)
+    if not is_multiview:
+        # The multi-view workflow is Pixal3D-only: it has no TRELLIS.2/Pixal3D branch node to write into.
+        patch_role(wf, server, "branch", nodes.get("branch"), bool(backend.get("trellis2", True)), warnings)
     if req.get("seed") is not None:
         patch_role(wf, server, "seed", nodes.get("seed"), int(req["seed"]), warnings)
     if req.get("resolution") is not None:

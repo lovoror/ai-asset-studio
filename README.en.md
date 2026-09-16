@@ -43,7 +43,7 @@ One job produces a folder like this:
 |---|---|
 | `master.glb` | The untouched high-detail model straight out of the 3D generator: up to 1 M triangles, 4096² PBR textures. Keep it for re-optimising later. |
 | `<name>.glb` | **The asset you ship.** Reduced to your triangle budget, with base colour, metallic-roughness and normal maps baked from the master. |
-| `<name>_LOD1.glb`, `<name>_LOD2.glb` | Lower-detail versions (50 % and 25 % by default), each with its own UVs and smaller bakes. |
+| `<name>_LOD1.glb` | A lower-detail version (70 % of the budget by default) that **reuses LOD0's UVs and textures** — one texture set for every level. |
 | `<name>_collision.glb` | A convex hull of a couple of hundred triangles for the physics engine. |
 | `previews/*.png` | Neutral-lit renders: four views of the asset, one of the master, and a contact sheet. |
 | `textures/*.png` | The baked maps as loose PNGs, in case you want them outside the GLB. |
@@ -419,13 +419,21 @@ errors and import into headless Godot 4.7.2.
 * The output is an **optimized static prop**: automatic decimation topology, no rig, no animation-friendly edge flow.
 * Matting defaults to Pixal3D's upstream `briaai/RMBG-2.0`, which is gated: accept its license on Hugging Face and run the
   prefetch with your token. Without access, set `[stage] rembg_model = "ZhengPeng7/BiRefNet"` (open drop-in replacement).
-* Multi-view input is implemented and statically validated, but the `*_mv` checkpoints (+17 GB) were never downloaded
-  and no multi-view job has been run. There is no automatic novel-view generation.
+* Multi-view input (2–12 images → one asset) runs on both lanes: `Pixal3DMultiViewConditioning` on ComfyUI, which
+  needs **ComfyUI 0.35+** on the 3D server, or Pixal3D's own `inference_mv` locally. The multi-view checkpoints are
+  in the same prefetch set as the single-image ones (`scripts/prefetch.py --role pixal3d --mv`); they are not a
+  separate download. What is still missing is the portal UI for picking the images, and automatic novel-view
+  generation — nothing renders the views you did not supply. See [docs/MULTIVIEW.md](docs/MULTIVIEW.md).
 * **Godot 4.7.2 import is tested**; Unity is not installed on this machine, so it is untested here (the GLBs are
   standard, validator-clean glTF).
-* **LODs are best-effort for small budgets.** Below roughly 8,000 triangles the UV-preserving reducer often stops
-  10–40 % above the LOD1/LOD2 targets rather than distort the mesh; that is reported as a warning in the manifest, not
-  a failure (it used to fail the job: [issue #1](https://github.com/zorrobyte/asset-studio/issues/1)).
+* **LOD budgets are capped by the UV layout, not by the fraction you ask for.** LODs share LOD0's texture set, so they
+  have to keep its UV layout, and meshoptimizer never collapses an edge lying on a UV border — after an atlas bake every
+  seam is one. Measured on a 19,415-triangle atlas-baked asset (`var/lod_fractions_sweep.py`): nothing below ~67 % was
+  reachable at all, and a chained second level stalled at ~65 %, so `[0.5, 0.25]` was not merely missed, it was
+  unreachable, and both levels were reported 12–113 % over budget. The default is therefore one level at `[0.7]`, which
+  is reached exactly; `lod_fractions` is still settable per request or per style. Asking for more levels is allowed — it
+  just comes back as a warning in the manifest, not a failure (it used to fail the job:
+  [issue #1](https://github.com/zorrobyte/asset-studio/issues/1)).
 * **The 3D environment is not pip-installable.** TRELLIS.2's CUDA extensions must be compiled for the GPU in the 3D
   server; `scripts/bootstrap.py --role pixal3d` checks what is present and tells you what is missing.
 
@@ -457,7 +465,7 @@ shipping assets from a given model.
 | `requirements/` | One file per role |
 | `web/` | React web portal (create → queue → library), served by the API |
 | `cli/`, `mcp/` | Dependency-free CLI, MCP wrapper with the same actions |
-| `docs/`, `BENCHMARKS.md` | Measurements, notes, limitations, [stage workers](docs/STAGES.md), [distributed setup](docs/DISTRIBUTED.md) |
+| `docs/`, `BENCHMARKS.md` | Measurements, notes, limitations, [stage workers](docs/STAGES.md), [multi-view](docs/MULTIVIEW.md), [distributed setup](docs/DISTRIBUTED.md) |
 | `manifests/dependency-manifest.json` | Pinned commits, model revisions, frozen packages per role |
 
 Tests (no GPU, no models needed for the first two):

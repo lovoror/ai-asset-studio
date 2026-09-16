@@ -446,7 +446,9 @@ def test_resolve_settings_leaves_local_jobs_alone(studio):
     assert (s["reference"]["width"], s["reference"]["height"]) == (1328, 1328)
     legacy = resolve_settings({"prompt": "a mug", "style": "mobile_factory", "quality": "balanced"}, None)
     assert legacy["backend"] == {"image": {"kind": "local", "url": "", "workflow": ""},
-                                 "three_d": {"kind": "local", "url": "", "workflow": "", "trellis2": True, "nodes": {}}}
+                                 "three_d": {"kind": "local", "url": "", "workflow": "",
+                                             "multiview_workflow": "3d_pixal3d_multi_views.json",
+                                             "trellis2": True, "nodes": {}}}
 
 
 def test_resolve_settings_rejects_an_unconfigured_remote_image_lane(studio):

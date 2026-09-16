@@ -2,6 +2,14 @@
 # Each preset contributes: a short UI description, a style clause for the image prompt, material/palette defaults,
 # background colour, extra negatives, and optimisation defaults. Application-level only: nothing here is forwarded
 # verbatim to a backend. Keys are referenced by the API/CLI (`style`) and the portal.
+#
+# lod_fractions is 0.7 rather than the 0.5/0.25 a first guess suggests, and it is a single level rather than two.
+# LODs reuse LOD0's texture set, so they have to keep its UV layout, and meshoptimizer will not collapse an edge
+# that lies on a UV border - after an atlas bake every seam is one. Measured on a 19,415-triangle atlas-baked car
+# (var/lod_fractions_sweep.py): the reducer cannot get below ~67% of LOD0 at all, and a chained second level stalls
+# at ~65%. So 0.5/0.25 was not merely missed, it was unreachable, and every LOD overshoot was reported as a warning.
+# The reachable sets are 0.7 (hits its budget exactly) or 0.7/0.6 (a 7% step, and each LOD is a further ~9 MB
+# because the textures, not the triangles, are the payload). Ask for more levels only if you accept that warning.
 mobile_factory:
   label: "Stylized factory game"
   description: "Chunky, readable machines and props for a factory-builder. Bold silhouettes, painted metal, limited palette."
@@ -18,7 +26,7 @@ mobile_factory:
   optimize_defaults:
     target_triangles: 20000
     texture_size: 2048
-    lod_fractions: [0.5, 0.25]
+    lod_fractions: [0.7]
     collision_triangles: 200
 stylized_generic:
   label: "Stylized"
@@ -31,7 +39,7 @@ stylized_generic:
   default_palette: []
   background: "plain flat light grey studio background"
   negative_extra: "clutter, tiny greebles"
-  optimize_defaults: {target_triangles: 30000, texture_size: 2048, lod_fractions: [0.5, 0.25], collision_triangles: 256}
+  optimize_defaults: {target_triangles: 30000, texture_size: 2048, lod_fractions: [0.7], collision_triangles: 256}
 realistic:
   label: "Realistic"
   description: "Physically plausible materials, proportions and light wear, like a product photo of the real thing."
@@ -42,7 +50,7 @@ realistic:
   default_palette: []
   background: "plain flat neutral grey studio background"
   negative_extra: "cartoon, toy-like, exaggerated proportions"
-  optimize_defaults: {target_triangles: 40000, texture_size: 2048, lod_fractions: [0.5, 0.25], collision_triangles: 256}
+  optimize_defaults: {target_triangles: 40000, texture_size: 2048, lod_fractions: [0.7], collision_triangles: 256}
 lowpoly:
   label: "Low-poly"
   description: "Flat-shaded facets and solid colours. Very small triangle budgets; detail comes from shape, not texture."
@@ -54,7 +62,7 @@ lowpoly:
   default_palette: []
   background: "plain flat light grey studio background"
   negative_extra: "fine texture detail, realistic grime, smooth organic curves"
-  optimize_defaults: {target_triangles: 6000, texture_size: 1024, lod_fractions: [0.5], collision_triangles: 128}
+  optimize_defaults: {target_triangles: 6000, texture_size: 1024, lod_fractions: [0.7], collision_triangles: 128}
 clean_product:
   label: "Clean product"
   description: "Catalogue-style render of a manufactured object: precise smooth surfaces, accurate materials, no wear."
@@ -66,7 +74,7 @@ clean_product:
   default_palette: []
   background: "plain flat white studio background"
   negative_extra: "wear, dirt, scratches, stylization"
-  optimize_defaults: {target_triangles: 30000, texture_size: 2048, lod_fractions: [0.5, 0.25], collision_triangles: 256}
+  optimize_defaults: {target_triangles: 30000, texture_size: 2048, lod_fractions: [0.7], collision_triangles: 256}
 scifi:
   label: "Sci-fi hard surface"
   description: "Panelled hard-surface design with emissive accents and machined details, clean and readable."
@@ -78,7 +86,7 @@ scifi:
   default_palette: ["gunmetal", "off-white", "cyan accent"]
   background: "plain flat dark grey studio background"
   negative_extra: "tangled cables, tiny greebles, holographic screens, text panels"
-  optimize_defaults: {target_triangles: 30000, texture_size: 2048, lod_fractions: [0.5, 0.25], collision_triangles: 256}
+  optimize_defaults: {target_triangles: 30000, texture_size: 2048, lod_fractions: [0.7], collision_triangles: 256}
 fantasy:
   label: "Fantasy"
   description: "Hand-crafted medieval and magical props: worn wood, forged iron, stone, leather, warm painted look."
@@ -90,4 +98,4 @@ fantasy:
   default_palette: ["oak brown", "iron grey", "brass"]
   background: "plain flat light grey studio background"
   negative_extra: "modern materials, plastic, photorealistic grime, runes with text"
-  optimize_defaults: {target_triangles: 30000, texture_size: 2048, lod_fractions: [0.5, 0.25], collision_triangles: 256}
+  optimize_defaults: {target_triangles: 30000, texture_size: 2048, lod_fractions: [0.7], collision_triangles: 256}

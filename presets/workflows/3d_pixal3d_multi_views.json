@@ -1,0 +1,1346 @@
+{
+  "108": {
+    "_meta": {
+      "title": "\u91c7\u6837\u7b97\u6cd5\uff08SD3\uff09"
+    },
+    "class_type": "ModelSamplingSD3",
+    "inputs": {
+      "model": [
+        "125",
+        0
+      ],
+      "shift": 5
+    }
+  },
+  "117": {
+    "_meta": {
+      "title": "\u52a0\u8f7dVAE"
+    },
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "trellis_2_shape_vae_bf16.safetensors"
+    }
+  },
+  "118": {
+    "_meta": {
+      "title": "\u52a0\u8f7dVAE"
+    },
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "trellis_2_texture_vae_bf16.safetensors"
+    }
+  },
+  "119": {
+    "_meta": {
+      "title": "VaeDecodeStructureTrellis2"
+    },
+    "class_type": "VaeDecodeStructureTrellis2",
+    "inputs": {
+      "resolution": "32",
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "117",
+        0
+      ]
+    }
+  },
+  "12": {
+    "_meta": {
+      "title": "K\u91c7\u6837\u5668"
+    },
+    "class_type": "KSampler",
+    "inputs": {
+      "cfg": 1,
+      "denoise": 1,
+      "latent_image": [
+        "98",
+        2
+      ],
+      "model": [
+        "319",
+        0
+      ],
+      "negative": [
+        "98",
+        1
+      ],
+      "positive": [
+        "98",
+        0
+      ],
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "seed": 43,
+      "steps": 12
+    }
+  },
+  "122": {
+    "_meta": {
+      "title": "\u52a0\u8f7d\u56fe\u50cf"
+    },
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "img_v3_0215a_5489a5d1-5f43-4b7b-b177-de136672f6dg.jpg"
+    }
+  },
+  "125": {
+    "_meta": {
+      "title": "\u7f29\u653eCFG"
+    },
+    "class_type": "RescaleCFG",
+    "inputs": {
+      "model": [
+        "199",
+        0
+      ],
+      "multiplier": 0.7
+    }
+  },
+  "126": {
+    "_meta": {
+      "title": "\u7f29\u653eCFG"
+    },
+    "class_type": "RescaleCFG",
+    "inputs": {
+      "model": [
+        "279",
+        0
+      ],
+      "multiplier": 0.5
+    }
+  },
+  "147": {
+    "_meta": {
+      "title": "Bake Texture From Voxel"
+    },
+    "class_type": "BakeTextureFromVoxel",
+    "inputs": {
+      "mesh": [
+        "196",
+        0
+      ],
+      "reference_mesh": [
+        "92",
+        0
+      ],
+      "texture_size": [
+        "288",
+        0
+      ],
+      "voxel_colors": [
+        "93",
+        0
+      ]
+    }
+  },
+  "15": {
+    "_meta": {
+      "title": "\u52a0\u8f7dCLIP\u89c6\u89c9"
+    },
+    "class_type": "CLIPVisionLoader",
+    "inputs": {
+      "clip_name": "dino_v3_L_naf_fp32.safetensors"
+    }
+  },
+  "164": {
+    "_meta": {
+      "title": "Base Color"
+    },
+    "class_type": "PreviewImage",
+    "inputs": {
+      "images": [
+        "147",
+        0
+      ]
+    }
+  },
+  "18": {
+    "_meta": {
+      "title": "K\u91c7\u6837\u5668"
+    },
+    "class_type": "KSampler",
+    "inputs": {
+      "cfg": 7.5,
+      "denoise": 1,
+      "latent_image": [
+        "91",
+        2
+      ],
+      "model": [
+        "126",
+        0
+      ],
+      "negative": [
+        "91",
+        1
+      ],
+      "positive": [
+        "91",
+        0
+      ],
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "seed": 42,
+      "steps": 20
+    }
+  },
+  "186": {
+    "_meta": {
+      "title": "Decimate Mesh"
+    },
+    "class_type": "DecimateMesh",
+    "inputs": {
+      "mesh": [
+        "241",
+        0
+      ],
+      "placement_mode": "midpoint",
+      "target_face_count": 700000
+    }
+  },
+  "192": {
+    "_meta": {
+      "title": "\u79fb\u9664\u80cc\u666f"
+    },
+    "class_type": "RemoveBackground",
+    "inputs": {
+      "bg_removal_model": [
+        "193",
+        0
+      ],
+      "image": [
+        "122",
+        0
+      ]
+    }
+  },
+  "193": {
+    "_meta": {
+      "title": "\u52a0\u8f7d\u80cc\u666f\u79fb\u9664\u6a21\u578b"
+    },
+    "class_type": "LoadBackgroundRemovalModel",
+    "inputs": {
+      "bg_removal_name": "birefnet.safetensors"
+    }
+  },
+  "196": {
+    "_meta": {
+      "title": "Unwrap Mesh UVs"
+    },
+    "class_type": "UnwrapMesh",
+    "inputs": {
+      "mesh": [
+        "238",
+        0
+      ],
+      "padding": 1,
+      "resolution": [
+        "288",
+        0
+      ],
+      "segmenter": "pec",
+      "weld_distance": 0.0002
+    }
+  },
+  "199": {
+    "_meta": {
+      "title": "CFG \u8986\u76d6"
+    },
+    "class_type": "CFGOverride",
+    "inputs": {
+      "cfg": 1,
+      "end_percent": 1,
+      "model": [
+        "319",
+        0
+      ],
+      "start_percent": 0.667
+    }
+  },
+  "202": {
+    "_meta": {
+      "title": "Get Mesh Info"
+    },
+    "class_type": "GetMeshInfo",
+    "inputs": {
+      "mesh": [
+        "92",
+        0
+      ]
+    }
+  },
+  "207": {
+    "_meta": {
+      "title": "Metallic"
+    },
+    "class_type": "PreviewImage",
+    "inputs": {
+      "images": [
+        "147",
+        1
+      ]
+    }
+  },
+  "208": {
+    "_meta": {
+      "title": "Roughness"
+    },
+    "class_type": "PreviewImage",
+    "inputs": {
+      "images": [
+        "147",
+        2
+      ]
+    }
+  },
+  "210": {
+    "_meta": {
+      "title": "Apply Texture to Mesh"
+    },
+    "class_type": "ApplyTextureToMesh",
+    "inputs": {
+      "base_color": [
+        "164",
+        0
+      ],
+      "mesh": [
+        "196",
+        0
+      ],
+      "metallic": [
+        "207",
+        0
+      ],
+      "normal_map": [
+        "226",
+        0
+      ],
+      "occlusion": [
+        "235",
+        0
+      ],
+      "roughness": [
+        "208",
+        0
+      ]
+    }
+  },
+  "224": {
+    "_meta": {
+      "title": "Bake Normal Map from Mesh"
+    },
+    "class_type": "BakeNormalMapFromMesh",
+    "inputs": {
+      "cage_distance": 0.05,
+      "high_poly": [
+        "241",
+        0
+      ],
+      "ignore_backfaces": true,
+      "low_poly": [
+        "196",
+        0
+      ],
+      "resolution": 2048
+    }
+  },
+  "226": {
+    "_meta": {
+      "title": "Normal"
+    },
+    "class_type": "PreviewImage",
+    "inputs": {
+      "images": [
+        "224",
+        0
+      ]
+    }
+  },
+  "23": {
+    "_meta": {
+      "title": "K\u91c7\u6837\u5668"
+    },
+    "class_type": "KSampler",
+    "inputs": {
+      "cfg": 7.5,
+      "denoise": 1,
+      "latent_image": [
+        "94",
+        2
+      ],
+      "model": [
+        "126",
+        0
+      ],
+      "negative": [
+        "94",
+        1
+      ],
+      "positive": [
+        "94",
+        0
+      ],
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "seed": 42,
+      "steps": 12
+    }
+  },
+  "233": {
+    "_meta": {
+      "title": "Bake Ambient Occlusion"
+    },
+    "class_type": "BakeAmbientOcclusion",
+    "inputs": {
+      "bias": 0.01,
+      "high_poly": [
+        "241",
+        0
+      ],
+      "low_poly": [
+        "196",
+        0
+      ],
+      "max_distance": 0.71,
+      "resolution": 1024,
+      "samples": 64,
+      "strength": 1
+    }
+  },
+  "235": {
+    "_meta": {
+      "title": "Ambiant Occlusion"
+    },
+    "class_type": "PreviewImage",
+    "inputs": {
+      "images": [
+        "233",
+        0
+      ]
+    }
+  },
+  "238": {
+    "_meta": {
+      "title": "Smooth Mesh Normals"
+    },
+    "class_type": "MeshSmoothNormals",
+    "inputs": {
+      "crease_angle": 180,
+      "mesh": [
+        "186",
+        0
+      ]
+    }
+  },
+  "241": {
+    "_meta": {
+      "title": "Remesh Mesh (Narrow-Band DC)"
+    },
+    "class_type": "RemeshMesh",
+    "inputs": {
+      "band": 1,
+      "drop_small_components": 0.01,
+      "fix_poles": false,
+      "mesh": [
+        "202",
+        0
+      ],
+      "precluster_max_verts": 20000000,
+      "project_back": 0,
+      "resolution": 768,
+      "sign_mode": "udf",
+      "sign_mode.drop_enclosed_components": false,
+      "sign_mode.drop_inverted_components": false,
+      "sign_mode.qef": false,
+      "smooth_iters": 20
+    }
+  },
+  "242": {
+    "_meta": {
+      "title": "Get FoV from MoGe Geometry"
+    },
+    "class_type": "MoGeGeometryToFOV",
+    "inputs": {
+      "axis": "horizontal",
+      "moge_geometry": [
+        "56",
+        0
+      ],
+      "unit": "degrees"
+    }
+  },
+  "246": {
+    "_meta": {
+      "title": "3D \u9884\u89c8\uff08\u9ad8\u7ea7\uff09"
+    },
+    "class_type": "Preview3DAdvanced",
+    "inputs": {
+      "height": 1024,
+      "model_3d": [
+        "247",
+        0
+      ],
+      "viewport_state": {
+        "camera_info": {
+          "aspect": 1,
+          "cameraType": "perspective",
+          "far": 10000,
+          "fov": 35,
+          "frustum": {
+            "bottom": -5,
+            "left": -5,
+            "right": 5,
+            "top": 5
+          },
+          "near": 0.01,
+          "position": {
+            "x": -4.318670150850384,
+            "y": 1.050698591926654,
+            "z": 3.394497752725807
+          },
+          "quaternion": {
+            "w": 0.8967999624792881,
+            "x": -0.09844133630037535,
+            "y": -0.4287702527424115,
+            "z": -0.047065921511774696
+          },
+          "target": {
+            "x": -0.18539216968998096,
+            "y": -0.12940291071409174,
+            "z": 0.060075853302763965
+          },
+          "zoom": 1
+        },
+        "image": "",
+        "mask": "",
+        "model_3d_info": [
+          {
+            "position": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "quaternion": {
+              "w": 1,
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            }
+          }
+        ],
+        "normal": "",
+        "recording": ""
+      },
+      "width": 1024
+    }
+  },
+  "247": {
+    "_meta": {
+      "title": "Create 3D File (from Mesh)"
+    },
+    "class_type": "MeshToFile3D",
+    "inputs": {
+      "mesh": [
+        "4",
+        0
+      ]
+    }
+  },
+  "248": {
+    "_meta": {
+      "title": "Switch: Remove background"
+    },
+    "class_type": "ComfySwitchNode",
+    "inputs": {
+      "on_false": [
+        "122",
+        1
+      ],
+      "on_true": [
+        "192",
+        0
+      ],
+      "switch": true
+    }
+  },
+  "252": {
+    "_meta": {
+      "title": "Paint Mesh"
+    },
+    "class_type": "PaintMesh",
+    "inputs": {
+      "mesh": [
+        "238",
+        0
+      ],
+      "voxel_colors": [
+        "93",
+        0
+      ]
+    }
+  },
+  "260": {
+    "_meta": {
+      "title": "Smooth Mesh Normals"
+    },
+    "class_type": "MeshSmoothNormals",
+    "inputs": {
+      "crease_angle": 180,
+      "mesh": [
+        "210",
+        0
+      ]
+    }
+  },
+  "261": {
+    "_meta": {
+      "title": "Render UV Atlas"
+    },
+    "class_type": "RenderUVAtlas",
+    "inputs": {
+      "mesh": [
+        "196",
+        0
+      ],
+      "resolution": 1024
+    }
+  },
+  "262": {
+    "_meta": {
+      "title": "\u9884\u89c8\u56fe\u50cf"
+    },
+    "class_type": "PreviewImage",
+    "inputs": {
+      "images": [
+        "261",
+        0
+      ]
+    }
+  },
+  "279": {
+    "_meta": {
+      "title": "CFG \u8986\u76d6"
+    },
+    "class_type": "CFGOverride",
+    "inputs": {
+      "cfg": 1,
+      "end_percent": 1,
+      "model": [
+        "319",
+        0
+      ],
+      "start_percent": 0.769
+    }
+  },
+  "282": {
+    "_meta": {
+      "title": "Create 3D File (from Mesh)"
+    },
+    "class_type": "MeshToFile3D",
+    "inputs": {
+      "mesh": [
+        "252",
+        0
+      ]
+    }
+  },
+  "285": {
+    "_meta": {
+      "title": "Create 3D File (from Mesh)"
+    },
+    "class_type": "MeshToFile3D",
+    "inputs": {
+      "mesh": [
+        "260",
+        0
+      ]
+    }
+  },
+  "288": {
+    "_meta": {
+      "title": "Texture Resolution"
+    },
+    "class_type": "PrimitiveInt",
+    "inputs": {
+      "value": 4096
+    }
+  },
+  "298": {
+    "class_type": "Pixal3DMultiViewConditioning",
+    "inputs": {
+      "back": [
+        "415",
+        0
+      ],
+      "clip_vision_model": [
+        "15",
+        0
+      ],
+      "fov": [
+        "242",
+        0
+      ],
+      "front": [
+        "302",
+        0
+      ],
+      "left": [
+        "405",
+        0
+      ],
+      "right": [
+        "425",
+        0
+      ]
+    }
+  },
+  "3": {
+    "_meta": {
+      "title": "K\u91c7\u6837\u5668"
+    },
+    "class_type": "KSampler",
+    "inputs": {
+      "cfg": 7.5,
+      "denoise": 1,
+      "latent_image": [
+        "87",
+        0
+      ],
+      "model": [
+        "108",
+        0
+      ],
+      "negative": [
+        "298",
+        1
+      ],
+      "positive": [
+        "298",
+        0
+      ],
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "seed": 56,
+      "steps": 12
+    }
+  },
+  "302": {
+    "_meta": {
+      "title": "\u9884\u89c8\u56fe\u50cf"
+    },
+    "class_type": "PreviewImage",
+    "inputs": {
+      "images": [
+        "312",
+        0
+      ]
+    }
+  },
+  "303": {
+    "_meta": {
+      "title": "\u9884\u89c8\u906e\u7f69"
+    },
+    "class_type": "MaskPreview",
+    "inputs": {
+      "mask": [
+        "248",
+        0
+      ]
+    }
+  },
+  "312": {
+    "_meta": {
+      "title": "Crop Image to Mask"
+    },
+    "class_type": "ImageCropToMask",
+    "inputs": {
+      "background": "#000000",
+      "grow_mask": 0,
+      "height": 1024,
+      "images": [
+        "122",
+        0
+      ],
+      "masks": [
+        "303",
+        0
+      ],
+      "pad_factor": 1.1,
+      "width": 1024
+    }
+  },
+  "319": {
+    "_meta": {
+      "title": "UNet\u52a0\u8f7d\u5668"
+    },
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "pixal3d_multiview_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "322": {
+    "_meta": {
+      "title": "\u4fdd\u5b58 3D\uff08\u9ad8\u7ea7\uff09"
+    },
+    "class_type": "Save3DAdvanced",
+    "inputs": {
+      "filename_prefix": "3d/ComfyUI",
+      "height": 1024,
+      "model_3d": [
+        "285",
+        0
+      ],
+      "viewport_state": {
+        "camera_info": {
+          "aspect": 1,
+          "cameraType": "perspective",
+          "far": 10000,
+          "fov": 35,
+          "frustum": {
+            "bottom": -5,
+            "left": -5,
+            "right": 5,
+            "top": 5
+          },
+          "near": 0.01,
+          "position": {
+            "x": -5.039335113813643,
+            "y": -0.5437340180474283,
+            "z": 4.95440208301633
+          },
+          "quaternion": {
+            "w": 0.9215670424389577,
+            "x": 0.03535750382852678,
+            "y": -0.38632155618316755,
+            "z": 0.014821890619741353
+          },
+          "target": {
+            "x": -1.49747775812827e-05,
+            "y": -0.0006691908145472098,
+            "z": 1.6032085193750527e-05
+          },
+          "zoom": 1
+        },
+        "image": "",
+        "mask": "",
+        "model_3d_info": [
+          {
+            "position": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "quaternion": {
+              "w": 1,
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            }
+          }
+        ],
+        "normal": "",
+        "recording": ""
+      },
+      "width": 1024
+    }
+  },
+  "323": {
+    "_meta": {
+      "title": "3D \u9884\u89c8\uff08\u9ad8\u7ea7\uff09"
+    },
+    "class_type": "Preview3DAdvanced",
+    "inputs": {
+      "height": 1024,
+      "model_3d": [
+        "282",
+        0
+      ],
+      "viewport_state": {
+        "camera_info": {
+          "aspect": 1,
+          "cameraType": "perspective",
+          "far": 10000,
+          "fov": 35,
+          "frustum": {
+            "bottom": -5,
+            "left": -5,
+            "right": 5,
+            "top": 5
+          },
+          "near": 0.01,
+          "position": {
+            "x": 10.000004862518189,
+            "y": 10.000011399473358,
+            "z": 9.999983737987554
+          },
+          "quaternion": {
+            "w": 0.8804759338233585,
+            "x": -0.2798484359761136,
+            "y": 0.3647056179040478,
+            "z": 0.11591719073905508
+          },
+          "target": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "zoom": 1
+        },
+        "image": "",
+        "mask": "",
+        "model_3d_info": [
+          {
+            "position": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "quaternion": {
+              "w": 1,
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            }
+          }
+        ],
+        "normal": "",
+        "recording": ""
+      },
+      "width": 1024
+    }
+  },
+  "4": {
+    "_meta": {
+      "title": "\u4f53\u7d20\u5230\u7f51\u683c"
+    },
+    "class_type": "VoxelToMesh",
+    "inputs": {
+      "algorithm": "basic",
+      "threshold": 0.6,
+      "voxel": [
+        "119",
+        0
+      ]
+    }
+  },
+  "400": {
+    "_meta": {
+      "title": "\u52a0\u8f7d\u56fe\u50cf"
+    },
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "view_400.png"
+    }
+  },
+  "401": {
+    "_meta": {
+      "title": "\u79fb\u9664\u80cc\u666f"
+    },
+    "class_type": "RemoveBackground",
+    "inputs": {
+      "bg_removal_model": [
+        "193",
+        0
+      ],
+      "image": [
+        "400",
+        0
+      ]
+    }
+  },
+  "402": {
+    "_meta": {
+      "title": "Switch: Remove background"
+    },
+    "class_type": "ComfySwitchNode",
+    "inputs": {
+      "on_false": [
+        "400",
+        1
+      ],
+      "on_true": [
+        "401",
+        0
+      ],
+      "switch": true
+    }
+  },
+  "403": {
+    "_meta": {
+      "title": "\u9884\u89c8\u906e\u7f69"
+    },
+    "class_type": "MaskPreview",
+    "inputs": {
+      "mask": [
+        "402",
+        0
+      ]
+    }
+  },
+  "404": {
+    "_meta": {
+      "title": "Crop Image to Mask"
+    },
+    "class_type": "ImageCropToMask",
+    "inputs": {
+      "background": "#000000",
+      "grow_mask": 0,
+      "height": 1024,
+      "images": [
+        "400",
+        0
+      ],
+      "masks": [
+        "403",
+        0
+      ],
+      "pad_factor": 1.1,
+      "width": 1024
+    }
+  },
+  "405": {
+    "_meta": {
+      "title": "\u9884\u89c8\u56fe\u50cf"
+    },
+    "class_type": "PreviewImage",
+    "inputs": {
+      "images": [
+        "404",
+        0
+      ]
+    }
+  },
+  "410": {
+    "_meta": {
+      "title": "\u52a0\u8f7d\u56fe\u50cf"
+    },
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "view_410.png"
+    }
+  },
+  "411": {
+    "_meta": {
+      "title": "\u79fb\u9664\u80cc\u666f"
+    },
+    "class_type": "RemoveBackground",
+    "inputs": {
+      "bg_removal_model": [
+        "193",
+        0
+      ],
+      "image": [
+        "410",
+        0
+      ]
+    }
+  },
+  "412": {
+    "_meta": {
+      "title": "Switch: Remove background"
+    },
+    "class_type": "ComfySwitchNode",
+    "inputs": {
+      "on_false": [
+        "410",
+        1
+      ],
+      "on_true": [
+        "411",
+        0
+      ],
+      "switch": true
+    }
+  },
+  "413": {
+    "_meta": {
+      "title": "\u9884\u89c8\u906e\u7f69"
+    },
+    "class_type": "MaskPreview",
+    "inputs": {
+      "mask": [
+        "412",
+        0
+      ]
+    }
+  },
+  "414": {
+    "_meta": {
+      "title": "Crop Image to Mask"
+    },
+    "class_type": "ImageCropToMask",
+    "inputs": {
+      "background": "#000000",
+      "grow_mask": 0,
+      "height": 1024,
+      "images": [
+        "410",
+        0
+      ],
+      "masks": [
+        "413",
+        0
+      ],
+      "pad_factor": 1.1,
+      "width": 1024
+    }
+  },
+  "415": {
+    "_meta": {
+      "title": "\u9884\u89c8\u56fe\u50cf"
+    },
+    "class_type": "PreviewImage",
+    "inputs": {
+      "images": [
+        "414",
+        0
+      ]
+    }
+  },
+  "420": {
+    "_meta": {
+      "title": "\u52a0\u8f7d\u56fe\u50cf"
+    },
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "view_420.png"
+    }
+  },
+  "421": {
+    "_meta": {
+      "title": "\u79fb\u9664\u80cc\u666f"
+    },
+    "class_type": "RemoveBackground",
+    "inputs": {
+      "bg_removal_model": [
+        "193",
+        0
+      ],
+      "image": [
+        "420",
+        0
+      ]
+    }
+  },
+  "422": {
+    "_meta": {
+      "title": "Switch: Remove background"
+    },
+    "class_type": "ComfySwitchNode",
+    "inputs": {
+      "on_false": [
+        "420",
+        1
+      ],
+      "on_true": [
+        "421",
+        0
+      ],
+      "switch": true
+    }
+  },
+  "423": {
+    "_meta": {
+      "title": "\u9884\u89c8\u906e\u7f69"
+    },
+    "class_type": "MaskPreview",
+    "inputs": {
+      "mask": [
+        "422",
+        0
+      ]
+    }
+  },
+  "424": {
+    "_meta": {
+      "title": "Crop Image to Mask"
+    },
+    "class_type": "ImageCropToMask",
+    "inputs": {
+      "background": "#000000",
+      "grow_mask": 0,
+      "height": 1024,
+      "images": [
+        "420",
+        0
+      ],
+      "masks": [
+        "423",
+        0
+      ],
+      "pad_factor": 1.1,
+      "width": 1024
+    }
+  },
+  "425": {
+    "_meta": {
+      "title": "\u9884\u89c8\u56fe\u50cf"
+    },
+    "class_type": "PreviewImage",
+    "inputs": {
+      "images": [
+        "424",
+        0
+      ]
+    }
+  },
+  "55": {
+    "_meta": {
+      "title": "\u52a0\u8f7d MoGe \u6a21\u578b"
+    },
+    "class_type": "LoadMoGeModel",
+    "inputs": {
+      "model_name": "moge_2_vitl_normal_fp16.safetensors"
+    }
+  },
+  "56": {
+    "_meta": {
+      "title": "MoGe \u63a8\u7406"
+    },
+    "class_type": "MoGeInference",
+    "inputs": {
+      "apply_mask": true,
+      "batch_size": 4,
+      "force_projection": true,
+      "fov_x_degrees": 0,
+      "image": [
+        "302",
+        0
+      ],
+      "moge_model": [
+        "55",
+        0
+      ],
+      "resolution_level": 9
+    }
+  },
+  "87": {
+    "_meta": {
+      "title": "EmptyTrellis2LatentStructure"
+    },
+    "class_type": "EmptyTrellis2LatentStructure",
+    "inputs": {
+      "batch_size": 1
+    }
+  },
+  "91": {
+    "_meta": {
+      "title": "Trellis2ShapeStage"
+    },
+    "class_type": "Trellis2ShapeStage",
+    "inputs": {
+      "negative": [
+        "298",
+        1
+      ],
+      "positive": [
+        "298",
+        0
+      ],
+      "voxel": [
+        "119",
+        0
+      ]
+    }
+  },
+  "92": {
+    "_meta": {
+      "title": "VaeDecodeShapeTrellis"
+    },
+    "class_type": "VaeDecodeShapeTrellis",
+    "inputs": {
+      "samples": [
+        "23",
+        0
+      ],
+      "vae": [
+        "117",
+        0
+      ]
+    }
+  },
+  "93": {
+    "_meta": {
+      "title": "VaeDecodeTextureTrellis"
+    },
+    "class_type": "VaeDecodeTextureTrellis",
+    "inputs": {
+      "samples": [
+        "12",
+        0
+      ],
+      "shape_subdivides": [
+        "92",
+        1
+      ],
+      "vae": [
+        "118",
+        0
+      ]
+    }
+  },
+  "94": {
+    "_meta": {
+      "title": "Trellis2 Upsample Stage"
+    },
+    "class_type": "Trellis2UpsampleStage",
+    "inputs": {
+      "negative": [
+        "91",
+        1
+      ],
+      "positive": [
+        "91",
+        0
+      ],
+      "shape_latent": [
+        "18",
+        0
+      ],
+      "target_resolution": "1536",
+      "vae": [
+        "117",
+        0
+      ]
+    }
+  },
+  "98": {
+    "_meta": {
+      "title": "Trellis2TextureStage"
+    },
+    "class_type": "Trellis2TextureStage",
+    "inputs": {
+      "negative": [
+        "94",
+        1
+      ],
+      "positive": [
+        "94",
+        0
+      ],
+      "shape_latent": [
+        "23",
+        0
+      ]
+    }
+  }
+}

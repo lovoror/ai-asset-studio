@@ -63,6 +63,12 @@ def custom_style_def(req: dict, presets: dict, base: dict | None) -> dict | None
     return style
 
 
+# The workflow a multi-view job runs when the settings name none. Shipped in presets/workflows/ and built
+# from the single-image workflow by var/build_multiview_workflow.py: same graph, Pixal3DConditioning swapped
+# for Pixal3DMultiViewConditioning, one image pipeline per view, and no TRELLIS.2/Pixal3D branch switch.
+MULTIVIEW_WORKFLOW = "3d_pixal3d_multi_views.json"
+
+
 def backend_config(global_settings: dict | None) -> dict:
     """The generation-backend settings, normalised into the shape the stage request.json carries.
 
@@ -77,6 +83,9 @@ def backend_config(global_settings: dict | None) -> dict:
                   "workflow": g.get("image_workflow") or ""},
         "three_d": {"kind": g.get("three_d_kind") or "local", "url": (g.get("three_d_url") or "").rstrip("/"),
                     "workflow": g.get("three_d_workflow") or "",
+                    # A multi-view job runs a different graph: the single-image workflow conditions on one
+                    # LoadImage and has no Pixal3DMultiViewConditioning node in it at all.
+                    "multiview_workflow": g.get("three_d_multiview_workflow") or MULTIVIEW_WORKFLOW,
                     "trellis2": bool(g.get("trellis2", True)),
                     # node ids are strings in the API-format workflow JSON; accept ints from hand-edited settings
                     "nodes": {k: str(v) for k, v in nodes.items() if v not in (None, "")}},
@@ -150,7 +159,7 @@ def resolve_settings(req: dict, global_settings: dict | None = None) -> dict:
             "target_triangles": int(req.get("target_triangles") or od.get("target_triangles", 12000)),
             "texture_size": int(req.get("texture_size") or od.get("texture_size", 2048)),
             "generate_lods": bool(req.get("generate_lods", True)),
-            "lod_fractions": list(req.get("lod_fractions") or od.get("lod_fractions", [0.5, 0.25])),
+            "lod_fractions": list(req.get("lod_fractions") or od.get("lod_fractions", [0.7])),
             "generate_collision": bool(req.get("generate_collision", True)),
             "collision_triangles": int(req.get("collision_triangles") or od.get("collision_triangles", 200)),
             "height_m": req.get("height_m"),

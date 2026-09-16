@@ -157,8 +157,21 @@ Lightning 4 vs 8 share seeds, so the compositions match and the difference is de
   image 1.0 and scored both pump candidates 1.0.
 * Matting: the three acceptance jobs used `ZhengPeng7/BiRefNet` (RMBG-2.0 access was granted later; it is now the default,
   `STUDIO_REMBG_MODEL` switches).
-* Multi-view: the calibrated-input path is implemented and validated statically (matrices, FOV, front-view convention);
-  the `*_mv` checkpoints were not downloaded (+17 GB) and no multi-view job was run. No automatic novel-view generation.
+* Multi-view: both lanes are wired. The ComfyUI lane runs `presets/workflows/3d_pixal3d_multi_views.json` (built by
+  `var/build_multiview_workflow.py`, `Pixal3DMultiViewConditioning`) and needs **ComfyUI >= 0.35** on the 3D server; the
+  `*_mv` checkpoints are already present on both boxes, so no download is needed. The control plane maps each frame onto
+  the node's `front/left/back/right` slots from its name, its camera azimuth or its position, and either pins the caller's
+  FOV or lets MoGe measure it (`docs/MULTIVIEW.md`). The local lane runs Pixal3D's own `inference_mv`. Still missing: a
+  portal UI, and automatic novel-view generation - nothing renders the missing views for you yet.
+* LOD budgets: LODs reuse LOD0's texture set, so they have to keep its UV layout, and meshoptimizer never collapses an edge
+  on a UV border - after an atlas bake every UV seam is one. That puts a floor under how far an LOD can be reduced, and the
+  floor is a property of the mesh's seams, not of the requested fraction. Measured with `var/lod_fractions_sweep.py` on a
+  19,415-triangle atlas-baked asset: the reducer could not go below ~13,100 triangles (0.67) for a 0.5 target, and a
+  chained second level stalled at ~12,500. Two assets in `var/jobs` both hit that: LOD1 stopped 12 % and 15 % over budget
+  and LOD2 108 % and 113 % over. The shipped default is therefore a single level at `[0.7]` (`presets/styles.yaml`), which
+  is reached exactly; `lod_fractions` is still settable per request or per style. Two levels measured `[0.7, 0.6]` for the
+  same asset, both inside budget but the second with under 2 % margin - and each extra level is another ~9 MB copy of the
+  same textures, so the triangle count is not what it buys.
 * No quantised Qwen mode yet (BF16 with block offload only); a faster mode would need a quality comparison first.
 * Output is an optimized static asset: automatic decimation topology, no rig, not animation-ready.
 * Text/lettering: models garble it; the prompt builder forbids text on the object.

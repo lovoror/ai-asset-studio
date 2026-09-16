@@ -244,6 +244,8 @@ class SettingsPatch(BaseModel):
     three_d_kind: Optional[Literal["local", "comfyui"]] = None
     three_d_url: Optional[str] = Field(None, max_length=300)
     three_d_workflow: Optional[str] = Field(None, max_length=200, pattern=r"^([\w.\-]+\.json)?$")
+    three_d_multiview_workflow: Optional[str] = Field(None, max_length=200, pattern=r"^([\w.\-]+\.json)?$",
+                                                      description="workflow for multi-view jobs; empty = the shipped 3d_pixal3d_multi_views.json")
     trellis2: Optional[bool] = None
     nodes: Optional[BackendNodes] = None
     # Stage worker addresses, overriding config.toml [servers]. Send {} to fall back to config.toml.

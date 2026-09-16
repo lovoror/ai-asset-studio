@@ -16,7 +16,8 @@ import time
 from pathlib import Path
 
 from . import config
-from .presets import backend_config, load_presets
+from . import multiview
+from .presets import MULTIVIEW_WORKFLOW, backend_config, load_presets
 from .promptbuilder import build_reference_prompt
 from .runner_client import Runner, StageCancelled, StageFailed
 from .validate import validate_glb
@@ -397,10 +398,16 @@ class JobRun:
         ref = self.stage_result("reference")
         px = self.settings["pixal3d"]
         master = self.settings["master"]
+        # A multi-view job swaps in its own workflow, so keep the copy the request carries mutable.
+        backend3d = dict(self.backend.get("three_d") or {"kind": "local"})
         req = {
             "mode": "multiview" if ref.get("source") == "multiview" else "single",
             "image_path": None if ref.get("source") == "multiview" else str(self.stages_dir / "reference" / ref["selected"]),
             "views_dir": ref.get("views_dir"),
+            # ComfyUI multi-view only: the control plane maps the frames onto the node's four named slots,
+            # because that node rebuilds a fixed orbit rig instead of posing each camera from its matrix.
+            "views": None,
+            "view_fov_degrees": None,
             "out_dir": str(d), "seed": self.settings["seed"],
             "resolution": px["resolution"], "low_vram": px["low_vram"], "max_num_tokens": px["max_num_tokens"],
             "attn_backend": px.get("attn_backend", "flash_attn"),
@@ -408,7 +415,7 @@ class JobRun:
                        "remesh": master["remesh"], "remesh_band": master["remesh_band"], "remesh_project": master["remesh_project"]},
             "rembg_model": config.REMBG_MODEL,
             # See stage_reference: the runner's env is empty, so per-job configuration travels in the request.
-            "backend": self.backend.get("three_d") or {"kind": "local"},
+            "backend": backend3d,
         }
         remote3d = self.remote("three_d")
         if remote3d:
@@ -419,13 +426,25 @@ class JobRun:
                     raise JobFailed(name, f"the ComfyUI 3D backend is selected but no {what} is configured "
                                           f"(Settings -> Generation backends)")
             if req["mode"] == "multiview":
-                raise JobFailed(name, "multiview input needs the local Pixal3D backend: the ComfyUI image-to-model "
-                                      "workflow takes a single reference image")
+                req["views"], req["view_fov_degrees"], mv_warnings = multiview.view_inputs(req["views_dir"])
+                for w in mv_warnings:
+                    self.warn(w)
+                if not req["views"]:
+                    raise JobFailed(name, "the multi-view input has no views that map onto the Pixal3D rig")
+                # The multi-view graph, not the single-image one: see presets.MULTIVIEW_WORKFLOW.
+                backend3d["workflow"] = backend3d.get("multiview_workflow") or MULTIVIEW_WORKFLOW
+                if req["view_fov_degrees"] is None:
+                    self.log("multi-view cameras are approximate: the workflow measures the horizontal FOV "
+                             "from the front view with MoGeGeometryToFOV")
+                else:
+                    self.log(f"multi-view rig pinned to the caller's {req['view_fov_degrees']:.1f}° horizontal FOV")
         atomic_write_json(d / "request.json", req)
         log_path = d / "log.txt"
         if remote3d:
-            self.log(f"ComfyUI 3D generation from {remote3d['url']} ({remote3d['workflow']}, "
-                     f"{'TRELLIS.2' if remote3d.get('trellis2', True) else 'Pixal3D'} branch), master export "
+            branch = "Pixal3D multi-view" if req["mode"] == "multiview" else (
+                "TRELLIS.2" if remote3d.get("trellis2", True) else "Pixal3D")
+            self.log(f"ComfyUI 3D generation from {remote3d['url']} ({backend3d['workflow']}, "
+                     f"{branch}), master export "
                      f"{master['decimation_target']} tris / {master['texture_size']}px")
         else:
             self.log(f"Pixal3D {req['mode']} generation at {px['resolution']} (low_vram={px['low_vram']}), master export "

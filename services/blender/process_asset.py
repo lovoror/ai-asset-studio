@@ -656,6 +656,16 @@ def mo_decimate(obj, target: int, error_ladder=(0.01, 0.03, 0.05)) -> dict:
             "simplifier": "meshoptimizer.simplifyWithAttributes(normals w=0.7, PRUNE)"}
 
 
+# LODs preserve the UV layout so every level shares LOD0's textures (no re-unwrap, no re-bake). Measured on a
+# 19,415-tri atlas-baked asset (var/lod_fractions_sweep.py): the error ladder's usable rung is err=0.5, and the
+# next rung (0.75) collapses the mesh, so the reducer cannot get below ~67% of LOD0 whatever target it is given.
+# The attribute weight makes no difference at all (10.0 and 0.0 give the same result). The limit is
+# meshoptimizer's border lock - it never collapses an edge on a mesh border, and after UV-splitting every atlas
+# seam is one. Only reducing a *welded* mesh breaks through (5,732 measured), which costs the UV layout and
+# therefore needs its own unwrap and bake. Consequences for lod_fractions: anything below ~0.7 is unreachable and
+# is reported as an overshoot, and a chained second level stalls near 0.65 - so two levels buy a few percent of
+# triangles for another full copy of the textures. If a project needs true LOD budgets, the LODs have to be built
+# and baked separately.
 def lod_from_asset(asset, target: int, error_ladder=(0.01, 0.03, 0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0)) -> dict:
     """Simplify the optimized asset while preserving its UV layout (meshoptimizer with UV+normal attributes on the
     UV-split vertex set), so LODs reuse LOD0's textures and material: no re-unwrap, no re-bake, one texture set."""
@@ -1052,7 +1062,7 @@ def main():
     if opt.get("generate_lods"):
         t0 = time.time()
         prev = asset  # LODs form a chain (docs: simplifying the previous LOD is cheaper and gives smoother transitions)
-        for i, frac in enumerate(opt.get("lod_fractions", [0.5, 0.25]), start=1):
+        for i, frac in enumerate(opt.get("lod_fractions", [0.7]), start=1):
             lod_target = max(12, int(got * frac))
             info = lod_from_asset(prev, lod_target)
             lod = info.pop("object")
