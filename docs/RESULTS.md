@@ -161,7 +161,11 @@ Lightning 4 vs 8 share seeds, so the compositions match and the difference is de
   `var/build_multiview_workflow.py`, `Pixal3DMultiViewConditioning`) and needs **ComfyUI >= 0.35** on the 3D server; the
   `*_mv` checkpoints are already present on both boxes, so no download is needed. The control plane maps each frame onto
   the node's `front/left/back/right` slots from its name, its camera azimuth or its position, and either pins the caller's
-  FOV or lets MoGe measure it (`docs/MULTIVIEW.md`). The local lane runs Pixal3D's own `inference_mv`. Still missing: a
+  FOV or lets MoGe measure it (`docs/MULTIVIEW.md`). The local lane runs Pixal3D's own `inference_mv`. **Verified end to
+  end** on 2026-09-16 against a local ComfyUI 0.36: four 512² rig renders of the 19,415-triangle car asset, fed through
+  the shipped workflow, produced a 56 MB / 698,803-triangle textured GLB in 3.0 min, and re-rendering the result shows the
+  same object from the same angles (the front view stays the front view). At the 1536 cascade the same job exhausts an
+  8 GB card in `VaeDecodeTextureTrellis`; it completes at 1024, which is what the numbers above are for. Still missing: a
   portal UI, and automatic novel-view generation - nothing renders the missing views for you yet.
 * LOD budgets: LODs reuse LOD0's texture set, so they have to keep its UV layout, and meshoptimizer never collapses an edge
   on a UV border - after an atlas bake every UV seam is one. That puts a floor under how far an LOD can be reduced, and the

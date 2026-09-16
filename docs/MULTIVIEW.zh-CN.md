@@ -95,6 +95,11 @@ ComfyUI 侧用 `Pixal3DMultiViewConditioning` 实现（2026-09-08 进入 ComfyUI
   重启。
 * `models/diffusion_models/` 里要有那个多视角权重，另外还需要共用的 `dino_v3_L_naf_fp32.safetensors`、
   `trellis_2_shape_vae_bf16.safetensors`、`trellis_2_texture_vae_bf16.safetensors`。
+* **显存峰值在贴图 VAE 解码，不在采样。** 一个 19,415 面资产、1536 上采样、四视角的任务跑完了 49 个节点，然后在
+  8 GB 卡上的 `VaeDecodeTextureTrellis` 崩了（已分配 3.40 GiB，又申请 2.04 GiB）。同一个任务把 `resolution` 调到
+  **1024** 后 **3.0 分钟**跑完，产出一个 56 MB 的带贴图 GLB（698,803 面，baseColor + metallicRoughness + normal，
+  含 TEXCOORD_0），而且它的前视图就是输入的前视图——槽位映射把模型摆正了。24 GB 卡在 1536 下余量充足；小卡上把
+  `resolution`（`Trellis2UpsampleStage.target_resolution`）调低即可——这正是 `balanced` 画质档 OOM 降级阶梯里的同一步。
 
 工作流由 `three_d_multiview_workflow`（设置项，默认 `3d_pixal3d_multi_views.json`）指定，所以无论单图工作流
 配的是哪个，多视角任务都走自己那张图。

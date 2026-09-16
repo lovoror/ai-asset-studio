@@ -101,6 +101,13 @@ refused with a warning rather than passed on.
   other ComfyUI checkout: `git pull`, install requirements, restart.
 * The multi-view checkpoint in `models/diffusion_models/`, plus the shared `dino_v3_L_naf_fp32.safetensors`,
   `trellis_2_shape_vae_bf16.safetensors` and `trellis_2_texture_vae_bf16.safetensors`.
+* **VRAM: the peak is the texture VAE decode, not the sampler.** A 4-view job on a 19,415-triangle asset took 49
+  nodes and then exhausted an 8 GB card at `VaeDecodeTextureTrellis` (3.40 GiB allocated, 2.04 GiB requested).
+  The same job at `resolution = 1024` finished in **3.0 minutes** and produced a 56 MB textured GLB (698,803
+  triangles, base colour + metallic-roughness + normal, TEXCOORD_0 present), and its front view is the front view
+  of the input — the slot mapping poses the model the right way round. A 24 GB card has ample headroom at 1536;
+  on a small card lower `resolution` (the `Trellis2UpsampleStage.target_resolution` role) — the same step as the
+  `balanced` quality preset's OOM ladder.
 
 The workflow is selected by `three_d_multiview_workflow` (Settings; default `3d_pixal3d_multi_views.json`),
 so a multi-view job uses its own graph no matter which single-image workflow is configured.
