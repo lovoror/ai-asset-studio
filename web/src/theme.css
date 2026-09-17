@@ -1144,26 +1144,95 @@ kbd {
 .canvas-empty { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
 .canvas-empty .empty-action { pointer-events: auto; }
 
-.canvas-card {
+/* A node. The frame carries no padding of its own: the head, the port rows and the body each have theirs, and the
+   port rows are full-bleed so a dot sits exactly on the frame's edge - which is where `canvas.ts` computes the
+   anchor the wires are drawn from. */
+.canvas-node {
   position: absolute;
-  display: flex; flex-direction: column; gap: var(--sp-3);
-  padding: var(--sp-3);
+  display: flex; flex-direction: column;
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-md);
-  overflow: hidden;         /* clips the full-bleed header to the card's radius */
+  overflow: hidden;         /* clips the full-bleed head to the node's radius */
 }
-/* The header is dragged, so it is a bar across the whole card: negative margins pull it out of the card's padding. */
-.canvas-card-head {
+/* The head is dragged, so it is a bar across the whole node. Its height is set inline from NODE_HEAD. */
+.canvas-node-head {
   display: flex; align-items: center; gap: var(--sp-2);
-  margin: calc(-1 * var(--sp-3)) calc(-1 * var(--sp-3)) 0;
-  padding: var(--sp-2) var(--sp-3);
+  flex: none;
+  padding: 0 var(--sp-3);
   background: var(--bg-hover);
   border-bottom: 1px solid var(--border);
   cursor: grab;
 }
-.canvas-card-head .grip { color: var(--fg-faint); flex: none; }
+.canvas-node-head .grip { color: var(--fg-faint); flex: none; }
+.canvas-node-body { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-3); }
+
+/* Ports: one row each, heights and top padding inline from PORT_ROW / PORT_TOP for the same reason. */
+.canvas-ports { display: flex; flex-direction: column; padding-bottom: 4px; }
+.canvas-port {
+  position: relative;
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 var(--sp-3);
+  font-size: var(--fs-xs);
+  color: var(--fg-muted);
+}
+.canvas-port-label { flex: none; }
+.canvas-port-state { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.canvas-port.in .canvas-port-state { margin-left: auto; }
+.canvas-port.out .canvas-port-state { margin-right: auto; }
+.canvas-port.in.required .canvas-port-state { color: var(--danger); }
+.canvas-port-dot {
+  position: absolute; top: 50%;
+  width: 12px; height: 12px;
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev);
+  transform: translateY(-50%);
+  transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+/* The dot's distance from the edge is set inline from PORT_INSET - see canvas.ts for why it is not on the edge. */
+.canvas-port.out .canvas-port-dot { cursor: crosshair; }
+.canvas-port.out:hover .canvas-port-dot { border-color: var(--accent); background: var(--accent); }
+/* While a wire is being dragged, the inputs it could land on advertise themselves. */
+.canvas-viewport.wiring .canvas-port.in .canvas-port-dot { border-color: var(--accent); }
+.canvas-viewport.wiring .canvas-port.in:hover .canvas-port-dot { background: var(--accent); }
+
+/* Wires. The svg lives inside the transformed surface, so every coordinate in it is a world coordinate; the
+   stroke stays hairline at any zoom through vector-effect="non-scaling-stroke" on the paths. */
+.canvas-edges { position: absolute; overflow: visible; pointer-events: none; }
+.canvas-wire { fill: none; stroke: var(--border-strong); stroke-width: 2; }
+.canvas-wire.is-selected { stroke: var(--accent); stroke-width: 2.5; }
+.canvas-wire.pending { stroke: var(--accent); stroke-dasharray: 5 4; }
+/* An invisible fat stroke over each wire: a 2px hairline is not a click target. */
+.canvas-wire-hit { fill: none; stroke: transparent; stroke-width: 16; pointer-events: stroke; cursor: pointer; }
+.canvas-edge-badge { fill: var(--bg-elev); stroke: var(--border-strong); }
+.canvas-edge-badge-text {
+  fill: var(--fg-muted); font-size: 10px; pointer-events: none;
+  text-anchor: middle; dominant-baseline: central;
+}
+.canvas-edge-x { pointer-events: all; cursor: pointer; }
+.canvas-edge-x circle { fill: var(--bg-elev); stroke: var(--border-strong); }
+.canvas-edge-x text { fill: var(--fg-muted); font-size: 12px; text-anchor: middle; dominant-baseline: central; }
+.canvas-edge-x:hover circle { stroke: var(--danger); }
+.canvas-edge-x:hover text { fill: var(--danger); }
+
+/* the five add-node buttons in the page head */
+.canvas-add { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-1); }
+
+/* a node's own disclosure, e.g. the prompt node's optional fields */
+.canvas-more {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  text-decoration: underline;
+}
+.canvas-more:hover { color: var(--accent); }
 
 /* the assembled prompt, and the switch that decides whether it or the user's own text is sent */
 .canvas-composed {
@@ -1200,6 +1269,8 @@ kbd {
   overflow: hidden;
 }
 .canvas-ref img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* An image node's own picture is the node's subject, not a 64px chip in a row, so it gets the full width. */
+.canvas-ref.wide { width: 100%; height: 128px; }
 .canvas-ref.missing { border-style: dashed; border-color: var(--danger); }
 .canvas-ref-none { display: grid; place-items: center; height: 100%; color: var(--danger); font-weight: 600; }
 .canvas-ref-n {
@@ -1260,6 +1331,8 @@ kbd {
 }
 .canvas-result-img { display: block; width: 100%; aspect-ratio: 1 / 1; padding: 0; border: 0; background: none; cursor: zoom-in; }
 .canvas-result-img img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* The candidate this node's image output carries. */
+.canvas-result.is-output { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .canvas-result-ops { display: flex; border-top: 1px solid var(--border); }
 .canvas-result-ops button {
   flex: 1;
@@ -1270,6 +1343,7 @@ kbd {
   cursor: pointer;
 }
 .canvas-result-ops button:hover { background: var(--accent-soft); color: var(--accent); }
+.canvas-result-ops button.on { color: var(--accent); }
 
 /* the reference picker */
 .canvas-pick-group { display: flex; flex-direction: column; gap: var(--sp-2); }

@@ -28,28 +28,45 @@ Open **http://127.0.0.1:8090** after `scripts\start.ps1`. The portal is a React 
 
 ## Canvas
 
-`/canvas` is the *other* way to make images: instead of one form and one session per idea, it is an infinite
-board of **cards**, each card its own generation request. It exists because "type a prompt, get four pictures"
-hides the instruction the pipeline actually sends and cannot express "make this look like that".
+`/canvas` is the *other* way to make images: a **node graph**, not a form and not one-session-per-idea. It is a
+graph because a single card that carries the prompt, the style and the references can only ever describe one
+request; separate nodes can be reused — one style node feeds every generator, one reference image feeds any
+number of generations, and turning a result into the input of the next generation is a *wire* rather than a copy
+of the whole request. (The page used to be exactly those bundled cards; a board saved in that shape is migrated
+into nodes on load rather than dropped.)
 
+| node | takes | gives |
+|---|---|---|
+| **Prompt** | — | `prompt` (the idea, plus a collapsed *more* with materials, palette and an avoid-list) |
+| **Style** | — | `style` |
+| **Image** | — | `image` (one picture: uploaded, or picked from a job) |
+| **Generate 2D** | `prompt`, `style`, `image` × n | `image` (the variations of a job) |
+| **Make 3D** | `image` | `asset` (a link to the 3D job) |
+
+* **Ports are typed**, so an edge only joins like to like. `Generate 2D → Generate 2D` is legal — that is how you
+  iterate on a result — cycles are refused, and an input that takes a single edge *replaces* it when you drop a
+  second one. An input taking several (references) keeps them in the order they were connected, and says which is
+  which, because order is meaning: in a two-image edit the first is the subject and the second is what it should
+  look like.
+* **Connecting:** drag from an output port to an input port; click an edge and press Delete (or its ×) to remove
+  it. An incompatible or cyclic target is refused with the reason on screen.
+* **A Generate node has no prompt or style of its own** — it reads them from its wires and says so when nothing is
+  connected. Only the prompt is required; an unconnected style falls back to the saved default (the port says so)
+  and references are optional.
+* **It shows the prompt it will send.** The composed instruction comes from `POST /v1/prompt/preview` with the
+  parts it was built from, and *Composed* / *My text* decides whether that or your own text (`final_prompt`) goes
+  out. Switching to *My text* seeds the box with the composed text, so changing the default starts from the
+  default.
 * **Pan and zoom** by hand: wheel zooms about the pointer, dragging the background (or the middle button, or
-  space-drag) pans, cards are dragged by their header. No pan/zoom library — the transform is two numbers and a
-  scale, and `web/src/canvas.ts` is the whole model (view math, card/reference shapes, localStorage).
-* **Each card shows the prompt it will send.** The composed instruction is fetched from `POST /v1/prompt/preview`
-  and displayed with the parts it was built from (`组成(n)` expands them); *Composed* / *My text* switches between
-  sending that composed text and sending your own verbatim (`final_prompt`). Switching to *My text* seeds the box
-  with the composed text, so "change the default" starts from the default.
-* **0–6 reference images per card**, in order — *order is meaning*: in a two-image edit the first is the subject
-  and the second is what it should look like. A slot is filled by uploading a file (base64, straight from disk) or
-  by picking an existing image from another card or from a session. Each result offers *use as reference*, which
-  drops it into a new card beside the one it came from.
-* **Results stay on the card**: click to enlarge (the same lightbox as Session, arrow keys browse), or *make 3D*
-  to send that variation to the asset pipeline.
-* Everything (cards, positions, view, and uploads up to the browser's storage quota) is kept in
-  `localStorage["as-canvas"]`; if the quota is hit, the uploaded *bytes* are dropped and the card says so rather
+  space-drag) pans, nodes are dragged by their header. No pan/zoom library — `web/src/canvas.ts` is the whole
+  model (node/port/edge types, connection rules, view math, localStorage).
+* Results stay on the node: click to enlarge (the same lightbox as Session, arrow keys browse) or send one to the
+  3D pipeline, either from the result or through a *Make 3D* node.
+* Everything (nodes, wires, view, and uploads up to the browser's storage quota) is kept in
+  `localStorage["as-canvas"]`; if the quota is hit, the uploaded *bytes* are dropped and the node says so rather
   than generating from a picture that is gone.
-* A card with its composed prompt shown is taller than a 900 px viewport, so after typing you may need to pan or
-  press **适应 / Fit** to bring its *Generate* button fully into view. Adding a card already brings it into view.
+* A node showing its composed prompt can be taller than the viewport, so after typing you may need to pan or press
+  **适应 / Fit** to bring its *Generate* button fully into view. Adding a node already brings it into view.
 * The image lane must be able to take a reference: references need a *LoadImage* graph, and if the configured
   workflow is a text-to-image one the pipeline substitutes the shipped `krea2_edit_refs.json` and records that in
   the job's warnings (see [`PROMPTS.md`](PROMPTS.md) §4).
@@ -65,9 +82,12 @@ hides the instruction the pipeline actually sends and cannot express "make this 
 - [ ] Zip download contains GLBs, previews, textures, manifest (master excluded unless `?include_master=true`).
 - [ ] Re-optimise re-runs only the Blender stage.
 - [ ] The asset inspector switches between all eight display modes without console errors.
-- [ ] Canvas: *New card* lands fully in view; typing a prompt fills the composed-prompt block from the server;
-      **Fit** frames every card; a reference picked from an earlier session generates through the edit graph;
-      *use as reference* and *make 3D* both work; reloading the page puts the board back.
+- [ ] Canvas: a fresh board arrives wired (Prompt → Generate 2D); dragging from an output port to an input port
+      connects, an incompatible or cyclic drop is refused with a reason, and selecting an edge + Delete removes it;
+      typing in the prompt node fills the Generate node's composed prompt from the server; **Fit** frames every
+      node; a reference picked from an earlier session generates through the edit graph; *make 3D* works from a
+      result and from a Make 3D node; reloading the page puts the board back, and a board saved by the older
+      card-based page is migrated rather than dropped.
 - [ ] `python -m pytest tests/test_portal_mock.py` passes.
 
 ## Dev

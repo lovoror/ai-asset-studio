@@ -1,28 +1,18 @@
 import { useEffect, useState } from "react";
 import { Images } from "lucide-react";
 import { api, Candidate, Job, withToken } from "../api";
+import { candidatePath, clampLabel } from "../canvas";
 import { useT } from "../i18n";
 import { Modal, Spinner } from "./ui";
 
 /** A reference that already exists on the server: exactly the `job_id` + `file` pair `ReferenceImage` wants, plus a
-    thumbnail so the slot has something to draw before the card is generated. */
+    thumbnail so the node has something to draw before the card is generated. */
 export interface PickedReference { job_id: string; file: string; label: string; url: string }
-
-/** Where an image job keeps the candidates a reference may point at.
- *
- * `GET /v1/jobs/{id}` reports a candidate's `file` as a bare name (`cand_00.png`) and serves it from
- * `artifacts/reference_candidates/`; a reference `file` is resolved against the job's `artifacts/` directory, so
- * this prefix is what makes the two line up. */
-export const candidatePath = (name: string) => `artifacts/reference_candidates/${name}`;
-
-/** `ReferenceImage.label` is capped at 40 characters and is only ever shown back to the user, so a long title is
-    trimmed here rather than refused by the API. */
-export const clampLabel = (s: string) => s.slice(0, 40);
 
 export interface PickerSource { key: string; label: string; job: Job }
 
 interface Props {
-  /** Results of the other cards on the canvas, in card order. */
+  /** Results of the other generate nodes on the canvas, in node order. */
   sources: PickerSource[];
   onPick: (ref: PickedReference) => void;
   onClose: () => void;
