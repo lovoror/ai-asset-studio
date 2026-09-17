@@ -353,18 +353,20 @@ def signature(image, box: Panel, size: int = 48) -> np.ndarray:
     return arr / norm if norm > 1e-6 else arr
 
 
-def mirror_side_views(views: dict[str, Path], warnings: list) -> None:
+def mirror_side_views(views: dict[str, Path], warnings: list) -> str:
     """Make sure `left` and `right` show opposite sides, mirroring one when the model drew the same side twice.
 
-    The generator is not reliable about which side it draws. Measured on real sheets: one run produced a proper
-    mirrored pair (0.95 correlated once one is flipped) and another the same side twice (0.65 correlated
-    unflipped). Handing the rig the same side as both "left" and "right" tells it two contradictory things about
-    one half of the object, and that reconstructs as a malformed side - which is what a "the car is not a car"
-    result looks like. So a duplicate pair is turned into a mirrored pair by flipping the right view: exact for a
+    The generator is not reliable about which side it draws - measured, more often than not: of five sheets off
+    the reworked workflow, three drew the *same* side for both side panels. Handing the rig the same side as both
+    "left" and "right" tells it two contradictory things about one half of the object, and that reconstructs as a
+    malformed side. So a duplicate pair is turned into a mirrored pair by flipping the right view: exact for a
     symmetric object, approximate for an asymmetric one, and better than a contradiction either way.
+
+    Returns the reading, because the caller may prefer to *re-draw* the sheet rather than settle for a mirror:
+    "pair" (as drawn), "duplicate" (mirrored), "ambiguous" (neither, used as drawn) or "missing".
     """
     if not {"left", "right"} <= set(views):
-        return
+        return "missing"
     with Image.open(views["left"]) as a, Image.open(views["right"]) as b:
         a = a.convert("RGB")
         b = b.convert("RGB")
@@ -378,9 +380,12 @@ def mirror_side_views(views: dict[str, Path], warnings: list) -> None:
         warnings.append(f"the sheet drew the same side twice ({same:+.2f} correlated unflipped against "
                         f"{flipped:+.2f} flipped); the right view was mirrored from the left, which is exact for a "
                         f"symmetric object and approximate for an asymmetric one")
-    elif abs(same - flipped) <= SIDE_PAIR_MARGIN:
+        return "duplicate"
+    if abs(same - flipped) <= SIDE_PAIR_MARGIN:
         warnings.append(f"the two side views are neither a clean mirrored pair nor an obvious duplicate "
                         f"({same:+.2f} unflipped against {flipped:+.2f} flipped); they were used as drawn")
+        return "ambiguous"
+    return "pair"
 
 
 def _view_signature(path: Path) -> np.ndarray:
@@ -401,7 +406,7 @@ def _view_signature(path: Path) -> np.ndarray:
     return signature(tile, Panel(0, tile.width - 1, 0, tile.height - 1))
 
 
-def drop_duplicate_views(views: dict[str, Path], warnings: list) -> None:
+def drop_duplicate_views(views: dict[str, Path], warnings: list) -> list[str]:
     """Drop a view that is another view's picture, so the rig is never told a pose that is not so.
 
     Measured on real sheets: the model drew its "front, left, rear, right" row as a front plus the *same side
@@ -416,9 +421,10 @@ def drop_duplicate_views(views: dict[str, Path], warnings: list) -> None:
     `mirror_side_views` has already dealt with it by the time this runs.
     """
     if len(views) < 2:
-        return
+        return []
     signatures = {slot: _view_signature(path) for slot, path in views.items()}
     kept: list[str] = []
+    dropped: list[str] = []
     for slot in VIEW_SLOTS:
         if slot not in views:
             continue
@@ -436,14 +442,26 @@ def drop_duplicate_views(views: dict[str, Path], warnings: list) -> None:
             continue
         other, score = twin
         views.pop(slot).unlink(missing_ok=True)
+        dropped.append(slot)
         warnings.append(f"the sheet's {slot} panel is the same picture as its {other} one ({score:+.2f} "
                         f"correlated), so it cannot be the {slot} view the rig needs; it was left out and the "
                         f"reconstruction runs on {len(views)} view(s)")
+    return dropped
 
 
-def split_sheet(sheet_path: Path, out_dir: Path,
-                slots: tuple[str, ...] = VIEW_SLOTS) -> tuple[dict[str, Path], list[str]]:
-    """Cut a turnaround sheet into one square image per slot. Returns ({slot: path}, warnings)."""
+def split_sheet(sheet_path: Path, out_dir: Path, slots: tuple[str, ...] = VIEW_SLOTS,
+                notes: dict | None = None) -> tuple[dict[str, Path], list[str]]:
+    """Cut a turnaround sheet into one square image per slot. Returns ({slot: path}, warnings).
+
+    `notes`, when given, is filled in with the reading of the sheet rather than the sheet's contents:
+    `side_pair` ("pair" / "duplicate" / "ambiguous" / "missing") and `redo` - True when the sheet did not come
+    back with the views it was asked for, and is worth drawing again. Both are reports about the model's output,
+    which the caller needs because the repairs below are *approximations*: mirroring a duplicated side pair is
+    exact only for a left-right symmetric object, and dropping a repeated view leaves the rig with fewer views
+    than it asked for. Re-drawing is the better answer when it is available.
+    """
+    if notes is not None:
+        notes.clear()
     if Image is None:
         raise RuntimeError("splitting a turnaround sheet needs Pillow, which the control plane installs "
                            "for thumbnails; install it on the machine running the control plane")
@@ -525,10 +543,16 @@ def split_sheet(sheet_path: Path, out_dir: Path,
             tile.save(path)
             views[slot] = path
         # The rig needs the two side views to be opposite sides; the generator does not always oblige.
-        mirror_side_views(views, warnings)
+        pair = mirror_side_views(views, warnings)
         # And a view that is another view's picture is not the view its slot needs - the model has already been
         # caught drawing the same side three times and leaving the rear slot holding a side profile.
-        drop_duplicate_views(views, warnings)
+        repeated = drop_duplicate_views(views, warnings)
+    if notes is not None:
+        notes["side_pair"] = pair
+        notes["repeated"] = repeated
+        notes["views"] = len(views)
+        # a mirrored side or a dropped view both mean the sheet did not come back with what it was asked for
+        notes["redo"] = pair == "duplicate" or bool(repeated)
     return views, warnings
 
 

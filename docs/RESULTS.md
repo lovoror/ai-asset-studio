@@ -187,7 +187,10 @@ Lightning 4 vs 8 share seeds, so the compositions match and the difference is de
   `presets/workflows/README.md`): the row is exactly four square panels with the rear view drawn, on all four
   seeds measured. As a guard for the same class of failure, a view whose signature matches an earlier slot's to
   0.90 is now dropped rather than posed as the view its slot needs - measured, that fires on the broken sheet
-  (the rear slot's side profile, +0.98 against the left) and stays quiet on the fixed one.
+  (the rear slot's side profile, +0.98 against the left) and stays quiet on the fixed one. The same reading
+  drives a **re-draw**: a sheet whose side pair came back as the same side twice (measured, 3 sheets of 5) or
+  with a repeated view is drawn again with the seed moved on, up to three times, because mirroring a duplicated
+  pair is exact only for a left-right symmetric object. One extra pass costs about 1.5 minutes.
 * LOD budgets: LODs reuse LOD0's texture set, so they have to keep its UV layout, and meshoptimizer never collapses an edge
   on a UV border - after an atlas bake every UV seam is one. That puts a floor under how far an LOD can be reduced, and the
   floor is a property of the mesh's seams, not of the requested fraction. Measured with `var/lod_fractions_sweep.py` on a

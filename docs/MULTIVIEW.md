@@ -204,16 +204,32 @@ Five things are worth knowing, all measured:
   whole reference then goes through a CPU vision encoder. A 2000×2000 canvas took **two hours** that way and
   **2.9 minutes** in the pipeline at 768 with 8 steps.
 * **The two sides are named by the direction the object faces in the frame, and the pair is checked afterwards.**
-  "The left side profile" leaves the model to pick a convention; the prompt therefore states the *screen*
-  direction - "the full side profile, with the object facing the left edge of the panel" - which is exactly what
-  the rig means by `left`: §2's azimuth puts the left camera at +x, where image-right is +y while the object
-  faces −y, so the object's left side is the profile whose front points to the left of the frame. On top of that
-  the pair is read after the fact - unflipped against flipped - and the right view is mirrored when the model
-  drew the same side twice (measured: 0.99 correlated unflipped against 0.76 flipped, where a proper mirrored
-  pair reads 0.95 once flipped). That check still earns its place on the reworked workflow: **2 of the 4 seeds**
-  measured drew the same side for both side panels. A duplicate pair tells the rig two contradictory things
-  about one half of the object, which is half of what a "the car is not a car" result looks like; a swapped pair
-  is the other half, because it poses the object mirrored.
+  The prompt states the *screen* direction - "the full side profile, with the object facing the left edge of the
+  panel" - which is what the rig means by `left`: §2's azimuth puts the left camera at +x, where image-right is
+  +y while the object faces −y, so the object's left side is the profile whose front points to the left of the
+  frame. That wording replaced "the left side profile" after a sheet came back with the two sides swapped - but
+  that sheet also came off the workflow that was painting its own source into the row, so the attribution was
+  wrong, and later measurements do not support it: four wordings were tried on a reference the model gets wrong
+  (see below) and the two that came back as a proper pair did so once each, while the same wording failed on the
+  next three seeds. **No wording has been shown to fix this**, so the wording stands as it is. On top of it the
+  pair is read after the fact - unflipped against flipped - and the right view is mirrored when the model drew
+  the same side twice (measured: 0.99 correlated unflipped against 0.76 flipped, where a proper mirrored pair
+  reads 0.95 once flipped). A duplicate pair tells the rig two contradictory things about one half of the object,
+  which is half of what a "the car is not a car" result looks like; a swapped pair is the other half, because it
+  poses the object mirrored.
+* **Whether the model draws the second side at all is partly a property of the reference image.** Measured on one
+  reference: the four seeds tried drew a proper pair twice (so a re-draw fixes those), while on another reference
+  **every** seed and every wording tried - seven draws in all - drew the same side twice, so there was nothing to
+  re-draw *to*. The pipeline reads what the splitter had to repair (`studio/sheet.py` fills a `notes` dict -
+  `side_pair`, `repeated`, `redo`) and draws the sheet again when it did, up to `TURNAROUND_ATTEMPTS` (2) with
+  the seed moved on by `TURNAROUND_RESEED_STEP`; rejected sheets are kept beside the accepted one as
+  `turnaround_attempt<N>.png`, because "did the re-draw draw anything different?" is the first question to ask.
+  Only the accepted sheet's warnings are reported, and its attempt count lands in the job's `turnaround` result.
+  When it still comes back duplicated, the mirror is the fallback - exact for a left-right symmetric object,
+  approximate for an asymmetric one. A *rendered* other side is reachable instead (`var/try_turnaround.py` at
+  1024×1024 with a single-view prompt drew one, in about a minute) but it is not wired in: it would have to be
+  scaled to the sheet's own object height, because the four views in a sheet share one scale and the rig depends
+  on that.
 
 A panel that repeats another panel is caught for **every** slot, not only for the side pair. Measured across real
 sheets: two cuts of the same view read +0.98 to +1.00 with or without a mirror between them, while genuinely
@@ -295,11 +311,15 @@ image lane is local, the job warns and reconstructs from the single reference in
 * **No portal UI.** A multi-view job has to be submitted through the API/CLI today (`generate_views: true`);
   the dialog still takes a single reference. Choosing several images, or ticking "generate the other angles",
   is the next step.
-* **"Right" is still the weakest of the four panels.** The model reads a side request as a three-quarter view
-  more often on the right than on the left, so that is the panel most likely to need `views_prompt` tuning.
+* **"Right" is still the weakest of the four panels, and on some references it is not drawn at all.** The model
+  reads a side request as a three-quarter view more often on the right than on the left, and on one reference it
+  drew the *same* side for both side panels on every seed and wording tried - leaving the mirror as the only
+  repair. Drawing that side as its own single-view image works (§7) and is the obvious next step; it is not
+  wired in because the sheet's four views share one scale and a separate draw would have to be rescaled to it.
 * **Nothing checks what a panel actually shows, only that it is not a copy of another one.** The repeat check
   catches a view the model drew twice - which is how the rear slot came to hold a side profile - but a panel that
-  is a *different* wrong view (a three-quarter rear where a rear was asked for) passes it.
+  is a *different* wrong view (a three-quarter rear where a rear was asked for) passes it, and so does a side
+  pair that is wrong in the same way on both sides.
 * **The contact shadow can survive the cut-out**, leaving a thin dark skirt under the object (§7). Removing it
   needs a real segmentation model, not a colour rule.
 * **Framing caveat for rig renders.** `ImageCropToMask` normalises *each* view to its own silhouette, so a

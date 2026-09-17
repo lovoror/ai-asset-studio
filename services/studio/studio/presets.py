@@ -92,10 +92,19 @@ VIEWS_WORKFLOW = "krea2_turnaround.json"
 #
 # The side panels are described by the direction the object *faces in the frame*, which is the convention
 # Pixal3DMultiViewConditioning's rig encodes: its orbit cameras put the "left" slot at +x, where the image's
-# right is +y while the object faces -y, so the object's left side is the profile with its front pointing to
-# the *left* of the frame. "The left side profile" instead leaves the model to pick a convention, and a sheet
-# that came back with the two sides swapped is what prompted this wording - though that sheet also came off the
-# workflow that was painting its own source into the row, so the wording is not proven to be what fixed it.
+# right is +y while the object faces -y, so the object's left side is the profile with its front pointing to the
+# *left* of the frame. That replaced "the left side profile" after a sheet came back with the two sides swapped,
+# but the sheet in question also came off the workflow that was painting its own source into the row, so the
+# attribution was wrong - and later measurements do not support it. What *is* measured about this instruction:
+#
+#   * the model drawing the same side for both side panels is common, and partly a property of the reference
+#     image. One reference drew a proper pair on two of four seeds; another drew the same side twice on every
+#     seed and every wording tried (seven draws), including "the object seen from its left side ... seen from
+#     its other side, the opposite side of the object", "the same side view as panel two but flipped" and a
+#     sentence saying the two panels must not show the same side. No wording has been shown to fix it, so this
+#     one stands: the pipeline re-draws a sheet that comes back that way and mirrors as a last resort.
+#   * the prompt has to be re-stated rather than relied on: this file is a workflow default, and the control
+#     plane patches `views_prompt` over it on every run (see presets/workflows/krea2_turnaround.json).
 VIEWS_PROMPT = ("Convert the object in the image to a Character Sheet of exactly four views arranged in one "
                 "horizontal row of four equal square panels. Panel one: the front view. Panel two: the full "
                 "side profile, with the object facing the left edge of the panel. Panel three: the rear view. "

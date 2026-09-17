@@ -25,6 +25,14 @@ from .runner_client import Runner, StageCancelled, StageFailed
 from .validate import validate_glb
 
 STAGES = ["reference", "pixal3d", "blender", "validate", "package"]
+# How many turnaround sheets to draw before settling for the splitter's repairs. Measured: the model drawing the
+# same side for both side panels is common (3 sheets of 5), and *where* it happens decides whether another draw
+# helps at all - on one reference the first four seeds drew a proper pair and two did not (so a re-draw is worth
+# ~1.5 min), while on another every seed and every wording tried drew the same side twice (so two re-draws were
+# 4.5 min spent for nothing). Two attempts keeps the first case's benefit and halves the second case's cost.
+TURNAROUND_ATTEMPTS = 2
+# A re-draw has to change the seed, or it reproduces the same mistake exactly.
+TURNAROUND_RESEED_STEP = 101
 
 
 class JobCancelled(Exception):
@@ -285,28 +293,51 @@ class JobRun:
             return {}
         tdir = d / "turnaround"
         tdir.mkdir(parents=True, exist_ok=True)
-        req = {
-            "mode": "turnaround",
-            "reference_image": str(reference),
-            "out_dir": str(tdir),
-            "workflow": cfg.get("workflow"), "prompt": cfg.get("prompt"),
-            "width": cfg["width"], "height": cfg["height"], "steps": cfg["steps"],
-            "grounding_px": cfg.get("grounding_px"), "seed": self.settings["seed"],
-            "backend": self.backend.get("image") or {"kind": "local"},
-        }
-        atomic_write_json(tdir / "request.json", req)
+        vd = d / "views"
+        slots = tuple(multiview.VIEW_SLOTS[: cfg["count"]])
         self.set_stage("reference", 0.9)
         self.log(f"drawing a {cfg['count']}-view turnaround from the reference ({cfg['workflow']} at "
                  f"{cfg['width']}x{cfg['height']}, {cfg['steps']} steps)")
-        run = self._run_gpu_stage("image", "reference", "comfy_worker.image_generate", tdir, tdir / "log.txt", [])
-        out = json.loads((tdir / "output.json").read_text(encoding="utf-8"))
-        for w in out.get("warnings", []):
-            self.warn(w)
-        vd = d / "views"
-        views, cut_warnings = sheet.split_sheet(tdir / out["sheet"], vd,
-                                                slots=tuple(multiview.VIEW_SLOTS[: cfg["count"]]))
-        for w in cut_warnings:
-            self.warn(w)
+        # The sheet is drawn again when it does not come back with the views it was asked for. That is worth the
+        # extra pass because the repairs the splitter can make are approximations: a side pair the model drew
+        # twice is mirrored (exact only for a left-right symmetric object - measured, 3 sheets out of 5 came back
+        # that way) and a repeated view is dropped (leaving fewer views than the rig wants). One more draw costs
+        # ~1.5 min against an asset that is wrong on one whole side.
+        views: dict[str, Path] = {}
+        run = None
+        for attempt in range(1, TURNAROUND_ATTEMPTS + 1):
+            req = {
+                "mode": "turnaround",
+                "reference_image": str(reference),
+                "out_dir": str(tdir),
+                "workflow": cfg.get("workflow"), "prompt": cfg.get("prompt"),
+                "width": cfg["width"], "height": cfg["height"], "steps": cfg["steps"],
+                "grounding_px": cfg.get("grounding_px"),
+                # a fresh sheet each time: the same seed would reproduce the same mistake
+                "seed": int(self.settings["seed"]) + (attempt - 1) * TURNAROUND_RESEED_STEP,
+                "backend": self.backend.get("image") or {"kind": "local"},
+            }
+            atomic_write_json(tdir / "request.json", req)
+            run = self._run_gpu_stage("image", "reference", "comfy_worker.image_generate", tdir,
+                                      tdir / "log.txt", [])
+            out = json.loads((tdir / "output.json").read_text(encoding="utf-8"))
+            attempt_warnings = list(out.get("warnings", []))
+            readings: dict = {}
+            views, cut_warnings = sheet.split_sheet(tdir / out["sheet"], vd, slots=slots, notes=readings)
+            attempt_warnings += cut_warnings
+            # only the accepted sheet's warnings are reported: a re-drawn attempt supersedes the one before it
+            if not readings.get("redo") or attempt == TURNAROUND_ATTEMPTS:
+                for w in attempt_warnings:
+                    self.warn(w)
+                break
+            self.log(f"turnaround attempt {attempt}: the sheet came back with a {readings.get('side_pair')} side "
+                     f"pair and repeated views {readings.get('repeated')}; drawing it again with a new seed")
+            # keep the rejected sheet: "did the re-draw actually draw something different?" is the first question
+            # to ask when a sheet keeps coming back wrong, and the next attempt overwrites turnaround.png
+            try:
+                shutil.copy(tdir / out["sheet"], tdir / f"turnaround_attempt{attempt}.png")
+            except OSError:  # noqa: PERF203 - the sheet is a diagnostic, not a deliverable
+                pass
         if len(views) < 2:
             # Pixal3D's multi-view path is pointless with one view, and the single-image path is better tested.
             self.warn(f"only {len(views)} usable view(s) came out of the turnaround sheet; reconstructing from "
@@ -319,7 +350,7 @@ class JobRun:
         self.log(f"turnaround: {len(views)} views ({', '.join(views)}) cut from {out['sheet']} "
                  f"in {out.get('time_s')}s")
         return {"source": "multiview", "views_dir": str(vd), "num_views": len(views), "generated_views": True,
-                "turnaround": {"sheet": out["sheet"], "time_s": out.get("time_s"),
+                "turnaround": {"sheet": out["sheet"], "time_s": out.get("time_s"), "attempts": attempt,
                                "effective": out.get("effective", {})},
                 "run_turnaround": run}
 

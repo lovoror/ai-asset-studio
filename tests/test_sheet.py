@@ -377,6 +377,37 @@ def test_the_side_pair_is_not_treated_as_a_repeat(tmp_path):
     assert sorted(views) == ["left", "right"] and warnings == []
 
 
+# --------------------------------------------------------------------------- when to draw the sheet again
+
+def test_a_sheet_worth_redrawing_says_so(tmp_path):
+    """The caller re-draws rather than settle for a repair, so the split has to report which it did.
+
+    Measured: more often than not the model draws the same side for both side panels (three sheets of five), and
+    mirroring one is exact only for a left-right symmetric object. A repeat elsewhere is the same story - the
+    sheet did not come back with the views it was asked for.
+    """
+    duplicate = [(80, 170, NOTCHED), (260, 170, WEDGE), (440, 170, CROSS), (620, 170, WEDGE)]
+    p = save(mixed_sheet((720, 340), duplicate), tmp_path / "dup.png")
+    notes: dict = {}
+    views, _ = sh.split_sheet(p, tmp_path / "out1", notes=notes)
+    assert notes["side_pair"] == "duplicate" and notes["redo"] is True and len(views) == 4
+
+    repeat = [(80, 170, NOTCHED), (260, 170, WEDGE), (440, 170, WEDGE), (620, 170, mirror(WEDGE))]
+    p = save(mixed_sheet((720, 340), repeat), tmp_path / "repeat.png")
+    notes = {}
+    views, _ = sh.split_sheet(p, tmp_path / "out2", notes=notes)
+    assert notes["repeated"] == ["back"] and notes["redo"] is True and "back" not in views
+
+
+def test_a_good_sheet_is_not_worth_redrawing(tmp_path):
+    shapes = [(80, 170, NOTCHED), (260, 170, WEDGE), (440, 170, CROSS), (620, 170, mirror(WEDGE))]
+    p = save(mixed_sheet((720, 340), shapes), tmp_path / "sheet.png")
+    notes: dict = {}
+    views, warnings = sh.split_sheet(p, tmp_path / "out", notes=notes)
+    assert notes == {"side_pair": "pair", "repeated": [], "views": 4, "redo": False}
+    assert len(views) == 4 and warnings == []
+
+
 # --------------------------------------------------------------------------- rig frames
 
 def test_rig_frames_describe_the_nodes_own_rig():

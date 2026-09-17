@@ -747,3 +747,73 @@ def test_run_dispatches_the_turnaround_mode(monkeypatch, tmp_path):
     monkeypatch.setattr(ig, "run_turnaround", fake_run_turnaround)
     ig.run({"mode": "turnaround", "out_dir": str(tmp_path)})
     assert called["mode"] == "turnaround"
+
+
+# -------------------------------------------------------------------------------------------- drawing it again
+
+def _turnaround_sheet(path, side_pair="duplicate"):
+    """A four-cell sheet - front, left, back, right - with the side pair however the test wants it.
+
+    The silhouettes are distinct on purpose: the splitter drops a panel that is another panel's picture, and a
+    signature is taken from the object's own box, where two solid blobs of the same box-filling kind are
+    indistinguishable (see the fixtures in test_sheet.py).
+    """
+    from PIL import Image, ImageDraw
+
+    front = [(-22, -32), (22, -32), (22, 0), (2, 0), (2, 32), (-22, 32)]
+    wedge = [(-34, 30), (-34, -30), (34, 30)]
+    cross = [(-10, -32), (10, -32), (10, -10), (32, -10), (32, 10), (10, 10), (10, 32),
+             (-10, 32), (-10, 10), (-32, 10), (-32, -10), (-10, -10)]
+    right = wedge if side_pair == "duplicate" else [(-x, y) for x, y in wedge]
+    im = Image.new("RGB", (720, 340), (200, 200, 198))
+    draw = ImageDraw.Draw(im)
+    for cx, points in zip((80, 260, 440, 620), (front, wedge, cross, right)):
+        draw.polygon([(cx + x, 170 + y) for x, y in points], fill=(60, 120, 90))
+    im.save(path)
+    return path
+
+
+def test_a_sheet_the_model_drew_the_same_side_twice_is_drawn_again(studio, tmp_path, monkeypatch):
+    """Measured: the model gives both side panels the same side in 3 sheets out of 5.
+
+    Mirroring one of them is exact only for a left-right symmetric object, so a sheet that comes back that way is
+    worth another draw - and the re-draw has to change the seed, or it reproduces the same mistake.
+    """
+    import json
+    import shutil
+
+    from studio.db import JobStore
+    from studio.pipeline import JobRun
+
+    store = JobStore()
+    job = store.create(
+        {"prompt": "a car", "style": "mobile_factory", "quality": "balanced"},
+        {"seed": 7, "backend": {"image": {"kind": "comfyui", "url": "http://x", "workflow": "w.json"}},
+         "views": {"enabled": True, "workflow": "krea2_turnaround.json", "prompt": "four views",
+                   "width": 2048, "height": 512, "steps": 8, "grounding_px": 768, "count": 4,
+                   "fov_degrees": 20.0}},
+        kind="asset")
+    run = JobRun(store, store.get(job))
+    monkeypatch.setattr(run, "remote", lambda role: True)
+
+    sheets = [_turnaround_sheet(tmp_path / "first.png", "duplicate"),
+              _turnaround_sheet(tmp_path / "second.png", "pair")]
+    seeds: list[int] = []
+
+    def fake_stage(role, stage, module, stage_dir, log_path, extra):
+        seeds.append(json.loads((stage_dir / "request.json").read_text(encoding="utf-8"))["seed"])
+        shutil.copy(sheets[min(len(seeds) - 1, len(sheets) - 1)], stage_dir / "turnaround.png")
+        (stage_dir / "output.json").write_text(
+            json.dumps({"sheet": "turnaround.png", "time_s": 1.0, "warnings": [], "effective": {}}),
+            encoding="utf-8")
+        return {"ok": True}
+
+    monkeypatch.setattr(run, "_run_gpu_stage", fake_stage)
+    d = run.stage_dir("reference")
+    d.mkdir(parents=True, exist_ok=True)
+    out = run._generate_views(tmp_path / "reference.png", d)
+
+    assert len(seeds) == 2 and seeds[1] != seeds[0], "the second draw has to use a different seed"
+    assert out["num_views"] == 4 and out["turnaround"]["attempts"] == 2
+    # the rejected sheet's mirror warning is not reported: the accepted sheet never needed one
+    assert not any("same side twice" in w for w in run.warnings)
