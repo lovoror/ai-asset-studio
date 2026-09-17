@@ -677,6 +677,296 @@ def test_patch_everywhere_reaches_both_encoders_and_warns_when_there_is_nothing_
     assert any("no_such_input" in w for w in warnings)
 
 
+# ---------------------------------------------------------------------- several references into one graph
+
+def multi_ref_workflow() -> dict:
+    """The shape of the shipped `krea2_edit_refs.json`: two reference slots, each resized, both feeding the
+    named `image`/`image_b` (or `source_image`/`source_image_b`) inputs of the three nodes that need them."""
+    return {
+        "3": {"class_type": "UNETLoader", "inputs": {"unet_name": "krea2_turbo_nvfp4.safetensors"}},
+        "4": {"class_type": "CLIPLoader", "inputs": {"clip_name": "qwen3vl_4b.safetensors", "type": "krea2"}},
+        "5": {"class_type": "VAELoader", "inputs": {"vae_name": "qwen_image_vae.safetensors"}},
+        "10": {"class_type": "LoadImage", "_meta": {"title": "REFERENCE1"}, "inputs": {"image": "reference1.png"}},
+        "11": {"class_type": "ImageResizeKJv2", "inputs": {"image": ["10", 0], "width": 1024, "height": 1024}},
+        "30": {"class_type": "LoadImage", "_meta": {"title": "REFERENCE2"}, "inputs": {"image": "reference2.png"}},
+        "31": {"class_type": "ImageResizeKJv2", "inputs": {"image": ["30", 0], "width": 1024, "height": 1024}},
+        "12": {"class_type": "Krea2EditGroundedEncode",
+               "inputs": {"clip": ["4", 0], "prompt": "OLD", "image": ["11", 0], "image_b": ["31", 0],
+                          "grounding_px": 768}},
+        "13": {"class_type": "Krea2EditGroundedEncode",
+               "inputs": {"clip": ["4", 0], "prompt": "", "image": ["11", 0], "image_b": ["31", 0],
+                          "grounding_px": 768}},
+        "14": {"class_type": "VAEEncode", "inputs": {"pixels": ["11", 0], "vae": ["5", 0]}},
+        "15": {"class_type": "Krea2EditModelPatch",
+               "inputs": {"model": ["3", 0], "source_image": ["11", 0], "source_image_b": ["31", 0],
+                          "source_latent": ["14", 0], "vae": ["5", 0], "fit_mode": "fit"}},
+        "16": {"class_type": "EmptySD3LatentImage", "inputs": {"width": 1024, "height": 1024, "batch_size": 1}},
+        "17": {"class_type": "KSampler",
+               "inputs": {"seed": 0, "steps": 8, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple",
+                          "denoise": 1.0, "model": ["15", 0], "positive": ["12", 0], "negative": ["13", 0],
+                          "latent_image": ["16", 0]}},
+        "18": {"class_type": "VAEDecode", "inputs": {"samples": ["17", 0], "vae": ["5", 0]}},
+        "19": {"class_type": "SaveImage", "inputs": {"images": ["18", 0], "filename_prefix": "cand"}},
+    }
+
+
+def _reachable_from_output(wf: dict, out: str = "19") -> set:
+    """Every node ComfyUI can reach walking back from an output node.
+
+    This is the set validation and execution are limited to (execution.py:1128 collects the OUTPUT_NODEs and
+    validates what it can reach from them), so "unreachable" is the same statement as "never looked at".
+    """
+    seen: set = set()
+    stack = [out]
+    while stack:
+        nid = stack.pop()
+        if nid in seen:
+            continue
+        seen.add(nid)
+        for val in (wf.get(nid, {}).get("inputs") or {}).values():
+            if isinstance(val, list) and len(val) == 2 and isinstance(val[0], str) and val[0] in wf:
+                stack.append(val[0])
+    return seen
+
+
+def test_reference_slots_prefer_titles_and_fall_back_to_node_order():
+    from comfy_worker import image_generate as ig
+    wf = multi_ref_workflow()
+    assert ig.reference_slots(wf) == ["10", "30"]
+
+    for nid, node in wf.items():                      # untitled: numerically, so 10 comes before 30
+        node.pop("_meta", None)
+    assert ig.reference_slots(wf) == ["10", "30"]
+
+
+def test_reference_slots_are_ordered_by_title_not_by_node_id():
+    """A slot's number is its title, so re-adding a node with a lower id cannot silently swap the references."""
+    from comfy_worker import image_generate as ig
+    wf = multi_ref_workflow()
+    wf["30"]["_meta"]["title"] = "REFERENCE1"
+    wf["10"]["_meta"]["title"] = "REFERENCE2"
+    assert ig.reference_slots(wf) == ["30", "10"]
+
+
+def test_two_references_are_uploaded_in_order_into_the_two_slots(monkeypatch, tmp_path):
+    from comfy_worker import image_generate as ig
+    wf = multi_ref_workflow()
+    uploaded: list = []
+
+    def fake_upload(server, path, prefix=None):
+        uploaded.append((Path(path).name, prefix))
+        return f"{prefix}_{Path(path).name}"
+
+    monkeypatch.setattr(ig, "upload_image", fake_upload)
+
+    warnings: list = []
+    used = ig.patch_reference_images(wf, "http://s", [tmp_path / "subject.png", tmp_path / "style.png"],
+                                    warnings)
+
+    # the prefix is what keeps the two uploads from replacing each other: both files could share a basename
+    assert uploaded == [("subject.png", "reference1"), ("style.png", "reference2")]
+    assert used == ["10", "30"]
+    assert wf["10"]["inputs"]["image"] == "reference1_subject.png"
+    assert wf["30"]["inputs"]["image"] == "reference2_style.png"
+    assert wf["12"]["inputs"]["image_b"] == ["31", 0]          # both inputs stay wired
+    assert wf["15"]["inputs"]["source_image_b"] == ["31", 0]
+    assert warnings == []
+
+
+def test_two_references_with_the_same_basename_do_not_reach_the_same_file(tmp_path):
+    """Measured: two references called `reference.png` were uploaded and the second replaced the first, so both
+    slots read the same picture and the result was an edit of one input with no warning anywhere.
+
+    The upload replaces by name (`overwrite=true`, which is what keeps a re-run from piling up copies), so the
+    name has to carry something about the content as well as the slot.
+    """
+    a = tmp_path / "reference.png"
+    b = tmp_path / "other" / "reference.png"
+    b.parent.mkdir()
+    a.write_bytes(b"first picture")
+    b.write_bytes(b"second picture")
+
+    assert cc.upload_name("reference1", a) != cc.upload_name("reference1", b)
+    assert cc.upload_name("reference1", a) != cc.upload_name("reference2", a)
+    assert cc.upload_name("reference1", a) == cc.upload_name("reference1", a)     # a re-run replaces itself
+    assert cc.upload_name("reference1", a).startswith("reference1_")
+    assert cc.upload_name("reference1", a).endswith(".png")
+
+
+def test_the_spare_slot_is_disconnected_when_only_one_reference_is_given(monkeypatch, tmp_path):
+    """The node pack's README: "leave the b-inputs unconnected for single-image use".
+
+    So the spare slot's inputs are removed rather than pointed at the workflow's own placeholder filename -
+    which would otherwise be an upload that never happened.
+    """
+    from comfy_worker import image_generate as ig
+    wf = multi_ref_workflow()
+    monkeypatch.setattr(ig, "upload_image", lambda server, path, prefix=None: "remote_subject.png")
+
+    warnings: list = []
+    cut = ig.disconnect_slots(wf, ["30"], warnings)
+
+    # the slot's own resize goes too, so nothing hangs off the loader any more
+    assert cut == ["31.image", "12.image_b", "13.image_b", "15.source_image_b"]
+    assert "image_b" not in wf["12"]["inputs"] and "image_b" not in wf["13"]["inputs"]
+    assert "source_image_b" not in wf["15"]["inputs"]
+    # the walk stops at the real graph: the first-render wiring is untouched
+    assert wf["12"]["inputs"]["image"] == ["11", 0] and wf["12"]["inputs"]["clip"] == ["4", 0]
+    assert wf["15"]["inputs"]["source_image"] == ["11", 0]
+    assert wf["15"]["inputs"]["source_latent"] == ["14", 0]
+    assert wf["11"]["inputs"]["image"] == ["10", 0]
+    assert any(w.startswith("1 reference slot(s) had no reference") for w in warnings)
+
+    # what makes removing the inputs enough: the branch is no longer reachable, so ComfyUI never validates
+    # the LoadImage filename that was never uploaded
+    reach = _reachable_from_output(wf)
+    assert "30" not in reach and "31" not in reach
+    assert {"10", "11", "12", "13", "14", "15", "17", "19"} <= reach
+
+
+def test_a_used_slot_is_never_disconnected(monkeypatch, tmp_path):
+    from comfy_worker import image_generate as ig
+    wf = multi_ref_workflow()
+    warnings: list = []
+    assert ig.disconnect_slots(wf, [], warnings) == []
+    assert warnings == []
+    assert wf["12"]["inputs"]["image_b"] == ["31", 0]
+
+
+def test_more_references_than_slots_warns_and_keeps_the_first(monkeypatch, tmp_path):
+    from comfy_worker import image_generate as ig
+    wf = multi_ref_workflow()
+    monkeypatch.setattr(ig, "upload_image", lambda server, path, prefix=None: f"{prefix}.png")
+    warnings: list = []
+    used = ig.patch_reference_images(wf, "http://s",
+                                     [tmp_path / f"r{i}.png" for i in range(3)], warnings)
+    assert used == ["10", "30"] and wf["30"]["inputs"]["image"] == "reference2.png"
+    assert any("the extra reference(s) were ignored" in w for w in warnings)
+
+
+def test_a_workflow_with_no_loadimage_cannot_take_a_reference(monkeypatch, tmp_path):
+    from comfy_worker import image_generate as ig
+    wf = multi_ref_workflow()
+    del wf["10"], wf["30"]
+    monkeypatch.setattr(ig, "upload_image", lambda server, path, prefix=None: "x.png")
+    with pytest.raises(cc.ComfyError, match="no LoadImage"):
+        ig.patch_reference_images(wf, "http://s", [tmp_path / "r.png"], [])
+
+
+def test_candidate_generation_uploads_the_references_once_for_every_seed(monkeypatch, tmp_path):
+    """One upload per reference for the whole job, not one per seed: every candidate is the same request with a
+    different seed, so they all read the same references."""
+    import json as _json
+
+    from comfy_worker import image_generate as ig
+    wf = multi_ref_workflow()
+    monkeypatch.setattr(ig, "load_workflow", lambda p: wf)
+    monkeypatch.setattr(ig, "find_workflow_file", lambda name: Path(name))
+    monkeypatch.setattr(ig, "probe", lambda server: {"comfyui_version": "test"})
+    uploaded: list = []
+
+    def fake_upload(server, path, prefix=None):
+        uploaded.append(prefix)
+        return f"{prefix}_{Path(path).name}"
+
+    monkeypatch.setattr(ig, "upload_image", fake_upload)
+    seen: list = []
+
+    def fake_run(server, workflow, timeout, client_id=None):
+        seen.append(_json.loads(_json.dumps(workflow)))
+        return {"outputs": {"19": {"images": [{"filename": "c.png", "subfolder": "", "type": "output"}]}},
+                "prompt": [1, "client", workflow]}
+
+    monkeypatch.setattr(ig, "run_workflow", fake_run)
+    monkeypatch.setattr(ig, "download", lambda server, name, sub, t, dest: dest.write_bytes(b"png") or 3)
+    monkeypatch.setattr(ig, "analyze_candidate",
+                        lambda f: {"score": 1.0, "bg_color": [0.87, 0.87, 0.89], "fg_components": 1})
+    monkeypatch.setattr(ig, "external_eval", lambda url, f: None)
+    refs = [tmp_path / "subject.png", tmp_path / "style.png"]
+    for r in refs:
+        r.write_bytes(b"png")
+
+    warnings: list = []
+    cands, _, _ = ig.generate_candidates(
+        {"prompt": "P", "seeds": [1, 2], "width": 1024, "height": 1024, "steps": 8,
+         "reference_images": [str(r) for r in refs]},
+        tmp_path, {"url": "http://server", "workflow": "krea2_edit_refs.json"}, warnings)
+
+    assert uploaded == ["reference1", "reference2"]
+    assert len(seen) == 2 and [w["17"]["inputs"]["seed"] for w in seen] == [1, 2]
+    assert all(w["12"]["inputs"]["image_b"] == ["31", 0] for w in seen), "each candidate gets both references"
+    assert all(w["10"]["inputs"]["image"] == "reference1_subject.png" for w in seen)
+    assert all(w["30"]["inputs"]["image"] == "reference2_style.png" for w in seen)
+    assert [c["seed"] for c in cands] == [1, 2]
+    assert warnings == []
+
+
+def test_candidate_generation_with_one_reference_cuts_the_spare_slot_for_every_seed(monkeypatch, tmp_path):
+    import json as _json
+
+    from comfy_worker import image_generate as ig
+    wf = multi_ref_workflow()
+    monkeypatch.setattr(ig, "load_workflow", lambda p: wf)
+    monkeypatch.setattr(ig, "find_workflow_file", lambda name: Path(name))
+    monkeypatch.setattr(ig, "probe", lambda server: {})
+    monkeypatch.setattr(ig, "upload_image", lambda server, path, prefix=None: "subject.png")
+    seen: list = []
+
+    def fake_run(server, workflow, timeout, client_id=None):
+        seen.append(_json.loads(_json.dumps(workflow)))
+        return {"outputs": {"19": {"images": [{"filename": "c.png", "subfolder": "", "type": "output"}]}},
+                "prompt": [1, "client", workflow]}
+
+    monkeypatch.setattr(ig, "run_workflow", fake_run)
+    monkeypatch.setattr(ig, "download", lambda server, name, sub, t, dest: dest.write_bytes(b"png") or 3)
+    monkeypatch.setattr(ig, "analyze_candidate", lambda f: {"score": 1.0})
+    monkeypatch.setattr(ig, "external_eval", lambda url, f: None)
+    ref = tmp_path / "subject.png"
+    ref.write_bytes(b"png")
+
+    warnings: list = []
+    ig.generate_candidates({"prompt": "P", "seeds": [4], "width": 1024, "height": 1024,
+                            "reference_images": [str(ref)]},
+                           tmp_path, {"url": "http://server", "workflow": "krea2_edit_refs.json"}, warnings)
+
+    assert len(seen) == 1
+    assert "image_b" not in seen[0]["12"]["inputs"] and "source_image_b" not in seen[0]["15"]["inputs"]
+    assert "30" not in _reachable_from_output(seen[0])
+    assert any("had no reference" in w for w in warnings)
+
+
+def test_no_references_leaves_a_reference_graph_exactly_as_shipped(monkeypatch, tmp_path):
+    """A text-to-image job against an editing workflow is a mistake the caller makes, not one to guess around:
+    with no references nothing is uploaded and nothing is cut."""
+    from comfy_worker import image_generate as ig
+    wf = multi_ref_workflow()
+    monkeypatch.setattr(ig, "load_workflow", lambda p: wf)
+    monkeypatch.setattr(ig, "find_workflow_file", lambda name: Path(name))
+    monkeypatch.setattr(ig, "probe", lambda server: {})
+    monkeypatch.setattr(ig, "upload_image",
+                        lambda server, path, prefix=None: pytest.fail("nothing should be uploaded"))
+    seen: list = []
+
+    def fake_run(server, workflow, timeout, client_id=None):
+        seen.append(workflow)
+        return {"outputs": {"19": {"images": [{"filename": "c.png", "subfolder": "", "type": "output"}]}},
+                "prompt": [1, "client", workflow]}
+
+    monkeypatch.setattr(ig, "run_workflow", fake_run)
+    monkeypatch.setattr(ig, "download", lambda server, name, sub, t, dest: dest.write_bytes(b"png") or 3)
+    monkeypatch.setattr(ig, "analyze_candidate", lambda f: {"score": 1.0})
+    monkeypatch.setattr(ig, "external_eval", lambda url, f: None)
+
+    warnings: list = []
+    ig.generate_candidates({"prompt": "P", "seeds": [4], "width": 1024, "height": 1024},
+                           tmp_path, {"url": "http://server", "workflow": "krea2_edit_refs.json"}, warnings)
+
+    assert len(seen) == 1
+    assert seen[0]["10"]["inputs"]["image"] == "reference1.png"      # the workflow's own placeholders
+    assert seen[0]["12"]["inputs"]["image_b"] == ["31", 0]
+    assert warnings == []
+
+
 def test_turnaround_uploads_the_reference_and_points_every_loadimage_at_it(monkeypatch, tmp_path):
     """The reference reaches three different nodes, but all three read the LoadImage, so one patch covers the
     whole edit wiring."""
@@ -817,3 +1107,110 @@ def test_a_sheet_the_model_drew_the_same_side_twice_is_drawn_again(studio, tmp_p
     assert out["num_views"] == 4 and out["turnaround"]["attempts"] == 2
     # the rejected sheet's mirror warning is not reported: the accepted sheet never needed one
     assert not any("same side twice" in w for w in run.warnings)
+
+
+# ------------------------------------------- references and verbatim prompts on the way into the reference stage
+
+def _tiny_png(colour=(90, 120, 100)) -> bytes:
+    import io
+
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (24, 24), colour).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _reference_settings() -> dict:
+    return {"seed": 11, "style": "mobile_factory",
+            "reference": {"model": "krea2-turbo", "family": "comfyui", "width": 1024, "height": 1024,
+                          "steps": 8, "cfg": 1.0, "candidates": 1},
+            "backend": {"image": {"kind": "comfyui", "url": "http://x", "workflow": "krea2_edit_refs.json"}}}
+
+
+def test_references_are_copied_into_the_job_before_the_stage_runs(studio):
+    """Only files under the job directory are shipped to a stage worker, so a reference that names another job's
+    file has to be copied in first, and an inline picture has to be written out. Either way it is renamed to
+    `ref<i>`, which is also what keeps two references from one job from colliding on the ComfyUI server."""
+    import base64
+
+    from studio import config
+    from studio.db import JobStore
+    from studio.pipeline import JobRun
+
+    other = config.JOBS_DIR / "20260101-000000-aaaaaaaa" / "artifacts"
+    other.mkdir(parents=True)
+    (other / "reference.png").write_bytes(_tiny_png((10, 20, 30)))
+
+    store = JobStore()
+    job = store.create(
+        {"prompt": "an edited crate", "style": "mobile_factory",
+         "references": [{"image_b64": base64.b64encode(_tiny_png((90, 120, 100))).decode(), "label": "front"},
+                        {"job_id": "20260101-000000-aaaaaaaa", "file": "artifacts/reference.png",
+                         "label": "style"}]},
+        _reference_settings(), kind="image")
+    run = JobRun(store, store.get(job))
+    d = run.stage_dir("reference")
+    d.mkdir(parents=True, exist_ok=True)
+
+    paths = run._stage_references(d)
+
+    assert [Path(p).name for p in paths] == ["ref0.png", "ref1.png"]
+    assert all(Path(p).parent == d / "references" for p in paths)
+    assert Path(paths[0]).read_bytes() == _tiny_png((90, 120, 100)), "the inline bytes survive the round trip"
+    assert Path(paths[1]).read_bytes() == (other / "reference.png").read_bytes()
+    assert not run.request.get("workflow")      # the workflow comes from settings, not from the request here
+
+
+def test_no_references_means_no_reference_directory(studio):
+    from studio.db import JobStore
+    from studio.pipeline import JobRun
+
+    store = JobStore()
+    job = store.create({"prompt": "a crate", "style": "mobile_factory"}, _reference_settings(), kind="image")
+    run = JobRun(store, store.get(job))
+    d = run.stage_dir("reference")
+    d.mkdir(parents=True, exist_ok=True)
+    assert run._stage_references(d) == []
+    assert not (d / "references").exists(), "a text-to-image job should not grow an empty references/ directory"
+
+
+def test_the_stage_request_carries_the_references_and_a_verbatim_prompt(studio, monkeypatch):
+    """The canvas shows the composed prompt and sends it back edited. `final_prompt` is that edit, and it has to
+    win over the composed template - otherwise "just tweak the prompt" would still be a guess."""
+    import base64
+    import json
+
+    from studio.db import JobStore
+    from studio.pipeline import JobRun
+
+    store = JobStore()
+    job = store.create(
+        {"prompt": "an edited crate", "style": "mobile_factory",
+         "final_prompt": "A single painted crate, verbatim.",
+         "references": [{"image_b64": base64.b64encode(_tiny_png()).decode(), "label": "front"}]},
+        _reference_settings(), kind="image")
+    run = JobRun(store, store.get(job))
+    seen: dict = {}
+
+    def fake_stage(role, stage, module, stage_dir, log_path, extra):
+        seen.update(json.loads((stage_dir / "request.json").read_text(encoding="utf-8")))
+        (stage_dir / "candidates").mkdir(exist_ok=True)
+        (stage_dir / "candidates" / "cand_00.png").write_bytes(_tiny_png())
+        (stage_dir / "output.json").write_text(json.dumps(
+            {"candidates": [{"file": "candidates/cand_00.png", "seed": 11, "metrics": {}}],
+             "selected": "candidates/cand_00.png", "selection": {"chosen": "candidates/cand_00.png"},
+             "stats": {}, "warnings": []}), encoding="utf-8")
+        (stage_dir / "selection.json").write_text("{}", encoding="utf-8")
+        return {"ok": True}
+
+    monkeypatch.setattr(run, "_run_gpu_stage", fake_stage)
+    run.stage_reference(variations_only=True)
+
+    assert seen["prompt"] == "A single painted crate, verbatim."
+    assert seen["template"]["subject"] == "an edited crate", "what the composition would have been is still recorded"
+    assert [Path(p).name for p in seen["reference_images"]] == ["ref0.png"]
+    assert Path(seen["reference_images"][0]).is_file()
+    assert seen["model_id"] == "krea2-turbo" and seen["backend"]["workflow"] == "krea2_edit_refs.json"
+    assert seen["width"] == 1024 and seen["steps"] == 8
+    assert any("verbatim" in e["message"] for e in store.events(job))
+

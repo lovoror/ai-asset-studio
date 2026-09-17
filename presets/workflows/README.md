@@ -29,6 +29,42 @@ KSampler-based txt2img workflow works as-is. Requirements:
 Written per candidate: prompt, negative prompt, seed, steps, cfg, sampler_name, scheduler, width, height.
 `batch_size` is forced to 1 — variations need different seeds, so the worker submits one prompt each.
 
+## Reference slots: how an edit graph says where its images go
+
+An image-to-image job sends 1..n reference images and they land in the workflow's `LoadImage` nodes. Which node
+is "reference 1" is read off the node's **title**: `REFERENCE1`, `REFERENCE2`, ... in title order. Without
+titles the nodes are taken in numeric id order. Title the loaders in any graph that takes references —
+`node 3` and `node 47` say nothing about which of two references is the subject and which is the style, and
+re-adding a node with a lower id would silently swap them.
+
+Slots are also disconnected when there is no reference for them. A reference graph's spare slot holds a
+placeholder filename (`view_410.png`, `reference2.png`) that was never uploaded, and a wired `LoadImage` with a
+filename that does not exist is a hard validation error that fails the stage before it renders anything.
+Removing the inputs makes the branch unreachable from the output node, and ComfyUI validates only what it can
+reach that way (`execution.py:1128`), so the placeholder is never looked at.
+
+An uploaded reference is stored on the server under a name that carries both the slot number and a digest of
+the file's content (`reference1_d89bf523bf03.png`). The upload replaces by name, so without that two references
+that happen to share a basename (`reference.png` from two different jobs, say) would leave *every* slot reading
+whichever was sent last, and the job would quietly edit the wrong picture. A multi-view 3D workflow names its
+uploads the same way, keyed on the view slot (`front_...png`).
+
+## `krea2_edit_refs.json` — the multi-reference edit graph
+
+15 nodes: `LoadImage` 10/30 (titled `REFERENCE1`/`REFERENCE2`) → `ImageResizeKJv2` 11/31 →
+`Krea2EditGroundedEncode` 12 (positive, grounded on both images) and 13 (negative, both images) →
+`VAEEncode` 14 on the first image → `Krea2EditModelPatch` 15 (`source_image` + `source_image_b`) →
+`EmptySD3LatentImage` 16 (1024²) → `KSampler` 17 → `VAEDecode` 18 → `SaveImage` 19.
+
+With one reference the second slot is disconnected exactly as described above: `31.image`, `12.image_b`,
+`13.image_b` and `15.source_image_b` are removed, nodes 30/31 become unreachable, and the graph is the
+single-image case the node pack's README describes ("leave the b-inputs unconnected for single-image use").
+Unlike the turnaround graph this one **keeps** `Krea2EditModelPatch`: it re-renders the object as a presentation
+image rather than reposing it, so the fit-to-grid behaviour that broke the turnaround row is not a problem
+here — and the node is what anchors the output to the reference. It carries no 4-view LoRA.
+
+Rebuild it with `python var/build_edit_wf.py` and check it with `python var/check_workflow.py` if you change it.
+
 ## The turnaround workflow is not a plain export
 
 `krea2_turnaround.json` is the one file here that is deliberately *not* what ComfyUI exports: it is a Krea 2

@@ -23,8 +23,8 @@ from pydantic import BaseModel, Field
 from . import backends, config
 from .db import JobStore
 from .models import (AssetFromCandidateRequest, BackendTest, ImageJobRequest, JobCreated, JobPatch, JobRequest,
-                     SettingsPatch)
-from .presets import load_presets, resolve_settings, workflow_names
+                     PromptPreviewRequest, PromptPreviewResponse, SettingsPatch)
+from .presets import load_presets, preview_reference_prompt, prompt_defaults, resolve_settings, workflow_names
 from .runner_client import Runner
 
 app = FastAPI(title="asset-studio", version=config.VERSION,
@@ -140,6 +140,9 @@ def capabilities():
                        "default_palette": v.get("default_palette"),
                        "optimize_defaults": v.get("optimize_defaults")} for k, v in p["styles"].items()},
         "image_models": _image_models_with_availability(p["image_models"]),
+        # Every instruction the pipeline would compose for itself, so a UI can show it and let it be edited
+        # (the canvas does exactly that). See presets.prompt_defaults for what each entry drives.
+        "prompt_defaults": prompt_defaults(),
         "quality": {k: {"reference": v["reference"], "pixal3d": v["pixal3d"], "master": v["master"], "fallback": v.get("fallback")}
                     for k, v in p["quality"].items()},
         "request_schema": JobRequest.model_json_schema(),
@@ -202,7 +205,20 @@ def create_job(req: JobRequest):
 
 @app.post("/v1/image-jobs", response_model=JobCreated, dependencies=[Depends(auth)])
 def create_image_job(req: ImageJobRequest):
-    """Ideation: generate `variations` reference images of one idea; nothing is turned into 3D until you pick one."""
+    """Ideation: generate `variations` reference images of one idea; nothing is turned into 3D until you pick one.
+
+    With `references` this is also image-to-image: 1..n images the generation conditions on, which is what the
+    canvas feeds a card from another card. (The local torch lane cannot do that at all and says so at submission.)
+    """
+    # A reference that names a file checks out now rather than three minutes into the stage: the control plane is
+    # the only thing that can read the other job's directory, and it copies the file into this job before the
+    # worker starts.
+    for r in req.references:
+        if r.job_id:
+            base = (config.JOBS_DIR / r.job_id).resolve()
+            src = (base / r.file).resolve()
+            if base not in src.parents or not src.is_file():
+                raise HTTPException(404, f"reference {r.job_id}/{r.file} does not exist")
     data = req.model_dump()
     data["quality"] = "balanced"
     gsettings = store().get_settings()
@@ -215,6 +231,21 @@ def create_image_job(req: ImageJobRequest):
     _assert_ready(settings, kind="image")
     job_id = store().create(data, settings, kind="image", title=req.title)
     return JobCreated(job_id=job_id, status="queued", status_url=f"/v1/jobs/{job_id}", artifacts_url=f"/v1/jobs/{job_id}/artifacts")
+
+
+@app.post("/v1/prompt/preview", response_model=PromptPreviewResponse, dependencies=[Depends(auth)])
+def prompt_preview(req: PromptPreviewRequest):
+    """What prompt would this request actually send? No job and no GPU - it is the template, rendered.
+
+    The portal collected a one-line idea and the pipeline composed the instruction out of sight. This returns the
+    composed text plus the parts it came from, which is what a canvas needs to show the prompt beside a card and
+    let it be edited before anything is generated. `prompt_defaults` in /capabilities is the other half: the
+    constants the composition uses.
+    """
+    try:
+        return preview_reference_prompt(req.model_dump())
+    except ValueError as e:
+        raise HTTPException(422, str(e))
 
 
 @app.post("/v1/asset-jobs", response_model=JobCreated, dependencies=[Depends(auth)])
@@ -294,6 +325,11 @@ def _public(j: dict, events=None) -> dict:
     out = {k: v for k, v in j.items() if k not in ("request",)}
     req = dict(j["request"])
     req.pop("reference_image_b64", None)
+    if req.get("references"):
+        # Same reason as the line above: the request is echoed on every poll, and an inline reference is megabytes
+        # of base64. The caller that sent it already has the bytes; `inline` says that it was one.
+        req["references"] = [{**{k: v for k, v in r.items() if k != "image_b64"},
+                              "inline": bool(r.get("image_b64"))} for r in req["references"]]
     if req.get("multiview"):
         req["multiview"] = {"num_views": len(req["multiview"].get("frames", [])), "camera_source": req["multiview"].get("camera_source")}
     out["request"] = req

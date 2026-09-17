@@ -67,6 +67,16 @@
     于是策略是：**比上一级小不到 10% 的级别干脆不导出**（那只是同一套贴图的近乎重复副本，约 9 MB，只换来几个百分点的面数；
     改为记入 manifest 的 `lods_skipped`），**且只有超出预算 25% 以上才告警**。在这台汽车上，结果是一条 11,197 面的 LOD1、零告警。
     每次请求或每个风格仍可指定 `lod_fractions`；超预算永远不会让任务失败。
+12. **提示词看得见，参考图可以多张**（无限画布的第一阶段，后端部分）：`POST /v1/prompt/preview` 返回真正会发出去的提示词
+    以及它的组成部分（不建任务、不占 GPU），`/capabilities.prompt_defaults` 公布流水线自己组装时用到的全部常量。
+    `ImageJobRequest` 新增 `references`（最多 6 张：内联 base64，或指向已有任务里的文件）、`workflow`、
+    `width`/`height`/`steps`/`cfg`，以及 `final_prompt` / `final_negative_prompt`（把组装好的提示词改完原样发回）。
+    多张参考图按 `LoadImage` 节点的标题顺序（`REFERENCE1`、`REFERENCE2`…）落到槽位；多出来的槽位会被**断开**——
+    否则 ComfyUI 会去校验工作流自带、却从未上传的占位文件名，阶段在出图前就失败；上传时按「槽位 + 内容摘要」改名，
+    否则两张恰好同名的参考图会让**所有**槽位都读到同一张（实测踩到过：两张都叫 `reference.png`，结果只编辑了后一张）。
+    内置双参考图工作流为 `presets/workflows/krea2_edit_refs.json`。参考图需要 ComfyUI 图像通道，本地 torch 通道只按提示词生成，
+    因此会在提交时直接拒绝。详见 [`docs/PROMPTS.md`](docs/PROMPTS.md)（英）· [`docs/PROMPTS.zh-CN.md`](docs/PROMPTS.zh-CN.md)（中）。
+    画布界面（无限画布、卡片、拖拽连线）是下一阶段，接口这一侧已经就绪。
 
 ### 快速开始（Windows 优先）
 
@@ -151,6 +161,7 @@ python -m pytest -q tests                        # 测试（不需要 GPU 和模
 | [`README.en.md`](README.en.md) | 完整英文文档（本仓库 README 的英文原文） |
 | [`docs/STAGES.md`](docs/STAGES.md) · [`docs/STAGES.zh-CN.md`](docs/STAGES.zh-CN.md) | 阶段服务是什么、为什么存在、两条配置轴、故障排查（英 / 中） |
 | [`docs/MULTIVIEW.md`](docs/MULTIVIEW.md) · [`docs/MULTIVIEW.zh-CN.md`](docs/MULTIVIEW.zh-CN.md) | 多视角输入：接口、槽位映射、FOV、工作流怎么生成、ComfyUI 版本要求（英 / 中） |
+| [`docs/PROMPTS.md`](docs/PROMPTS.md) · [`docs/PROMPTS.zh-CN.md`](docs/PROMPTS.zh-CN.md) | 提示词怎么组装、怎么改（含不改代码的改法）、预览接口、参考图槽位与多参考图（英 / 中） |
 | [`docs/DISTRIBUTED.md`](docs/DISTRIBUTED.md) | 跨机器部署：worker 机器怎么装、怎么连、token 与安全 |
 | [`docs/PORTAL.md`](docs/PORTAL.md) | 工作台功能与语言设置 |
 | [`docs/RESULTS.md`](docs/RESULTS.md) · [`BENCHMARKS.md`](BENCHMARKS.md) | 实测记录与性能 |

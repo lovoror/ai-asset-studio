@@ -155,6 +155,38 @@ class JobRequest(BaseModel):
         return self
 
 
+class ReferenceImage(BaseModel):
+    """One image a generation conditions on: inline bytes, or a file from a job already on disk.
+
+    Both are needed. A canvas card feeding another card must not push megabytes through the browser, so
+    `job_id` + `file` names a file the control plane already has; a picture dragged in from the desktop has no
+    job to point at and travels as base64, the same shape `JobRequest.reference_image_b64` uses.
+    """
+    image_b64: Optional[str] = Field(None, description="base64 PNG/JPEG")
+    job_id: Optional[str] = Field(None, min_length=8, max_length=64, description="an existing job to read the image from")
+    file: Optional[str] = Field(None, max_length=200,
+                                description="path inside that job: e.g. artifacts/reference.png, "
+                                            "artifacts/reference_candidates/cand_00.png, or stages/reference/views/left.png")
+    label: Optional[str] = Field(None, max_length=40, description="what the caller calls this reference; the UI shows it")
+
+    _b64 = field_validator("image_b64")(JobRequest._b64.__func__)
+
+    @model_validator(mode="after")
+    def _one_source(self):
+        if (self.image_b64 is None) == (self.job_id is None):
+            raise ValueError("give either image_b64 or job_id + file, not both and not neither")
+        if self.job_id is not None:
+            if not self.file:
+                raise ValueError("job_id needs file: a job holds many images, so the path inside it has to be named")
+            # A plain relative path inside the job directory and nothing else: no "..", no drive, no leading
+            # slash. The control plane joins it onto the job directory, and a path that could climb out of it
+            # would read any file on the machine.
+            if (not re.match(r"^[\w\-. /]{1,200}$", self.file) or ".." in self.file
+                    or self.file.startswith("/")):
+                raise ValueError(f"invalid file path {self.file!r}: it must be a plain relative path inside the job")
+        return self
+
+
 class ImageJobRequest(BaseModel):
     """Ideation step: generate several reference-image variations of one idea (no 3D)."""
     prompt: str = Field(..., min_length=3, max_length=1500)
@@ -168,11 +200,65 @@ class ImageJobRequest(BaseModel):
     negative_extra: Optional[str] = Field(None, max_length=300)
     height_m: Optional[float] = Field(None, gt=0.001, le=1000, description="hint for proportions; reused as default when making 3D")
     title: Optional[str] = Field(None, max_length=120)
+    # ---- conditioning on images rather than on a prompt alone (the canvas needs this; nothing here did before)
+    references: list[ReferenceImage] = Field(
+        default_factory=list, max_length=6,
+        description="0 = text to image; 1 or more = condition the generation on these, in this order")
+    workflow: Optional[str] = Field(
+        None, pattern=r"^[\w.\-]+\.json$",
+        description="image workflow to run. Text-to-image graphs have nothing to wire a reference into, so an "
+                    "edit graph is needed whenever references are given; it must be a workflow this machine ships")
+    width: Optional[int] = Field(None, ge=64, le=4096, multiple_of=16,
+                                 description="output size; by default the model preset pins this (a 1024² model stays 1024²)")
+    height: Optional[int] = Field(None, ge=64, le=4096, multiple_of=16)
+    steps: Optional[int] = Field(None, ge=1, le=100, description="override the model preset's step count")
+    cfg: Optional[float] = Field(None, ge=0, le=20, description="the family's guidance value (true_cfg_scale for qwen, guidance_scale for klein/zimage, cfg for ComfyUI)")
+    final_prompt: Optional[str] = Field(
+        None, max_length=4000,
+        description="send exactly this instead of composing one from the template - what the canvas sends when the "
+                    "user edits the assembled prompt and means it verbatim")
+    final_negative_prompt: Optional[str] = Field(
+        None, max_length=4000,
+        description="same, for the negative prompt; without it `negative_extra` is appended to the style's own list")
 
     _clean = field_validator("prompt", "materials", "negative_extra")(JobRequest._clean_text.__func__)
     _style = field_validator("style")(JobRequest._style.__func__)
     _pal = field_validator("palette")(JobRequest._palette.__func__)
     _custom = model_validator(mode="after")(JobRequest._custom_style_present)
+    _final = field_validator("final_prompt", "final_negative_prompt")(JobRequest._clean_text.__func__)
+
+    @model_validator(mode="after")
+    def _final_prompt_is_usable(self):
+        # A final prompt replaces the composed one, so it has to stand on its own - the same floor the prompt field has.
+        if self.final_prompt is not None and len(self.final_prompt.strip()) < 3:
+            raise ValueError("final_prompt is too short to be a prompt")
+        return self
+
+
+class PromptPreviewRequest(BaseModel):
+    """What the canvas asks before generating: what prompt would this request actually send?"""
+    prompt: str = Field(..., min_length=1, max_length=1500)
+    style: str = Field("mobile_factory")
+    custom_style: Optional[CustomStyle] = None
+    materials: Optional[str] = Field(None, max_length=300)
+    palette: Optional[list[str]] = Field(None, max_length=8)
+    negative_extra: Optional[str] = Field(None, max_length=300)
+    height_m: Optional[float] = Field(None, gt=0.001, le=1000)
+    width_m: Optional[float] = Field(None, gt=0.001, le=1000)
+    depth_m: Optional[float] = Field(None, gt=0.001, le=1000)
+
+    _clean = field_validator("prompt", "materials", "negative_extra")(JobRequest._clean_text.__func__)
+    _style = field_validator("style")(JobRequest._style.__func__)
+    _pal = field_validator("palette")(JobRequest._palette.__func__)
+    _custom = model_validator(mode="after")(JobRequest._custom_style_present)
+
+
+class PromptPreviewResponse(BaseModel):
+    """The assembled prompt, in the two forms a UI needs: the text, and what each part of it came from."""
+    prompt: str
+    negative_prompt: str
+    template: dict
+    style_label: Optional[str] = None
 
 
 class AssetFromCandidateRequest(BaseModel):

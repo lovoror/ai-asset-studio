@@ -18,6 +18,7 @@ reads the log, not the code).
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import signal
@@ -77,15 +78,36 @@ def get_bytes(server: str, path: str, timeout: float = 600.0) -> bytes:
     return _request(server.rstrip("/") + path, timeout=timeout)
 
 
-def upload_image(server: str, path: str | Path, timeout: float = 300.0) -> str:
-    """POST /upload/image with a hand-rolled multipart body (no `requests` in this container)."""
+def upload_name(prefix: str, path: str | Path) -> str:
+    """A server-side filename that is unique per (prefix, content).
+
+    Uploading replaces by name, so two images put into one graph must never share a name: two references that
+    happen to have the same basename would otherwise leave every slot reading whichever was sent last, which is
+    a wrong picture with no warning anywhere. `prefix` separates the slots of one run, the digest separates runs
+    - so two jobs that run at once cannot overwrite each other's file between upload and execution - and because
+    it is keyed on content, re-running the same job replaces its own file instead of accumulating copies.
+    """
+    p = Path(path)
+    return f"{prefix}_{hashlib.sha1(p.read_bytes()).hexdigest()[:12]}{p.suffix.lower() or '.png'}"
+
+
+def upload_image(server: str, path: str | Path, prefix: str | None = None,
+                 timeout: float = 300.0) -> str:
+    """POST /upload/image with a hand-rolled multipart body (no `requests` in this container).
+
+    Returns the name the server stored it under. Without a `prefix` the file keeps its own name; with one it is
+    stored under `upload_name(prefix, path)`, which is what any caller putting more than one image into a graph
+    has to use.
+    """
     path = Path(path)
+    filename = upload_name(prefix, path) if prefix else path.name
     boundary = uuid.uuid4().hex
     data = path.read_bytes()
     body = b""
     for field, value in (("subfolder", ""), ("type", "input"), ("overwrite", "true")):
         body += f'--{boundary}\r\nContent-Disposition: form-data; name="{field}"\r\n\r\n{value}\r\n'.encode()
-    body += f'--{boundary}\r\nContent-Disposition: form-data; name="image"; filename="{path.name}"\r\n'.encode()
+    body += (f'--{boundary}\r\nContent-Disposition: form-data; name="image"; '
+             f'filename="{filename}"\r\n').encode()
     body += b"Content-Type: application/octet-stream\r\n\r\n" + data + f"\r\n--{boundary}--\r\n".encode()
     resp = json.loads(_request(server.rstrip("/") + "/upload/image", data=body, timeout=timeout,
                                headers={"Content-Type": f"multipart/form-data; boundary={boundary}"}).decode("utf-8"))

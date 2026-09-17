@@ -469,7 +469,7 @@ shipping assets from a given model.
 | `requirements/` | One file per role |
 | `web/` | React web portal (create → queue → library), served by the API |
 | `cli/`, `mcp/` | Dependency-free CLI, MCP wrapper with the same actions |
-| `docs/`, `BENCHMARKS.md` | Measurements, notes, limitations, [stage workers](docs/STAGES.md), [multi-view](docs/MULTIVIEW.md), [distributed setup](docs/DISTRIBUTED.md) |
+| `docs/`, `BENCHMARKS.md` | Measurements, notes, limitations, [stage workers](docs/STAGES.md), [multi-view](docs/MULTIVIEW.md), [prompts and references](docs/PROMPTS.md), [distributed setup](docs/DISTRIBUTED.md) |
 | `manifests/dependency-manifest.json` | Pinned commits, model revisions, frozen packages per role |
 
 Tests (no GPU, no models needed for the first two):

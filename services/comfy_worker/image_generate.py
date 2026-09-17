@@ -31,6 +31,9 @@ from image_worker.generate import analyze_candidate, external_eval, finish
 
 DEFAULT_TIMEOUT_S = float(os.environ.get("STUDIO_COMFY_TIMEOUT_S", "1800"))
 IMAGE_CLASSES = ("LoadImage",)
+# A workflow names its reference slots by titling the LoadImage nodes REFERENCE1, REFERENCE2, ... so that which
+# reference lands where survives an edit to the graph. All three shipped Krea graphs do it.
+REFERENCE_TITLE = "REFERENCE"
 
 
 def describe(req: dict, backend: dict, graph: dict) -> dict:
@@ -94,6 +97,94 @@ def _save_candidate(entry: dict, server: str, dest: Path, warnings: list) -> Non
     download(server, name, sub, ftype, dest)
 
 
+def reference_slots(wf: dict) -> list[str]:
+    """The LoadImage nodes a workflow uses for references, in order.
+
+    By `_meta.title` first, so a workflow can say "this slot is reference 2" and the mapping survives someone
+    re-adding a node with a lower id; without titles, node-id order (numerically, since ids are strings) is the
+    fallback. `three_d_generate.view_loaders` solves the same problem for the multi-view slots by following the
+    graph instead, which is not open to us here: a text-to-image graph has no named inputs to follow.
+    """
+    ids = find_nodes(wf, *IMAGE_CLASSES)
+    titled = [n for n in ids
+              if str(((wf[n].get("_meta") or {}).get("title") or "")).upper().startswith(REFERENCE_TITLE)]
+    if titled:
+        return sorted(titled, key=lambda n: str((wf[n].get("_meta") or {}).get("title")).upper())
+    return sorted(ids, key=lambda n: (int(n) if n.isdigit() else 1 << 30, n))
+
+
+def _consumers(wf: dict) -> dict[str, list[tuple[str, str]]]:
+    """{node id: [(consumer node id, input key)]} for every link in the graph."""
+    out: dict[str, list[tuple[str, str]]] = {}
+    for nid, node in wf.items():
+        for key, val in (node.get("inputs") or {}).items():
+            if isinstance(val, list) and len(val) == 2 and isinstance(val[0], str):
+                out.setdefault(val[0], []).append((nid, key))
+    return out
+
+
+def disconnect_slots(wf: dict, loaders: list[str], warnings: list) -> list[str]:
+    """Take unused reference slots out of the graph, and return the input keys that were cut.
+
+    A slot is a LoadImage plus whatever preprocessing hangs off it, feeding *named* inputs of the real graph
+    (`image_b`, `source_image_b`). The node pack is explicit that those are for two-input edits and that single
+    image use should "leave the b-inputs unconnected", so the inputs are removed rather than pointed at something
+    else - and removing them makes the whole branch unreachable, which is also what stops ComfyUI validating a
+    filename that was never uploaded (it validates only what it can reach from an output node: execution.py:1128).
+    """
+    consumers = _consumers(wf)
+    cut: list[str] = []
+    for loader in loaders:
+        chain = {loader}
+        frontier = [loader]
+        while frontier:
+            nid = frontier.pop()
+            for consumer, key in consumers.get(nid, []):
+                if consumer in chain:
+                    continue
+                (wf[consumer].get("inputs") or {}).pop(key, None)
+                cut.append(f"{consumer}.{key}")
+                # If nothing else feeds this consumer now, it was only the slot's own preprocessing (a resize
+                # node, say) and the walk continues through it. If the real graph also feeds it, it is shared and
+                # only the one edge is cut.
+                left = [v for v in (wf[consumer].get("inputs") or {}).values()
+                        if isinstance(v, list) and len(v) == 2 and isinstance(v[0], str)]
+                if not left:
+                    chain.add(consumer)
+                    frontier.append(consumer)
+    if cut:
+        warnings.append(f"{len(loaders)} reference slot(s) had no reference; their inputs were disconnected "
+                        f"({', '.join(cut)}) so the workflow runs with the references it was given")
+    return cut
+
+
+def patch_reference_images(wf: dict, server: str, paths: list[Path], warnings: list) -> list[str]:
+    """Upload each reference image and put them into the workflow's reference slots **in order**.
+
+    Order carries meaning: in a two-reference edit graph the first image is the subject and the second is what it
+    should look like, so swapping them silently changes the result. Slots with no reference are disconnected
+    rather than left pointing at whatever filename the workflow ships.
+    """
+    slots = reference_slots(wf)
+    if not slots:
+        raise ComfyError("the workflow has no LoadImage node, so the reference image(s) cannot be wired in")
+    if len(slots) < len(paths):
+        warnings.append(f"{len(paths)} reference image(s) were given but the workflow has {len(slots)} reference "
+                        f"slot(s); the extra reference(s) were ignored")
+    phase("preprocess")
+    used = []
+    for i, (nid, path) in enumerate(zip(slots, paths), start=1):
+        path = Path(path)
+        # Named per slot rather than after the file: two references that share a basename would otherwise
+        # overwrite each other and every slot would end up reading the same picture. See comfy_client.upload_name.
+        name = upload_image(server, path, f"reference{i}")
+        set_node_input(wf, nid, "image", name)
+        used.append(nid)
+        log(f"[comfy] reference {i}: uploaded {path.name} as {name!r} -> LoadImage {nid}")
+    disconnect_slots(wf, slots[len(paths):], warnings)
+    return used
+
+
 def generate_candidates(req: dict, out_dir: Path, backend: dict, warnings: list) -> tuple[list, dict, dict]:
     server = backend["url"]
     template = load_workflow(find_workflow_file(backend["workflow"]))
@@ -104,6 +195,11 @@ def generate_candidates(req: dict, out_dir: Path, backend: dict, warnings: list)
     timeout_s = float(req.get("timeout_s") or DEFAULT_TIMEOUT_S)
     cdir = out_dir / "candidates"
     cdir.mkdir(parents=True, exist_ok=True)
+    # Images to condition on, uploaded once for the whole job rather than per candidate: every candidate of a
+    # variation set is the same request with a different seed, so they all read the same references. A text-to-
+    # image graph simply has no slot to put them in, which is what the caller naming an edit workflow is for.
+    if req.get("reference_images"):
+        patch_reference_images(template, server, [Path(p) for p in req["reference_images"]], warnings)
 
     remote = {}
     try:

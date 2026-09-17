@@ -424,3 +424,171 @@ def test_cancel_then_purge_never_resurrects(env):
     client.post(f"/v1/jobs/{job2}/cancel")
     assert JobStore().requeue_orphans("worker-C") == []
     assert client.get(f"/v1/jobs/{job2}").json()["status"] == "cancelled"
+
+
+# -------------------------------------------------- the prompt and the references the canvas needs (P1 of the canvas)
+
+def _comfyui(client):
+    """Point the image lane at a ComfyUI server, which is the only lane that can take reference images."""
+    r = client.put("/v1/settings", json={"image_kind": "comfyui", "image_url": "http://127.0.0.1:8188",
+                                         "image_workflow": "krea2_edit_refs.json"})
+    assert r.status_code == 200, r.text
+
+
+def test_capabilities_advertises_the_prompts_the_pipeline_composes(env):
+    """These were constants in Python, which is why they could not be shown in a UI or adjusted per request."""
+    client, _, _ = env
+    d = client.get("/capabilities").json()["prompt_defaults"]
+    assert d["reference_rules"] and d["base_negative"]
+    assert d["views_prompt"] and d["views_workflow"] == "krea2_turnaround.json"
+    assert d["views_size"] == [2048, 512] and d["views_steps"] >= 1
+    assert "style_clause" in d["style_fields"]
+
+
+def test_prompt_preview_returns_the_composed_prompt_without_generating_anything(env):
+    """The portal collected one line and the pipeline composed the instruction out of sight. A canvas has to be
+    able to show what would actually be sent, before anything is generated."""
+    client, _, _ = env
+    r = client.post("/v1/prompt/preview", json={"prompt": "a rusty green hatchback", "style": "mobile_factory"})
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert "a rusty green hatchback" in d["prompt"]
+    assert d["negative_prompt"] and d["style_label"]
+    # the parts it was assembled from, so a UI can point at the piece to edit
+    assert d["template"]["subject"] == "a rusty green hatchback"
+    assert d["template"]["style_clause"] and d["template"]["background"]
+    assert d["template"]["view"] and d["template"]["lighting"]
+    assert d["template"]["constraints"] == client.get("/capabilities").json()["prompt_defaults"]["reference_rules"]
+    assert client.get("/v1/queue").json()["items"] == [], "a preview must not queue anything"
+
+
+def test_prompt_preview_reports_an_unknown_style(env):
+    client, _, _ = env
+    r = client.post("/v1/prompt/preview", json={"prompt": "a crate", "style": "does_not_exist"})
+    assert r.status_code == 422 and "unknown style" in r.text
+
+
+def test_an_image_job_takes_references_and_per_request_generation_settings(env):
+    client, _, _ = env
+    _comfyui(client)
+    ref = base64.b64encode(_png_bytes()).decode()
+    r = client.post("/v1/image-jobs", json={
+        "prompt": "an edited crate", "model": "krea2-turbo", "variations": 1,
+        "references": [{"image_b64": ref, "label": "front"}, {"image_b64": ref, "label": "side"}],
+        "workflow": "krea2_edit_refs.json",
+        "width": 768, "height": 512, "steps": 6, "cfg": 1.5,
+        "final_prompt": "draw exactly this",
+    })
+    assert r.status_code == 200, r.text
+    job = client.get(f"/v1/jobs/{r.json()['job_id']}").json()
+    assert [x["label"] for x in job["request"]["references"]] == ["front", "side"]
+    # the request is echoed on every poll, so the inline bytes are not: megabytes per poll would be the alternative
+    assert all("image_b64" not in x and x["inline"] for x in job["request"]["references"])
+    assert job["request"]["final_prompt"] == "draw exactly this"
+    ref_settings = job["settings"]["reference"]
+    # the per-request value wins over the model preset, which pins 1024x1024 for exactly this model
+    assert (ref_settings["width"], ref_settings["height"]) == (768, 512)
+    assert ref_settings["steps"] == 6 and ref_settings["cfg"] == 1.5
+    assert job["settings"]["reference"]["model"] == "krea2-turbo"
+    assert job["settings"]["backend"]["image"]["workflow"] == "krea2_edit_refs.json"
+
+
+def test_references_are_refused_on_a_lane_that_cannot_use_them(env):
+    """The local torch lane generates from a prompt and nothing else, and would take the references and quietly
+    produce an unrelated picture. Say so at submission instead."""
+    client, _, _ = env
+    r = client.post("/v1/image-jobs", json={
+        "prompt": "an edited crate", "references": [{"image_b64": base64.b64encode(_png_bytes()).decode()}]})
+    assert r.status_code == 422 and "ComfyUI image backend" in r.text
+
+
+def test_an_unknown_image_workflow_is_refused_at_submission(env):
+    client, _, _ = env
+    _comfyui(client)
+    r = client.post("/v1/image-jobs", json={
+        "prompt": "an edited crate", "model": "krea2-turbo", "workflow": "not_a_workflow.json",
+        "references": [{"image_b64": base64.b64encode(_png_bytes()).decode()}]})
+    assert r.status_code == 422 and "unknown image workflow" in r.text
+
+
+def test_a_reference_naming_another_job_is_checked_before_the_job_is_queued(env):
+    client, _, _ = env
+    _comfyui(client)
+    r = client.post("/v1/image-jobs", json={
+        "prompt": "an edited crate", "model": "krea2-turbo",
+        "references": [{"job_id": "20260101-000000-deadbeef", "file": "artifacts/reference.png"}]})
+    assert r.status_code == 404 and "does not exist" in r.text
+    assert client.get("/v1/queue").json()["items"] == []
+
+
+def test_a_reference_naming_a_real_job_file_is_accepted(env):
+    client, _, _ = env
+    _comfyui(client)
+    from studio import config
+    other = config.JOBS_DIR / "20260101-000000-deadbeef" / "artifacts"
+    other.mkdir(parents=True)
+    (other / "reference.png").write_bytes(_png_bytes())
+    r = client.post("/v1/image-jobs", json={
+        "prompt": "an edited crate", "model": "krea2-turbo",
+        "references": [{"job_id": "20260101-000000-deadbeef", "file": "artifacts/reference.png"}]})
+    assert r.status_code == 200, r.text
+    job = client.get(f"/v1/jobs/{r.json()['job_id']}").json()
+    assert job["request"]["references"][0]["file"] == "artifacts/reference.png"
+    assert job["request"]["references"][0]["inline"] is False
+
+
+def test_a_reference_path_cannot_climb_out_of_its_job(env):
+    """The control plane joins `file` onto the job directory, so a path that could climb out would read any file
+    on the machine."""
+    client, _, _ = env
+    _comfyui(client)
+    for bad in ("../../../etc/passwd", "/etc/passwd", "artifacts/../../../../secret.png"):
+        r = client.post("/v1/image-jobs", json={
+            "prompt": "an edited crate", "model": "krea2-turbo",
+            "references": [{"job_id": "20260101-000000-deadbeef", "file": bad}]})
+        assert r.status_code == 422, f"{bad!r} was accepted"
+
+
+def test_a_reference_needs_exactly_one_source(env):
+    client, _, _ = env
+    _comfyui(client)
+    ref = base64.b64encode(_png_bytes()).decode()
+    both = client.post("/v1/image-jobs", json={
+        "prompt": "an edited crate", "model": "krea2-turbo",
+        "references": [{"image_b64": ref, "job_id": "20260101-000000-deadbeef", "file": "a.png"}]})
+    assert both.status_code == 422
+    neither = client.post("/v1/image-jobs", json={
+        "prompt": "an edited crate", "model": "krea2-turbo", "references": [{"label": "front"}]})
+    assert neither.status_code == 422
+    no_file = client.post("/v1/image-jobs", json={
+        "prompt": "an edited crate", "model": "krea2-turbo",
+        "references": [{"job_id": "20260101-000000-deadbeef"}]})
+    assert no_file.status_code == 422 and "needs file" in no_file.text
+
+
+def test_at_most_six_references(env):
+    client, _, _ = env
+    _comfyui(client)
+    ref = base64.b64encode(_png_bytes()).decode()
+    r = client.post("/v1/image-jobs", json={"prompt": "an edited crate", "model": "krea2-turbo",
+                                            "references": [{"image_b64": ref} for _ in range(7)]})
+    assert r.status_code == 422
+
+
+def test_a_too_short_final_prompt_is_refused(env):
+    """`final_prompt` replaces the composed one, so it has to stand on its own."""
+    client, _, _ = env
+    _comfyui(client)
+    r = client.post("/v1/image-jobs", json={"prompt": "an edited crate", "model": "krea2-turbo",
+                                            "final_prompt": "x"})
+    assert r.status_code == 422 and "too short" in r.text
+
+
+def _png_bytes() -> bytes:
+    import io
+
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (32, 32), (120, 140, 110)).save(buf, format="PNG")
+    return buf.getvalue()
+

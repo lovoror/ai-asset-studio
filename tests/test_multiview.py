@@ -201,9 +201,9 @@ def test_patch_multiview_input_uploads_one_image_per_slot(monkeypatch):
     wf = json.loads(MULTIVIEW_WORKFLOW.read_text(encoding="utf-8"))
     uploaded = []
 
-    def fake_upload(server, path):
-        uploaded.append(Path(path).name)
-        return f"remote_{Path(path).name}"
+    def fake_upload(server, path, prefix=None):
+        uploaded.append((Path(path).name, prefix))
+        return f"remote_{prefix}_{Path(path).name}"
 
     monkeypatch.setattr(td, "upload_image", fake_upload)
     views = {"front": "/j/views/front.png", "left": "/j/views/left.png",
@@ -211,12 +211,15 @@ def test_patch_multiview_input_uploads_one_image_per_slot(monkeypatch):
     warnings: list[str] = []
     td.patch_multiview_input(wf, "http://server", views, 20.0, warnings)
 
-    assert sorted(uploaded) == ["back.png", "front.png", "left.png", "right.png"]
+    # one upload per slot, each named for its slot: four views of one asset often share a basename, and the
+    # upload replaces by name, so two of them sharing one would silently turn four views into two pictures
+    assert sorted(uploaded) == [("back.png", "back"), ("front.png", "front"),
+                                ("left.png", "left"), ("right.png", "right")]
     mv_id = td.multiview_node(wf)
     loaders = td.view_loaders(wf, mv_id)
     # the whole point: four different pictures, not the single-image path's "patched all of them"
     assert {wf[nid]["inputs"]["image"] for nid in loaders.values()} == {
-        "remote_front.png", "remote_left.png", "remote_back.png", "remote_right.png"}
+        "remote_front_front.png", "remote_left_left.png", "remote_back_back.png", "remote_right_right.png"}
     # the caller's FOV replaces the workflow's MoGeGeometryToFOV link
     assert wf[mv_id]["inputs"]["fov"] == 20.0
     assert warnings == []
@@ -225,7 +228,7 @@ def test_patch_multiview_input_uploads_one_image_per_slot(monkeypatch):
 def test_patch_multiview_input_leaves_moge_in_place_without_a_declared_fov(monkeypatch):
     wf = json.loads(MULTIVIEW_WORKFLOW.read_text(encoding="utf-8"))
     before = wf[td.multiview_node(wf)]["inputs"]["fov"]
-    monkeypatch.setattr(td, "upload_image", lambda server, path: "remote.png")
+    monkeypatch.setattr(td, "upload_image", lambda server, path, prefix=None: "remote.png")
     td.patch_multiview_input(wf, "http://server", {"front": "/j/views/front.png"}, None, [])
     assert wf[td.multiview_node(wf)]["inputs"]["fov"] == before
     assert isinstance(before, list) and before[0] == "242"
@@ -235,7 +238,7 @@ def test_patch_multiview_input_warns_about_a_slot_the_workflow_does_not_wire(mon
     wf = json.loads(MULTIVIEW_WORKFLOW.read_text(encoding="utf-8"))
     # unwire the right view, as a user editing the workflow might
     del wf[td.multiview_node(wf)]["inputs"]["right"]
-    monkeypatch.setattr(td, "upload_image", lambda server, path: "remote.png")
+    monkeypatch.setattr(td, "upload_image", lambda server, path, prefix=None: "remote.png")
     warnings: list[str] = []
     td.patch_multiview_input(wf, "http://server", {"right": "/j/views/right.png"}, None, warnings)
     assert any("right view" in w for w in warnings)
@@ -243,7 +246,7 @@ def test_patch_multiview_input_warns_about_a_slot_the_workflow_does_not_wire(mon
 
 def test_patch_multiview_input_refuses_a_workflow_without_the_node(monkeypatch):
     wf = json.loads(SINGLE_WORKFLOW.read_text(encoding="utf-8"))
-    monkeypatch.setattr(td, "upload_image", lambda server, path: "remote.png")
+    monkeypatch.setattr(td, "upload_image", lambda server, path, prefix=None: "remote.png")
     with pytest.raises(td.ComfyError):
         td.patch_multiview_input(wf, "http://server", {"front": "/j/views/front.png"}, None, [])
 
@@ -272,7 +275,7 @@ def test_a_slot_with_no_view_is_disconnected(monkeypatch):
     inputs and re-bases its rig on the first one it is given, so fewer views reconstruct fine.
     """
     wf = json.loads(MULTIVIEW_WORKFLOW.read_text(encoding="utf-8"))
-    monkeypatch.setattr(td, "upload_image", lambda server, path: "remote.png")
+    monkeypatch.setattr(td, "upload_image", lambda server, path, prefix=None: "remote.png")
     warnings: list[str] = []
     td.patch_multiview_input(wf, "http://server",
                              {"front": "/j/views/front.png", "back": "/j/views/back.png"}, None, warnings)

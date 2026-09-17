@@ -306,7 +306,7 @@ def patch_multiview_input(wf: dict, server: str, views: dict, fov: float | None,
         path = (views or {}).get(slot)
         if not path or slot not in loaders:
             continue
-        name = upload_image(server, Path(path))
+        name = upload_image(server, Path(path), slot)
         set_node_input(wf, loaders[slot], "image", name)
         log(f"[comfy] {slot} view: uploaded {Path(path).name} as {name!r} -> LoadImage {loaders[slot]}")
     unused = [s for s in VIEW_SLOTS if s in loaders and not (views or {}).get(s)]

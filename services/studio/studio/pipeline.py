@@ -373,6 +373,38 @@ class JobRun:
         self.stage_validate()
         self.stage_package()
 
+    def _stage_references(self, d: Path) -> list[str]:
+        """Copy this job's reference images into its own stage directory and return the paths to use.
+
+        A reference is either inline base64 (a picture from the user's desktop) or a file of an existing job (a
+        card on the canvas feeding another card, or a variant of an earlier job). Either way it has to land inside
+        *this* job's directory: only files under the job directory are shipped to a stage worker, so a path into
+        the other job's directory would simply not exist on a worker running on another machine.
+        """
+        refs = self.request.get("references") or []
+        if not refs:
+            return []
+        rdir = d / "references"
+        rdir.mkdir(parents=True, exist_ok=True)
+        paths: list[str] = []
+        for i, r in enumerate(refs):
+            label = r.get("label") or f"reference {i + 1}"
+            if r.get("image_b64"):
+                raw = base64.b64decode(r["image_b64"], validate=True)
+                # a backslash inside an f-string expression needs 3.12, and this repo supports 3.11
+                ext = ".png" if raw[:8] == b"\x89PNG\r\n\x1a\n" else ".jpg"
+                dest = rdir / f"ref{i}{ext}"
+                dest.write_bytes(raw)
+                source = "uploaded"
+            else:
+                src = (config.JOBS_DIR / r["job_id"] / r["file"]).resolve()
+                dest = rdir / f"ref{i}{Path(r['file']).suffix or '.png'}"
+                shutil.copy2(src, dest)
+                source = f"{r['job_id']}/{r['file']}"
+            paths.append(str(dest))
+            self.log(f"reference {i + 1} ({label}) from {source} -> {dest.name}")
+        return paths
+
     def stage_reference(self, variations_only: bool = False):
         name = "reference"
         if self.stage_result(name):
@@ -383,6 +415,16 @@ class JobRun:
         d = self.stage_dir(name)
         style = self.settings.get("style_def") or load_presets()["styles"][self.settings["style"]]
         built = build_reference_prompt(self.request, style)
+        # The caller may send the prompt it showed the user, verbatim: the composed text is the *default*, not a
+        # decision the pipeline keeps. `template` still records what the composition was, so a manifest can say
+        # which of the two the model actually read.
+        final_prompt = (self.request.get("final_prompt") or "").strip()
+        if final_prompt:
+            built = {**built, "prompt": final_prompt}
+            self.log("using the caller's prompt verbatim (final_prompt), not the composed template")
+        final_negative = (self.request.get("final_negative_prompt") or "").strip()
+        if final_negative:
+            built = {**built, "negative_prompt": final_negative}
         ref = self.settings["reference"]
         req = {
             "prompt": built["prompt"], "negative_prompt": built["negative_prompt"], "template": built["template"],
@@ -398,6 +440,11 @@ class JobRun:
             # configuration has to travel in the request rather than the environment. Ignored by the local worker.
             "backend": self.backend.get("image") or {"kind": "local"},
         }
+        # Images this generation conditions on (image-to-image / multi-reference). They have to be copied into
+        # this job's directory before the stage runs - see stage_reference_from_parent for why.
+        references = self._stage_references(d)
+        if references:
+            req["reference_images"] = references
         for k, v in ref.items():  # every registry parameter of the chosen model reaches the worker (distilled, sequential, ...)
             req.setdefault(k, v)
         atomic_write_json(d / "request.json", req)

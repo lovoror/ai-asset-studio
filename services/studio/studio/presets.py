@@ -7,6 +7,7 @@ from pathlib import Path
 import yaml
 
 from . import config
+from .promptbuilder import BASE_NEGATIVE, REFERENCE_RULES, build_reference_prompt
 
 
 @functools.lru_cache(maxsize=1)
@@ -36,6 +37,54 @@ def workflow_names() -> list[str]:
     if not d or not d.is_dir():
         return []
     return sorted(p.name for p in d.glob("*.json"))
+
+
+def prompt_defaults() -> dict:
+    """Every instruction the pipeline composes for itself, so a UI can show them and let them be edited.
+
+    These were constants buried in Python until now, which is exactly why they could not be adjusted without a
+    code change. Each one is also settable, and the API says so:
+
+      * `reference_rules` and `base_negative` are what `promptbuilder` assembles every reference prompt from.
+        They are fixed here; the per-job override is `negative_extra`, and `final_prompt` (ImageJobRequest)
+        replaces the composed prompt outright.
+      * `views_prompt` and `views_workflow` are the turnaround instruction and graph (Settings -> generation
+        backends; `auto_multiview` / `views_prompt` in the settings table).
+      * each style's own clause, background and extra negatives come back in /capabilities.styles, and are
+        editable there via `style_edits`.
+    """
+    return {
+        "reference_rules": REFERENCE_RULES,
+        "base_negative": BASE_NEGATIVE,
+        "views_prompt": VIEWS_PROMPT,
+        "views_workflow": VIEWS_WORKFLOW,
+        "views_size": list(VIEWS_SIZE),
+        "views_steps": VIEWS_STEPS,
+        "views_grounding_px": VIEWS_GROUNDING_PX,
+        "views_fov_degrees": VIEWS_FOV_DEGREES,
+        # What a style may override, so a style editor knows which fields exist.
+        "style_fields": ["label", "style_clause", "background", "negative_extra",
+                         "target_triangles", "texture_size"],
+    }
+
+
+def preview_reference_prompt(req: dict) -> dict:
+    """What prompt would this request actually send? No job, no GPU - it is the template, rendered.
+
+    A canvas shows this beside every card: the composed instruction is what the model really reads, and hiding it
+    is why "just tweak the prompt" meant "guess what the pipeline added". `template` breaks the same text into
+    the parts it was assembled from, so a UI can point at the piece to change.
+    """
+    p = load_presets()
+    base = None if req["style"] == "custom" else p["styles"].get(req["style"])
+    if base is None and req["style"] != "custom":
+        raise ValueError(f"unknown style {req['style']!r}; available: {', '.join(p['styles'])}, custom")
+    style = custom_style_def(req, p, base)
+    if style is None:
+        raise ValueError("style 'custom' requires custom_style.style_clause")
+    built = build_reference_prompt(req, style)
+    return {"prompt": built["prompt"], "negative_prompt": built["negative_prompt"],
+            "template": built["template"], "style_label": style.get("label")}
 
 
 def custom_style_def(req: dict, presets: dict, base: dict | None) -> dict | None:
@@ -170,6 +219,18 @@ def resolve_settings(req: dict, global_settings: dict | None = None) -> dict:
     if entry is None:
         raise ValueError(f"unknown image model {model_id!r}; available: {', '.join(p['image_models'])}")
     ref.update(copy.deepcopy(entry.get("params", {})))
+    # A model preset pins its own size and step count because the family has values that fit its VRAM (krea2-turbo
+    # is 1024² for exactly that reason), so a per-request value has to be applied *after* the preset - asking for a
+    # size is the point. `cfg` is spelled differently per family, and the local worker reads only its family's key.
+    if req.get("width"):
+        ref["width"] = int(req["width"])
+    if req.get("height"):
+        ref["height"] = int(req["height"])
+    if req.get("steps"):
+        ref["steps"] = int(req["steps"])
+    if req.get("cfg") is not None:
+        ref[{"qwen": "true_cfg_scale", "klein": "guidance_scale",
+             "zimage": "guidance_scale"}.get(entry.get("family", "qwen"), "cfg")] = float(req["cfg"])
     ref["model"] = model_id
     ref["family"] = entry.get("family", "qwen")
     ref["est_s"] = entry.get("est_s")
@@ -178,6 +239,16 @@ def resolve_settings(req: dict, global_settings: dict | None = None) -> dict:
         # The registry family outranks the settings switch: a comfyui model has no local implementation, so
         # honouring image_kind="local" here would only produce "unknown family comfyui" from the GPU worker.
         backend["image"]["kind"] = "comfyui"
+    # Conditioning on images is a ComfyUI-lane ability: the local torch lane generates from a prompt and nothing
+    # else, so it would take the references and quietly produce an unrelated picture. Refuse at submission.
+    if req.get("references") and backend["image"]["kind"] != "comfyui":
+        raise ValueError("generating from reference images needs the ComfyUI image backend: the local torch lane "
+                         "only generates from a prompt, so the references would be ignored")
+    if req.get("workflow"):
+        available = workflow_names()
+        if req["workflow"] not in available:
+            raise ValueError(f"unknown image workflow {req['workflow']!r}; available: {', '.join(available)}")
+        backend["image"]["workflow"] = req["workflow"]
     # Fail at submission rather than three minutes into the stage: a remote backend with no address cannot work.
     # Only checked when this job will actually run the reference stage - JobRun.run() generates references only for
     # input_mode "text" (a job from a picked candidate or a supplied image copies one instead). The 3D lane is never

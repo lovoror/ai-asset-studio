@@ -1,0 +1,214 @@
+{
+ "10": {
+  "_meta": {
+   "title": "REFERENCE1"
+  },
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "reference1.png"
+  }
+ },
+ "11": {
+  "class_type": "ImageResizeKJv2",
+  "inputs": {
+   "crop_position": "center",
+   "device": "cpu",
+   "divisible_by": 2,
+   "height": 1024,
+   "image": [
+    "10",
+    0
+   ],
+   "keep_proportion": "resize",
+   "pad_color": "0, 0, 0",
+   "upscale_method": "lanczos",
+   "width": 1024
+  }
+ },
+ "12": {
+  "class_type": "Krea2EditGroundedEncode",
+  "inputs": {
+   "clip": [
+    "4",
+    0
+   ],
+   "grounding_px": 768,
+   "image": [
+    "11",
+    0
+   ],
+   "image_b": [
+    "31",
+    0
+   ],
+   "prompt": "Show the object from the reference image(s) as a single finished game asset: one object, the whole object visible and centred with generous margin, plain flat light grey studio background, soft even neutral light, sharp focus, no text or logos anywhere.",
+   "system_prompt": ""
+  }
+ },
+ "13": {
+  "class_type": "Krea2EditGroundedEncode",
+  "inputs": {
+   "clip": [
+    "4",
+    0
+   ],
+   "grounding_px": 768,
+   "image": [
+    "11",
+    0
+   ],
+   "image_b": [
+    "31",
+    0
+   ],
+   "prompt": "",
+   "system_prompt": ""
+  }
+ },
+ "14": {
+  "class_type": "VAEEncode",
+  "inputs": {
+   "pixels": [
+    "11",
+    0
+   ],
+   "vae": [
+    "5",
+    0
+   ]
+  }
+ },
+ "15": {
+  "class_type": "Krea2EditModelPatch",
+  "inputs": {
+   "fit_mode": "fit",
+   "model": [
+    "3",
+    0
+   ],
+   "ref_boost": 1.0,
+   "ref_boost_a": 1.0,
+   "source_image": [
+    "11",
+    0
+   ],
+   "source_image_b": [
+    "31",
+    0
+   ],
+   "source_latent": [
+    "14",
+    0
+   ],
+   "vae": [
+    "5",
+    0
+   ]
+  }
+ },
+ "16": {
+  "class_type": "EmptySD3LatentImage",
+  "inputs": {
+   "batch_size": 1,
+   "height": 1024,
+   "width": 1024
+  }
+ },
+ "17": {
+  "class_type": "KSampler",
+  "inputs": {
+   "cfg": 1.0,
+   "denoise": 1.0,
+   "latent_image": [
+    "16",
+    0
+   ],
+   "model": [
+    "15",
+    0
+   ],
+   "negative": [
+    "13",
+    0
+   ],
+   "positive": [
+    "12",
+    0
+   ],
+   "sampler_name": "euler",
+   "scheduler": "simple",
+   "seed": 0,
+   "steps": 8
+  }
+ },
+ "18": {
+  "class_type": "VAEDecode",
+  "inputs": {
+   "samples": [
+    "17",
+    0
+   ],
+   "vae": [
+    "5",
+    0
+   ]
+  }
+ },
+ "19": {
+  "class_type": "SaveImage",
+  "inputs": {
+   "filename_prefix": "studio_edit",
+   "images": [
+    "18",
+    0
+   ]
+  }
+ },
+ "3": {
+  "class_type": "UNETLoader",
+  "inputs": {
+   "unet_name": "krea2_turbo_nvfp4.safetensors",
+   "weight_dtype": "default"
+  }
+ },
+ "30": {
+  "_meta": {
+   "title": "REFERENCE2"
+  },
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "reference2.png"
+  }
+ },
+ "31": {
+  "class_type": "ImageResizeKJv2",
+  "inputs": {
+   "crop_position": "center",
+   "device": "cpu",
+   "divisible_by": 2,
+   "height": 1024,
+   "image": [
+    "30",
+    0
+   ],
+   "keep_proportion": "resize",
+   "pad_color": "0, 0, 0",
+   "upscale_method": "lanczos",
+   "width": 1024
+  }
+ },
+ "4": {
+  "class_type": "CLIPLoader",
+  "inputs": {
+   "clip_name": "qwen3vl_4b_fp8_scaled.safetensors",
+   "device": "cpu",
+   "type": "krea2"
+  }
+ },
+ "5": {
+  "class_type": "VAELoader",
+  "inputs": {
+   "vae_name": "qwen_image_vae.safetensors"
+  }
+ }
+}

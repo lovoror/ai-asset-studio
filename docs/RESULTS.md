@@ -148,6 +148,17 @@ Lightning 4 vs 8 share seeds, so the compositions match and the difference is de
   warning about runtime tangent generation on normal-mapped meshes); headless Godot 4.7.2 import (`tools/godot_import_test.py`)
   succeeded for every GLB. Unity is not installed on this machine; Godot is the engine importer
   that was actually exercised.
+* **Multi-reference editing (2026-09-17, local RTX 4060, `krea2_edit_refs.json`, one seed, 1024², 8 steps):**
+  one reference **91 s** (`var/edit_1ref/`), two references **166 s** (`var/edit_2ref_fixed/`). Both scored 1.00 on
+  the technical checks (one component, not clipped, centred, flat background). The one-reference run removes
+  exactly `31.image`, `12.image_b`, `13.image_b`, `15.source_image_b` and leaves the first-render wiring intact,
+  which is what lets a single image run through a two-slot graph. The two-reference run renders a visible hybrid
+  of both inputs (a water pump station and a hatchback), so both slots really are conditioned on.
+
+  The first two-reference attempt was **wrong and looked fine**: both files were called `reference.png`, the
+  upload replaces by name, and both `LoadImage` nodes ended up reading the *second* image — a one-input edit
+  reported as a two-input one. Uploads are now named `<slot>_<content digest><ext>` and
+  `tests/test_comfy_worker.py::test_two_references_with_the_same_basename_do_not_reach_the_same_file` pins it.
 
 ## Known limitations
 
