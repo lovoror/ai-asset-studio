@@ -610,3 +610,140 @@ def test_both_lanes_remote_exhausts_the_ladder_without_a_rerun(studio):
     log.write_text("", encoding="utf-8")
     assert run._fallback("pixal3d", log) is False
     assert run.settings["pixal3d"] == {"resolution": 1536}
+
+
+# ------------------------------------------------------------------- the turnaround (2D multi-angle) path
+
+def edit_workflow() -> dict:
+    """A minimal instruction-editing graph: the instruction lives on `prompt`, and it is grounded on the same
+    LoadImage three times over (both encoders and the model patch) - the shape the shipped turnaround has."""
+    return {
+        "3": {"class_type": "UNETLoader", "inputs": {"unet_name": "krea2_turbo_nvfp4.safetensors",
+                                                     "weight_dtype": "default"}},
+        "4": {"class_type": "CLIPLoader", "inputs": {"clip_name": "qwen3vl_4b_fp8_scaled.safetensors",
+                                                     "type": "krea2", "device": "cpu"}},
+        "5": {"class_type": "VAELoader", "inputs": {"vae_name": "qwen_image_vae.safetensors"}},
+        "10": {"class_type": "LoadImage", "inputs": {"image": "reference.png"}},
+        "12": {"class_type": "Krea2EditGroundedEncode",
+               "inputs": {"clip": ["4", 0], "prompt": "OLD INSTRUCTION", "image": ["10", 0], "grounding_px": 0}},
+        "13": {"class_type": "Krea2EditGroundedEncode",
+               "inputs": {"clip": ["4", 0], "prompt": "", "image": ["10", 0], "grounding_px": 768}},
+        "14": {"class_type": "VAEEncode", "inputs": {"pixels": ["10", 0], "vae": ["5", 0]}},
+        "15": {"class_type": "Krea2EditModelPatch",
+               "inputs": {"model": ["3", 0], "source_latent": ["14", 0], "source_image": ["10", 0],
+                          "vae": ["5", 0]}},
+        "16": {"class_type": "EmptySD3LatentImage", "inputs": {"width": 2048, "height": 512, "batch_size": 1}},
+        "17": {"class_type": "KSampler",
+               "inputs": {"seed": 0, "steps": 10, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple",
+                          "denoise": 1.0, "model": ["15", 0], "positive": ["12", 0], "negative": ["13", 0],
+                          "latent_image": ["16", 0]}},
+        "18": {"class_type": "VAEDecode", "inputs": {"samples": ["17", 0], "vae": ["5", 0]}},
+        "19": {"class_type": "SaveImage", "inputs": {"images": ["18", 0], "filename_prefix": "studio_turnaround"}},
+    }
+
+
+def test_derive_sampler_graph_reports_the_key_an_instruction_lives_on():
+    """Assuming `text` on an editing graph would leave the workflow's own instruction in place and silently
+    ignore the caller's, so the key is part of the answer."""
+    g = cc.derive_sampler_graph(edit_workflow())
+    assert g["positive"] == "12" and g["prompt_key"] == "prompt"
+    assert g["negative"] == "13" and g["negative_key"] == "prompt"
+
+
+def test_a_plain_txt2img_workflow_still_reports_text():
+    g = cc.derive_sampler_graph(txt2img())
+    assert g["prompt_key"] == "text" and g["negative_key"] == "text"
+
+
+def test_patch_writes_the_instruction_where_the_workflow_keeps_it():
+    wf = edit_workflow()
+    from comfy_worker import image_generate as ig
+    ig._patch(wf, cc.derive_sampler_graph(wf),
+              {"prompt": "draw a turnaround", "width": 2048, "height": 512, "steps": 8}, 5, [])
+    assert wf["12"]["inputs"]["prompt"] == "draw a turnaround"
+    assert wf["13"]["inputs"]["prompt"] == ""          # the negative stays empty, as the node pack trains it
+    assert wf["17"]["inputs"]["seed"] == 5 and wf["17"]["inputs"]["steps"] == 8
+    assert (wf["16"]["inputs"]["width"], wf["16"]["inputs"]["height"]) == (2048, 512)
+
+
+def test_patch_everywhere_reaches_both_encoders_and_warns_when_there_is_nothing_to_patch():
+    from comfy_worker import image_generate as ig
+    wf = edit_workflow()
+    assert ig._patch_everywhere(wf, "grounding_px", 512, [], "the grounding resolution") == 2
+    assert wf["12"]["inputs"]["grounding_px"] == 512 and wf["13"]["inputs"]["grounding_px"] == 512
+
+    warnings: list = []
+    assert ig._patch_everywhere(wf, "no_such_input", 1, warnings, "the thing") == 0
+    assert any("no_such_input" in w for w in warnings)
+
+
+def test_turnaround_uploads_the_reference_and_points_every_loadimage_at_it(monkeypatch, tmp_path):
+    """The reference reaches three different nodes, but all three read the LoadImage, so one patch covers the
+    whole edit wiring."""
+    import json as _json
+
+    from comfy_worker import image_generate as ig
+    wf = edit_workflow()
+    monkeypatch.setattr(ig, "load_workflow", lambda p: wf)
+    monkeypatch.setattr(ig, "find_workflow_file", lambda name: Path(name))
+    monkeypatch.setattr(ig, "probe", lambda server: {"comfyui_version": "test"})
+    uploaded: list = []
+    monkeypatch.setattr(ig, "upload_image",
+                        lambda server, path: uploaded.append(Path(path).name) or "remote_ref.png")
+    seen: dict = {}
+
+    def fake_run(server, workflow, timeout, client_id=None):
+        seen["wf"] = _json.loads(_json.dumps(workflow))
+        seen["server"] = server
+        return {"outputs": {"19": {"images": [{"filename": "sheet.png", "subfolder": "", "type": "output"}]}},
+                "prompt": [1, "client", workflow]}
+
+    monkeypatch.setattr(ig, "run_workflow", fake_run)
+    monkeypatch.setattr(ig, "download", lambda server, name, sub, t, dest: dest.write_bytes(b"png") or 3)
+    ref = tmp_path / "reference.png"
+    ref.write_bytes(b"png")
+
+    warnings: list = []
+    out = ig.generate_turnaround({"workflow": "krea2_turnaround.json", "reference_image": str(ref),
+                                  "prompt": "make a turnaround", "width": 2048, "height": 512, "steps": 8,
+                                  "grounding_px": 512, "seed": 3},
+                                 tmp_path, {"url": "http://server", "workflow": "unused.json"}, warnings)
+
+    assert uploaded == ["reference.png"]
+    assert seen["server"] == "http://server"
+    assert seen["wf"]["10"]["inputs"]["image"] == "remote_ref.png"
+    assert seen["wf"]["12"]["inputs"]["prompt"] == "make a turnaround"
+    assert seen["wf"]["12"]["inputs"]["grounding_px"] == 512
+    assert seen["wf"]["13"]["inputs"]["grounding_px"] == 512
+    assert (tmp_path / "turnaround.png").is_file()
+    assert out["sheet"] == "turnaround.png"
+    assert warnings == []
+
+
+def test_turnaround_refuses_a_workflow_with_no_loadimage(monkeypatch, tmp_path):
+    from comfy_worker import image_generate as ig
+    wf = edit_workflow()
+    del wf["10"]
+    monkeypatch.setattr(ig, "load_workflow", lambda p: wf)
+    monkeypatch.setattr(ig, "find_workflow_file", lambda name: Path(name))
+    monkeypatch.setattr(ig, "probe", lambda server: {})
+    monkeypatch.setattr(ig, "upload_image", lambda server, path: "remote.png")
+    ref = tmp_path / "reference.png"
+    ref.write_bytes(b"png")
+    with pytest.raises(cc.ComfyError, match="no LoadImage"):
+        ig.generate_turnaround({"workflow": "w.json", "reference_image": str(ref), "prompt": "p",
+                                "width": 64, "height": 64, "steps": 1},
+                               tmp_path, {"url": "http://server"}, [])
+
+
+def test_run_dispatches_the_turnaround_mode(monkeypatch, tmp_path):
+    from comfy_worker import image_generate as ig
+    called: dict = {}
+
+    def fake_run_turnaround(req):
+        called["mode"] = req.get("mode")
+        (Path(req["out_dir"]) / "output.json").write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr(ig, "run_turnaround", fake_run_turnaround)
+    ig.run({"mode": "turnaround", "out_dir": str(tmp_path)})
+    assert called["mode"] == "turnaround"

@@ -21,15 +21,16 @@ import time
 import traceback
 from pathlib import Path
 
-from comfy_worker.comfy_client import (ComfyError, Interrupted, derive_sampler_graph, download, find_workflow_file,
-                                       iter_outputs, load_workflow, log, phase, probe, retract, run_workflow,
-                                       set_node_input)
+from comfy_worker.comfy_client import (ComfyError, Interrupted, derive_sampler_graph, download, find_nodes,
+                                       find_workflow_file, iter_outputs, load_workflow, log, phase, probe, retract,
+                                       run_workflow, set_node_input, upload_image)
 # Scoring and the output.json/selection.json shape come from the local worker rather than being reimplemented,
 # so a remote candidate is judged identically and the orchestrator sees the same contract either way.
 # All three are torch-free at import time (image_worker.generate imports torch inside its functions).
 from image_worker.generate import analyze_candidate, external_eval, finish
 
 DEFAULT_TIMEOUT_S = float(os.environ.get("STUDIO_COMFY_TIMEOUT_S", "1800"))
+IMAGE_CLASSES = ("LoadImage",)
 
 
 def describe(req: dict, backend: dict, graph: dict) -> dict:
@@ -47,12 +48,12 @@ def _patch(wf: dict, graph: dict, req: dict, seed: int, warnings: list) -> None:
     w, h = int(req["width"]), int(req["height"])
 
     if graph.get("positive"):
-        if not set_node_input(wf, graph["positive"], "text", req["prompt"]):
+        if not set_node_input(wf, graph["positive"], graph.get("prompt_key", "text"), req["prompt"]):
             warnings.append(f"could not write the prompt into node {graph['positive']}")
     else:
         warnings.append("the workflow's sampler has no positive conditioning link; the prompt was not applied")
     if graph.get("negative"):
-        set_node_input(wf, graph["negative"], "text", req.get("negative_prompt") or "")
+        set_node_input(wf, graph["negative"], graph.get("negative_key", "text"), req.get("negative_prompt") or "")
 
     # KSampler uses `seed`; KSamplerAdvanced uses `noise_seed`. Patch whichever the node actually has.
     if not (set_node_input(wf, sampler, "seed", seed) or set_node_input(wf, sampler, "noise_seed", seed)):
@@ -138,7 +139,111 @@ def generate_candidates(req: dict, out_dir: Path, backend: dict, warnings: list)
     return cands, graph, remote
 
 
+def _patch_everywhere(wf: dict, key: str, value, warnings: list, what: str) -> int:
+    """Write `value` into `key` on every node that exposes it, and say so if none does.
+
+    "Every node" rather than "the first" because an editing workflow deliberately has two of them: the positive
+    and the negative encoder are both grounded at the same resolution, and patching only one would leave the
+    negative at the workflow's value.
+    """
+    written = 0
+    for nid, node in wf.items():
+        if key in (node.get("inputs") or {}) and set_node_input(wf, nid, key, value):
+            written += 1
+    if not written:
+        warnings.append(f"no node in the workflow has a {key!r} input, so {what} was left at its own value")
+    return written
+
+
+def patch_reference_image(wf: dict, server: str, image_path: Path, warnings: list) -> None:
+    """Upload the reference and point every LoadImage at it.
+
+    One patch covers the whole edit wiring: the grounded encoders and the model patch do not take the file
+    name, they take an IMAGE link that ends at the LoadImage (usually through a resizer), so they follow it.
+    """
+    phase("preprocess")
+    name = upload_image(server, image_path)
+    loaders = find_nodes(wf, *IMAGE_CLASSES)
+    if not loaders:
+        raise ComfyError("the turnaround workflow has no LoadImage node, so the reference cannot be wired in")
+    if len(loaders) > 1:
+        warnings.append(f"the turnaround workflow has {len(loaders)} LoadImage nodes {loaders}; patched all of "
+                        f"them with the same reference")
+    for nid in loaders:
+        set_node_input(wf, nid, "image", name)
+    log(f"[comfy] turnaround: uploaded {image_path.name} as {name!r}; patched LoadImage {loaders}")
+
+
+def generate_turnaround(req: dict, out_dir: Path, backend: dict, warnings: list) -> dict:
+    """One image out of one reference image in: the multi-view turnaround sheet the splitter cuts up.
+
+    Deliberately not part of the candidate loop: there is nothing to score and nothing to choose between, and
+    the sheet is not a candidate for anything - it is an intermediate that the control plane splits into the
+    front/left/back/right views the 3D stage consumes.
+    """
+    server = backend["url"]
+    workflow = req.get("workflow") or backend.get("workflow")
+    if not workflow:
+        raise ComfyError("request.json names no turnaround workflow; set Settings -> Generation backends")
+    template = load_workflow(find_workflow_file(workflow))
+    graph = derive_sampler_graph(template)
+    log(f"[comfy] turnaround workflow {workflow}: sampler {graph['sampler']}, instruction node "
+        f"{graph.get('positive')} (key {graph.get('prompt_key')!r})")
+    ref = req.get("reference_image")
+    if not ref or not Path(ref).is_file():
+        raise ComfyError(f"turnaround reference image not found: {ref!r}. The control plane ships the stage's "
+                         f"inputs before starting it, so this means the path left the job directory.")
+
+    remote = {}
+    try:
+        remote = probe(server)
+        log(f"[comfy] server {server}: ComfyUI {remote.get('comfyui_version')}, gpu {remote.get('gpu')}")
+    except Exception as e:  # noqa: BLE001
+        warnings.append(f"could not read {server}/system_stats ({e}); continuing anyway")
+
+    wf = copy.deepcopy(template)
+    patch_reference_image(wf, server, Path(ref), warnings)
+    _patch(wf, graph, req, int(req.get("seed") or 0), warnings)
+    if req.get("grounding_px") is not None:
+        _patch_everywhere(wf, "grounding_px", int(req["grounding_px"]), warnings, "the grounding resolution")
+    if req.get("ref_boost") is not None:
+        _patch_everywhere(wf, "ref_boost", float(req["ref_boost"]), warnings, "the reference-fidelity dial")
+
+    phase("generate")
+    t0 = time.time()
+    entry = run_workflow(server, wf, float(req.get("timeout_s") or DEFAULT_TIMEOUT_S),
+                         client_id="asset-studio-turnaround")
+    sheet = out_dir / "turnaround.png"
+    _save_candidate(entry, server, sheet, warnings)
+    return {"sheet": sheet.name, "time_s": round(time.time() - t0, 2), "workflow": workflow,
+            "graph": {k: v for k, v in graph.items() if k != "n_samplers"},
+            "effective": {k: req[k] for k in ("prompt", "width", "height", "steps", "seed", "grounding_px",
+                                              "ref_boost") if k in req},
+            "remote_gpu": remote, "warnings": warnings}
+
+
+def run_turnaround(req: dict) -> None:
+    """The turnaround stage's entry point. Writes its own output.json, with no candidates and no selection."""
+    out_dir = Path(req["out_dir"])
+    out_dir.mkdir(parents=True, exist_ok=True)
+    backend = req.get("backend") or {}
+    if backend.get("kind") != "comfyui" or not backend.get("url"):
+        raise ComfyError("generating the multi-view turnaround needs a ComfyUI image backend (Settings -> "
+                         "Generation backends); the local torch image lane cannot edit a reference image")
+    warnings: list[str] = []
+    t_all = time.time()
+    phase("load")
+    result = generate_turnaround(req, out_dir, backend, warnings)
+    result["total_s"] = round(time.time() - t_all, 2)
+    tmp = out_dir / "output.json.tmp"
+    tmp.write_text(json.dumps(result, indent=1), encoding="utf-8")
+    tmp.replace(out_dir / "output.json")
+
+
 def run(req: dict) -> None:
+    if req.get("mode") == "turnaround":
+        run_turnaround(req)
+        return
     out_dir = Path(req["out_dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
     backend = req.get("backend") or {}

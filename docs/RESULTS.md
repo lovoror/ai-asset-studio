@@ -166,7 +166,11 @@ Lightning 4 vs 8 share seeds, so the compositions match and the difference is de
   the shipped workflow, produced a 56 MB / 698,803-triangle textured GLB in 3.0 min, and re-rendering the result shows the
   same object from the same angles (the front view stays the front view). At the 1536 cascade the same job exhausts an
   8 GB card in `VaeDecodeTextureTrellis`; it completes at 1024, which is what the numbers above are for. Still missing: a
-  portal UI, and automatic novel-view generation - nothing renders the missing views for you yet.
+  portal UI: a multi-view job is still submitted through the API. The views can also be **generated** rather than
+  supplied (`generate_views`): one Krea-2 editing pass draws a 2048x512 turnaround row, `studio/sheet.py` cuts it into
+  the four views (dropping the panel the model paints from its own source image), and the multi-view lane reconstructs
+  from those. Verified on 2026-09-17 as an ordinary job, prompt to finished asset: reference 5.8 min, turnaround 2.9 min,
+  Pixal3D multi-view 1.5 min on the 4090, **18.4 min end to end**, master 59.4 MB, validation clean, no LOD warnings.
 * LOD budgets: LODs reuse LOD0's texture set, so they have to keep its UV layout, and meshoptimizer never collapses an edge
   on a UV border - after an atlas bake every UV seam is one. That puts a floor under how far an LOD can be reduced, and the
   floor is a property of the mesh's seams, not of the requested fraction. Measured with `var/lod_fractions_sweep.py` on a

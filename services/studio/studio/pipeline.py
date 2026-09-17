@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import math
 import os
 import shutil
 import time
@@ -17,6 +18,7 @@ from pathlib import Path
 
 from . import config
 from . import multiview
+from . import sheet
 from .presets import MULTIVIEW_WORKFLOW, backend_config, load_presets
 from .promptbuilder import build_reference_prompt
 from .runner_client import Runner, StageCancelled, StageFailed
@@ -260,6 +262,67 @@ class JobRun:
                     pass
                 LANES.leave(lane)
 
+    def _generate_views(self, reference: Path, d: Path) -> dict:
+        """Draw the multi-view turnaround from the chosen reference and cut it into views.
+
+        Returns the extra reference-stage result fields, or {} when this job did not ask for views. The
+        turnaround runs in `stages/reference/turnaround/` and the views land in `stages/reference/views/`,
+        which is exactly what a caller-supplied multi-view input produces - so everything downstream (the
+        frame -> slot mapping, the fov decision, the multi-view workflow, the per-slot image patching) is code
+        that already existed and is already tested.
+
+        Kept inside the reference stage rather than made a stage of its own because the views are derived from
+        the reference: they have to be discarded exactly when the reference is, and the retry path already
+        discards `stages/reference/result.json` as a whole.
+        """
+        cfg = self.settings.get("views") or {}
+        if not cfg.get("enabled"):
+            return {}
+        if not self.remote("image"):
+            self.warn("generate_views needs the ComfyUI image backend: the local torch lane only generates "
+                      "images from a prompt, it cannot edit a reference image into other views. This job was "
+                      "reconstructed from the single reference instead")
+            return {}
+        tdir = d / "turnaround"
+        tdir.mkdir(parents=True, exist_ok=True)
+        req = {
+            "mode": "turnaround",
+            "reference_image": str(reference),
+            "out_dir": str(tdir),
+            "workflow": cfg.get("workflow"), "prompt": cfg.get("prompt"),
+            "width": cfg["width"], "height": cfg["height"], "steps": cfg["steps"],
+            "grounding_px": cfg.get("grounding_px"), "seed": self.settings["seed"],
+            "backend": self.backend.get("image") or {"kind": "local"},
+        }
+        atomic_write_json(tdir / "request.json", req)
+        self.set_stage("reference", 0.9)
+        self.log(f"drawing a {cfg['count']}-view turnaround from the reference ({cfg['workflow']} at "
+                 f"{cfg['width']}x{cfg['height']}, {cfg['steps']} steps)")
+        run = self._run_gpu_stage("image", "reference", "comfy_worker.image_generate", tdir, tdir / "log.txt", [])
+        out = json.loads((tdir / "output.json").read_text(encoding="utf-8"))
+        for w in out.get("warnings", []):
+            self.warn(w)
+        vd = d / "views"
+        views, cut_warnings = sheet.split_sheet(tdir / out["sheet"], vd,
+                                                slots=tuple(multiview.VIEW_SLOTS[: cfg["count"]]))
+        for w in cut_warnings:
+            self.warn(w)
+        if len(views) < 2:
+            # Pixal3D's multi-view path is pointless with one view, and the single-image path is better tested.
+            self.warn(f"only {len(views)} usable view(s) came out of the turnaround sheet; reconstructing from "
+                      f"the single reference instead")
+            return {}
+        fov = float(cfg.get("fov_degrees", 20.0))
+        atomic_write_json(vd / "transforms.json", {
+            "camera_angle_x": math.radians(fov), "mesh_scale": 1.0, "camera_source": "rig",
+            "frames": sheet.rig_frames(list(views), fov)})
+        self.log(f"turnaround: {len(views)} views ({', '.join(views)}) cut from {out['sheet']} "
+                 f"in {out.get('time_s')}s")
+        return {"source": "multiview", "views_dir": str(vd), "num_views": len(views), "generated_views": True,
+                "turnaround": {"sheet": out["sheet"], "time_s": out.get("time_s"),
+                               "effective": out.get("effective", {})},
+                "run_turnaround": run}
+
     # ---- stages ------------------------------------------------------------
     def run(self):
         self.store.update(self.id, status="running")
@@ -332,6 +395,9 @@ class JobRun:
                "prompt": built["prompt"], "negative_prompt": built["negative_prompt"],
                "effective": {k: req[k] for k in ("model_id", "family", "width", "height", "steps", "true_cfg_scale", "guidance_scale", "mode",
                                                   "gpu_resident_blocks", "lightning_lora", "seeds")}}
+        if not variations_only:
+            # An image job stops at the reference (it only makes variations), so views are for 3D jobs only.
+            res.update(self._generate_views(d / out["selected"], d))
         self.finish_stage(name, res, t0)
 
     def stage_reference_from_parent(self):
@@ -352,7 +418,11 @@ class JobRun:
         (self.art / "thumbs").mkdir(exist_ok=True)
         make_thumb(src, self.art / "thumbs" / "reference.jpg")
         self.log(f"using variation {cand} of image job {parent} (Qwen stage skipped)")
-        self.finish_stage(name, {"selected": "provided.png", "source": "image_job", "parent_id": parent, "candidate": cand}, t0)
+        res = {"selected": "provided.png", "source": "image_job", "parent_id": parent, "candidate": cand}
+        # The copy inside this job directory, not the parent's path: a worker on another machine can only read
+        # what the control plane ships, and only files under the job directory are shipped.
+        res.update(self._generate_views(d / "provided.png", d))
+        self.finish_stage(name, res, t0)
 
     def stage_reference_provided(self):
         name = "reference"
@@ -368,6 +438,7 @@ class JobRun:
             shutil.copy2(d / f"provided{ext}", self.art / f"reference{ext}")
             res = {"selected": f"provided{ext}", "source": "provided_by_caller"}
             self.log("using caller-provided reference image (Qwen stage skipped)")
+            res.update(self._generate_views(d / f"provided{ext}", d))
         else:
             mv = self.request["multiview"]
             vd = d / "views"

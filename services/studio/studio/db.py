@@ -79,6 +79,11 @@ DEFAULT_SETTINGS = {
     "three_d_url": "",
     "three_d_workflow": "",
     "three_d_multiview_workflow": "",  # API-format workflow for multi-view jobs; "" = presets.MULTIVIEW_WORKFLOW
+    # Generating the multi-view input itself: one editing pass draws a row of orbit views, which is then split
+    # into the front/left/back/right images the 3D lane reconstructs from. Off by default (it is an extra pass).
+    "auto_multiview": False,     # default for a new job's `generate_views`
+    "views_workflow": "",        # "" = presets.VIEWS_WORKFLOW (krea2_turnaround.json)
+    "views_prompt": "",          # "" = presets.VIEWS_PROMPT
     "trellis2": True,            # value written into the branch-switch node: true = TRELLIS.2, false = Pixal3D
     "nodes": {},                 # 3D lane only: {branch, seed, resolution, decimate, texture, normal, image,
                                  # output} -> ComfyUI node id, optionally "<id>:<input key>". See BackendNodes.

@@ -57,7 +57,10 @@
     **ComfyUI ≥ 0.35**），本地侧走 Pixal3D 的 `inference_mv`。控制面按帧名、相机方位角、输入顺序三级依据把每张图
     映射到 `front/left/back/right` 槽位，并决定水平 FOV 是钉死调用方的值还是交给 MoGe 从前视图测量。详见
     [`docs/MULTIVIEW.md`](docs/MULTIVIEW.md)（英）· [`docs/MULTIVIEW.zh-CN.md`](docs/MULTIVIEW.zh-CN.md)（中）。
-    还没做的：门户里的多选界面、自动补视角。
+    还没做的：门户里的界面（接口已支持 `generate_views`，对话框还没给这个开关）。
+    视角也**不必自己传**：`generate_views`（或设置里 `auto_multiview`）让流水线自己画——一次指令编辑把选中的参考图
+    画成一排环绕视角，`studio/sheet.py` 再切成 front/left/back/right 去重建。实测一句提示词到成品 18.4 分钟
+    （参考图 5.8 + 画视角 2.9 + 多视角重建 1.5 + 其余），master 59.4 MB，校验零错误、零 LOD 告警。
 11. **LOD 不再"报了也白报"**：默认仍是要 `[0.5, 0.25]` 这个游戏里真正想要的两级链，但由流水线自己消化减速器给不出的部分。
     LOD 复用 LOD0 的贴图就必须保留同一套 UV，而 meshoptimizer 不折叠落在 UV 边界上的边——图集烘焙后每条接缝都是这种边。
     实测（`var/lod_fractions_sweep.py`，19,415 面的图集资产）：根本降不到 LOD0 的 67% 以下，链式第二级卡在 65%。

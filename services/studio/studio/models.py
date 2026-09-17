@@ -69,6 +69,9 @@ class JobRequest(BaseModel):
     negative_extra: Optional[str] = Field(None, max_length=300)
     reference_candidates: Optional[int] = Field(None, ge=1, le=6)
     reference_image_b64: Optional[str] = Field(None, description="Skip Qwen: base64 PNG/JPEG used as the reference")
+    generate_views: Optional[bool] = Field(None, description="Generate the multi-view input from the chosen reference first "
+                                                            "(one extra editing pass), then reconstruct from those views. "
+                                                            "None = the installation default (Settings -> auto_multiview)")
     multiview: Optional[MultiViewInput] = None
     render_previews: bool = True
     preview_size: int = Field(512, ge=128, le=2048)
@@ -246,6 +249,12 @@ class SettingsPatch(BaseModel):
     three_d_workflow: Optional[str] = Field(None, max_length=200, pattern=r"^([\w.\-]+\.json)?$")
     three_d_multiview_workflow: Optional[str] = Field(None, max_length=200, pattern=r"^([\w.\-]+\.json)?$",
                                                       description="workflow for multi-view jobs; empty = the shipped 3d_pixal3d_multi_views.json")
+    # Generating the multi-view input (2D multi-angle) before reconstructing.
+    auto_multiview: Optional[bool] = Field(None, description="default for generate_views on new jobs")
+    views_workflow: Optional[str] = Field(None, max_length=200, pattern=r"^([\w.\-]+\.json)?$",
+                                          description="editing workflow that draws the turnaround; empty = the shipped krea2_turnaround.json")
+    views_prompt: Optional[str] = Field(None, max_length=1200,
+                                        description="instruction given to the editing workflow; empty = the shipped default")
     trellis2: Optional[bool] = None
     nodes: Optional[BackendNodes] = None
     # Stage worker addresses, overriding config.toml [servers]. Send {} to fall back to config.toml.

@@ -147,6 +147,11 @@ def _link_target(wf: dict, node_id: str, key: str) -> str | None:
     return None
 
 
+# The input keys an instruction can live on. `text` is CLIPTextEncode; `prompt` is what the instruction-editing
+# nodes call it (Krea2EditGroundedEncode), and a writer that assumed `text` would silently do nothing there.
+PROMPT_KEYS = ("text", "prompt")
+
+
 def derive_sampler_graph(wf: dict) -> dict:
     """Find the sampler and its prompt / negative / latent nodes by following the graph.
 
@@ -188,23 +193,42 @@ def derive_sampler_graph(wf: dict) -> dict:
     if len(samplers) > 1:
         log(f"[comfy] workflow has {len(samplers)} samplers {samplers}; patching {chosen} (last in the chain)")
 
-    def text_node(sampler: str, key: str) -> str | None:
-        """The CLIPTextEncode (or a node exposing `text`) feeding one of the sampler's prompt inputs."""
+    def prompt_key(nid: str) -> str | None:
+        """The input that carries this node's instruction, if it has one."""
+        inputs = (wf.get(nid) or {}).get("inputs") or {}
+        for key in PROMPT_KEYS:
+            if key in inputs:
+                return key
+        return None
+
+    def text_node(sampler: str, key: str) -> tuple[str | None, str]:
+        """The node feeding one of the sampler's prompt inputs, and the input key to write into it.
+
+        A txt2img graph ends at a CLIPTextEncode whose key is `text`; an instruction-editing graph ends at a
+        node whose key is `prompt` (Krea2EditGroundedEncode). The key is therefore part of the answer rather
+        than assumed - writing `text` into a node that has none would leave the workflow's own instruction in
+        place and silently ignore the caller's.
+        """
         nid = _link_target(wf, sampler, key)
         if nid is None:
-            return None
-        if "text" in ((wf.get(nid) or {}).get("inputs") or {}):
-            return nid
+            return None, "text"
+        found = prompt_key(nid)
+        if found:
+            return nid, found
         # Some graphs put a concatenation or a string primitive between the encoder and the sampler.
-        for upstream in ("text", "clip", "positive", "negative", "conditioning"):
+        for upstream in ("text", "prompt", "clip", "positive", "negative", "conditioning"):
             deeper = _link_target(wf, nid, upstream)
-            if deeper and "text" in ((wf.get(deeper) or {}).get("inputs") or {}):
-                return deeper
-        return nid
+            if deeper:
+                found = prompt_key(deeper)
+                if found:
+                    return deeper, found
+        return nid, "text"
 
     latent = _link_target(wf, chosen, "latent_image")
-    return {"sampler": chosen, "n_samplers": len(samplers),
-            "positive": text_node(chosen, "positive"), "negative": text_node(chosen, "negative"),
+    positive, positive_key = text_node(chosen, "positive")
+    negative, negative_key = text_node(chosen, "negative")
+    return {"sampler": chosen, "n_samplers": len(samplers), "positive": positive, "negative": negative,
+            "prompt_key": positive_key, "negative_key": negative_key,
             "latent": latent,
             "latent_kind": (wf.get(latent) or {}).get("class_type") if latent else None}
 

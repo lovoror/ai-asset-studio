@@ -1,0 +1,184 @@
+{
+ "10": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "reference.png"
+  }
+ },
+ "11": {
+  "class_type": "ImageResizeKJv2",
+  "inputs": {
+   "crop_position": "center",
+   "device": "cpu",
+   "divisible_by": 2,
+   "height": 1024,
+   "image": [
+    "10",
+    0
+   ],
+   "keep_proportion": "resize",
+   "pad_color": "0, 0, 0",
+   "upscale_method": "lanczos",
+   "width": 1024
+  }
+ },
+ "12": {
+  "class_type": "Krea2EditGroundedEncode",
+  "inputs": {
+   "clip": [
+    "4",
+    0
+   ],
+   "grounding_px": 768,
+   "image": [
+    "11",
+    0
+   ],
+   "prompt": "Convert the object in the image to a Character Sheet showing the front view, the left side view, the back view and the right side view of the same object, arranged in one horizontal row of four equal square panels, the whole object visible in every panel at the same scale and the same distance, plain flat light grey background, no text, no labels",
+   "system_prompt": ""
+  }
+ },
+ "13": {
+  "class_type": "Krea2EditGroundedEncode",
+  "inputs": {
+   "clip": [
+    "4",
+    0
+   ],
+   "grounding_px": 768,
+   "image": [
+    "11",
+    0
+   ],
+   "prompt": "",
+   "system_prompt": ""
+  }
+ },
+ "14": {
+  "class_type": "VAEEncode",
+  "inputs": {
+   "pixels": [
+    "11",
+    0
+   ],
+   "vae": [
+    "5",
+    0
+   ]
+  }
+ },
+ "15": {
+  "class_type": "Krea2EditModelPatch",
+  "inputs": {
+   "fit_mode": "fit",
+   "model": [
+    "20",
+    0
+   ],
+   "ref_boost": 1.0,
+   "ref_boost_a": 1.0,
+   "source_image": [
+    "11",
+    0
+   ],
+   "source_latent": [
+    "14",
+    0
+   ],
+   "vae": [
+    "5",
+    0
+   ]
+  }
+ },
+ "16": {
+  "class_type": "EmptySD3LatentImage",
+  "inputs": {
+   "batch_size": 1,
+   "height": 512,
+   "width": 2048
+  }
+ },
+ "17": {
+  "class_type": "KSampler",
+  "inputs": {
+   "cfg": 1.0,
+   "denoise": 1.0,
+   "latent_image": [
+    "16",
+    0
+   ],
+   "model": [
+    "15",
+    0
+   ],
+   "negative": [
+    "13",
+    0
+   ],
+   "positive": [
+    "12",
+    0
+   ],
+   "sampler_name": "euler",
+   "scheduler": "simple",
+   "seed": 0,
+   "steps": 8
+  }
+ },
+ "18": {
+  "class_type": "VAEDecode",
+  "inputs": {
+   "samples": [
+    "17",
+    0
+   ],
+   "vae": [
+    "5",
+    0
+   ]
+  }
+ },
+ "19": {
+  "class_type": "SaveImage",
+  "inputs": {
+   "filename_prefix": "studio_turnaround",
+   "images": [
+    "18",
+    0
+   ]
+  }
+ },
+ "20": {
+  "class_type": "LoraLoaderModelOnly",
+  "inputs": {
+   "lora_name": "Krea2_Character_Design_4-View_V1.safetensors",
+   "model": [
+    "3",
+    0
+   ],
+   "strength_model": 1.0
+  }
+ },
+ "3": {
+  "class_type": "UNETLoader",
+  "inputs": {
+   "unet_name": "krea2_turbo_nvfp4.safetensors",
+   "weight_dtype": "default"
+  }
+ },
+ "4": {
+  "class_type": "CLIPLoader",
+  "inputs": {
+   "clip_name": "qwen3vl_4b_fp8_scaled.safetensors",
+   "device": "cpu",
+   "type": "krea2"
+  }
+ },
+ "5": {
+  "class_type": "VAELoader",
+  "inputs": {
+   "vae_name": "qwen_image_vae.safetensors"
+  }
+ }
+}

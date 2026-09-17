@@ -156,13 +156,58 @@ It prints the camera's horizontal FOV, which is the value to put in `camera_angl
 39.60°). This is the fixture used to exercise the lane, and the basis for generating multi-view input from an
 asset that already exists.
 
-## 7. Not done yet
+## 7. Generating the views instead of supplying them
 
-* **No portal UI.** A multi-view job has to be submitted through the API/CLI today; the dialog still takes a
-  single reference. Choosing several images and picking a mode ("one asset per image" vs "one multi-view
-  asset") is the next step.
-* **No automatic novel-view generation.** Nothing renders the missing views for you yet; the caller supplies
-  real ones (or uses §6).
+Set `generate_views` on a job (or `auto_multiview` in Settings for new jobs) and the pipeline draws the orbit
+views itself: one instruction-editing pass turns the chosen reference into a row of views, which are then cut
+into the four images above. That is what makes multi-view reconstruction reachable from a single text prompt.
+
+```
+prompt -> reference image -> turnaround sheet (one editing pass, 2048x512)
+       -> front/left/back/right (studio/sheet.py) -> Pixal3D multi-view -> master.glb
+```
+
+It runs inside the **reference** stage, not as a stage of its own, because the views are derived from the
+reference: they have to be discarded exactly when it is, and the retry path already discards the reference
+stage's result as a whole. The sheet lands in `stages/reference/turnaround/` and the views in
+`stages/reference/views/` - the same shape a caller-supplied multi-view input produces, so everything
+downstream is code that already existed.
+
+| setting | default | why |
+|---|---|---|
+| `views_workflow` | `krea2_turnaround.json` | the editing graph; it needs the ComfyUI image lane |
+| `views_prompt` | the shipped turnaround instruction | the dial that decides what the row looks like |
+| canvas (`VIEWS_SIZE`) | 2048×512, i.e. **4:1** | see below - this is what makes the model lay out a row |
+| `VIEWS_STEPS` | 8 at CFG 1 | the turbo path the node pack documents |
+| `VIEWS_GROUNDING_PX` | 768 | the Qwen3-VL grounding resolution the node pack documents (384-768) |
+| `VIEWS_FOV_DEGREES` | 20 | what the node's own default describes for generator output |
+
+Three things are worth knowing, all measured:
+
+* **The canvas aspect decides whether a row happens at all.** At 1:1 the model re-renders a single view of the
+  reference however the instruction is worded, with or without a 4-view LoRA. At 4:1 it lays out a row.
+* **`grounding_px` is not a detail.** It caps the longest side handed to Qwen3-VL, and `0` means "native": the
+  whole reference then goes through a CPU vision encoder. A 2000×2000 canvas took **two hours** that way and
+  **2.9 minutes** in the pipeline at 768 with 8 steps.
+* **The model also paints its own source image into the row.** The node pack resamples that source onto the
+  canvas at a centred offset, so the extra panel lands in the middle - 2px off centre on a real job, while the
+  nearest real view was 360px away. `studio/sheet.py` drops it by position, refuses to re-normalise each
+  panel (one shared window sized from the widest view, or the narrow head-on view would be blown up until it
+  matched the wide side view), and pastes each tile from its own panel only, so a neighbouring view cannot
+  leak a sliver into it.
+
+Needs **Pillow** on the control-plane machine (it is already there for thumbnails), and the ComfyUI image
+backend: the local torch lane only generates from a prompt and cannot edit an image into other views. If the
+image lane is local, the job warns and reconstructs from the single reference instead.
+
+## 8. Not done yet
+
+* **No portal UI.** A multi-view job has to be submitted through the API/CLI today (`generate_views: true`);
+  the dialog still takes a single reference. Choosing several images, or ticking "generate the other angles",
+  is the next step.
+* **The generated "right" view is the weakest of the four.** The model reads "the right side view" as a
+  three-quarter from the right more often than it does for the left, which is the view most likely to need
+  prompt tuning (`views_prompt`).
 * **Framing caveat for rig renders.** `ImageCropToMask` normalises *each* view to its own silhouette, so a
   long object (a car seen from the side vs head-on) is magnified differently per view. That is the shipped
   upstream recipe and it is what makes arbitrary photos usable, but a physically consistent rig would share

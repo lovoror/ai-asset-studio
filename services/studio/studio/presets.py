@@ -68,6 +68,27 @@ def custom_style_def(req: dict, presets: dict, base: dict | None) -> dict | None
 # for Pixal3DMultiViewConditioning, one image pipeline per view, and no TRELLIS.2/Pixal3D branch switch.
 MULTIVIEW_WORKFLOW = "3d_pixal3d_multi_views.json"
 
+# Generating the multi-view input itself: one editing pass turns the chosen reference into a row of orbit
+# views, which studio.sheet then cuts into the front/left/back/right images the 3D lane consumes.
+#
+# These numbers are not guesses. Two of them decide whether it works at all:
+#   * the canvas is 4:1, and that is what makes the model lay out a *row*. At 1:1 it re-renders one view of
+#     the reference however the instruction is worded, with or without the 4-view LoRA.
+#   * grounding_px caps the longest side handed to Qwen3-VL, and the node pack documents 384-768. Leaving it
+#     at 0 ("native") pushes the whole reference through a CPU vision encoder: a 2000x2000 canvas took two
+#     hours that way and nine minutes at 768. The turbo path is 8 steps at CFG 1.
+VIEWS_WORKFLOW = "krea2_turnaround.json"
+VIEWS_PROMPT = ("Convert the object in the image to a Character Sheet showing the front view, the left side "
+                "view, the back view and the right side view of the same object, arranged in one horizontal "
+                "row of four equal square panels, the whole object visible in every panel at the same scale "
+                "and the same distance, plain flat light grey background, no text, no labels")
+VIEWS_SIZE = (2048, 512)
+VIEWS_STEPS = 8
+VIEWS_GROUNDING_PX = 768
+# What the generated views are declared to be: a synthetic orbit at the fov the node's own default describes
+# for multi-view generator output. That pins the rig instead of sending the pipeline off to measure one.
+VIEWS_FOV_DEGREES = 20.0
+
 
 def backend_config(global_settings: dict | None) -> dict:
     """The generation-backend settings, normalised into the shape the stage request.json carries.
@@ -170,6 +191,17 @@ def resolve_settings(req: dict, global_settings: dict | None = None) -> dict:
         },
         "fallback": q.get("fallback", []),
         "allow_quality_fallback": bool(req.get("allow_quality_fallback", True)),
+        # Whether to generate the multi-view input from the chosen reference before reconstructing. Off unless
+        # asked for: it is a second editing pass, and every existing job is a single-image one.
+        "views": {
+            "enabled": bool(req.get("generate_views") if req.get("generate_views") is not None
+                            else (global_settings or {}).get("auto_multiview")),
+            "count": 4,
+            "workflow": (global_settings or {}).get("views_workflow") or VIEWS_WORKFLOW,
+            "prompt": (global_settings or {}).get("views_prompt") or VIEWS_PROMPT,
+            "width": VIEWS_SIZE[0], "height": VIEWS_SIZE[1], "steps": VIEWS_STEPS,
+            "grounding_px": VIEWS_GROUNDING_PX, "fov_degrees": VIEWS_FOV_DEGREES,
+        },
         "input_mode": "multiview" if req.get("multiview") else ("reference_image" if req.get("reference_image_b64") else
                       ("image_job" if req.get("image_job_id") else "text")),
         # Which server generates what. Snapshotted here (like style_def) so the job stays reproducible.

@@ -419,11 +419,13 @@ errors and import into headless Godot 4.7.2.
 * The output is an **optimized static prop**: automatic decimation topology, no rig, no animation-friendly edge flow.
 * Matting defaults to Pixal3D's upstream `briaai/RMBG-2.0`, which is gated: accept its license on Hugging Face and run the
   prefetch with your token. Without access, set `[stage] rembg_model = "ZhengPeng7/BiRefNet"` (open drop-in replacement).
-* Multi-view input (2–12 images → one asset) runs on both lanes: `Pixal3DMultiViewConditioning` on ComfyUI, which
-  needs **ComfyUI 0.35+** on the 3D server, or Pixal3D's own `inference_mv` locally. The multi-view checkpoints are
-  in the same prefetch set as the single-image ones (`scripts/prefetch.py --role pixal3d --mv`); they are not a
-  separate download. What is still missing is the portal UI for picking the images, and automatic novel-view
-  generation — nothing renders the views you did not supply. See [docs/MULTIVIEW.md](docs/MULTIVIEW.md).
+* Multi-view input runs on both lanes: `Pixal3DMultiViewConditioning` on ComfyUI, which needs **ComfyUI 0.35+** on the
+  3D server, or Pixal3D's own `inference_mv` locally. The multi-view checkpoints are in the same prefetch set as the
+  single-image ones (`scripts/prefetch.py --role pixal3d --mv`); they are not a separate download. The views do not have
+  to be supplied either: `generate_views` has the pipeline draw them itself - one instruction-editing pass on the ComfyUI
+  image lane turns the chosen reference into a row of orbit views, which are cut into front/left/back/right and
+  reconstructed from there. Still missing is the portal UI for it (the API takes `generate_views`, the dialog does not
+  offer it yet). See [docs/MULTIVIEW.md](docs/MULTIVIEW.md).
 * **Godot 4.7.2 import is tested**; Unity is not installed on this machine, so it is untested here (the GLBs are
   standard, validator-clean glTF).
 * **LOD budgets are capped by the UV layout, not by the fraction you ask for.** LODs share LOD0's texture set, so they
