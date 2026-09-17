@@ -357,6 +357,10 @@ class JobRun:
     # ---- stages ------------------------------------------------------------
     def run(self):
         self.store.update(self.id, status="running")
+        # Anything resolve_settings decided on the caller's behalf becomes a job warning here, so a substituted
+        # workflow or a dropped setting is visible to whoever reads the job rather than silent.
+        for note in (self.settings.get("notes") or []):
+            self.warn(note)
         if self.job.get("kind") == "image":
             self.stage_reference(variations_only=True)
             self.stage_package()

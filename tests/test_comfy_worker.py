@@ -464,6 +464,48 @@ def test_resolve_settings_rejects_an_unconfigured_remote_image_lane(studio):
     assert ok["input_mode"] == "image_job"
 
 
+def test_a_graph_that_cannot_take_a_reference_is_swapped_for_one_that_can(studio):
+    """The shipped default image workflow (`KREA-2-TURBO.json`) is a text-to-image graph with no LoadImage at all,
+    so there is nowhere to wire a reference into - and it is the graph a caller is pointed at by default.
+
+    Refusing would be a dead end for a caller that has no way to choose a graph (the canvas has no workflow picker
+    and the setting is installation-wide), so the shipped editing graph stands in - and the job says so, because a
+    result that quietly came from a different graph than the one configured is worse than a visible substitution.
+    """
+    from studio.presets import resolve_settings, workflow_can_take_a_reference
+
+    assert workflow_can_take_a_reference("KREA-2-TURBO.json") is False
+    assert workflow_can_take_a_reference("krea2_edit_refs.json") is True
+    assert workflow_can_take_a_reference("no_such_workflow.json") is None, "unreadable: stay quiet"
+
+    settings = {**COMFY_SETTINGS, "image_workflow": "KREA-2-TURBO.json"}
+    base = {"prompt": "a mug", "style": "mobile_factory", "quality": "balanced", "model": "krea2-turbo"}
+    s = resolve_settings({**base, "references": [{"image_b64": "aGk="}]}, settings)
+    assert s["backend"]["image"]["workflow"] == "krea2_edit_refs.json"
+    assert s["notes"] and "no LoadImage node" in s["notes"][0]
+    # a graph the caller names is never swapped, and a text-to-image job keeps the configured one
+    named = resolve_settings({**base, "references": [{"image_b64": "aGk="}], "workflow": "krea2_edit_refs.json"},
+                             settings)
+    assert named["backend"]["image"]["workflow"] == "krea2_edit_refs.json" and named["notes"] == []
+    plain = resolve_settings(base, settings)
+    assert plain["backend"]["image"]["workflow"] == "KREA-2-TURBO.json" and plain["notes"] == []
+
+
+def test_resolve_settings_notes_become_job_warnings(studio, monkeypatch):
+    """A substitution the caller never asked for has to be visible in the job, not just in the code."""
+    from studio.db import JobStore
+    from studio.pipeline import JobRun
+
+    store = JobStore()
+    job = store.create({"prompt": "a mug", "style": "mobile_factory"},
+                       {"seed": 1, "notes": ["the configured image workflow was swapped"]}, kind="image")
+    run = JobRun(store, store.get(job))
+    monkeypatch.setattr(run, "stage_reference", lambda **kw: None)     # the note is surfaced before any stage runs
+    monkeypatch.setattr(run, "stage_package", lambda: None)
+    run.run()
+    assert any("swapped" in w for w in run.warnings)
+
+
 def test_settings_patch_validates_backend_urls(studio):
     from studio.models import SettingsPatch
 

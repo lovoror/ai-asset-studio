@@ -1,6 +1,7 @@
 """Load style/quality presets and resolve a request into effective per-stage settings."""
 import copy
 import functools
+import json
 import random
 from pathlib import Path
 
@@ -37,6 +38,31 @@ def workflow_names() -> list[str]:
     if not d or not d.is_dir():
         return []
     return sorted(p.name for p in d.glob("*.json"))
+
+
+# What a request that wants a reference falls back to when the configured graph cannot take one (resolve_settings).
+EDIT_REFS_WORKFLOW = "krea2_edit_refs.json"
+
+
+def workflow_can_take_a_reference(name: str) -> bool | None:
+    """Whether a shipped workflow has a node a reference image could be wired into.
+
+    True/False, or None when the file cannot be read - in which case this check stays quiet and the stage reports
+    whatever it reports. A graph with no LoadImage has nowhere to put a reference, and the worker only finds that
+    out once the job is running; the same "fail at submission rather than three minutes into the stage" reasoning
+    that the backend address checks below use. Mirrors `comfy_worker.image_generate.reference_slots` exactly:
+    a node whose `class_type` is `LoadImage`.
+    """
+    d = config.PRESETS_DIR / "workflows" if config.PRESETS_DIR else None
+    if not d or not name:
+        return None
+    try:
+        wf = json.loads((d / name).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(wf, dict):
+        return None
+    return any((n or {}).get("class_type") == "LoadImage" for n in wf.values())
 
 
 def prompt_defaults() -> dict:
@@ -205,6 +231,9 @@ def resolve_settings(req: dict, global_settings: dict | None = None) -> dict:
     if style is None:
         raise ValueError("style 'custom' requires custom_style.style_clause")
     q = copy.deepcopy(p["quality"][req["quality"]])
+    # Decisions this function made *for* the caller, recorded so the job can say them out loud instead of the
+    # result quietly differing from what was configured. The pipeline turns them into job warnings.
+    notes: list[str] = []
     od = style.get("optimize_defaults", {})
     seed = req.get("seed")
     if seed is None:
@@ -259,6 +288,19 @@ def resolve_settings(req: dict, global_settings: dict | None = None) -> dict:
             if not backend["image"][key]:
                 raise ValueError(f"the ComfyUI image backend is selected but no {what} is configured "
                                  f"(Settings -> Generation backends)")
+    if req.get("references") and generates_reference and backend["image"]["kind"] == "comfyui":
+        # A text-to-image graph has no LoadImage, so there is nowhere to wire a reference into - and the worker
+        # would only discover that once the job was running. The shipped default workflow is exactly such a graph,
+        # so this is the mistake a caller is most likely to make - and refusing would be a dead end for a caller
+        # that has no way to choose a graph (the canvas does not, and the setting is installation-wide), so the
+        # shipped editing graph stands in for it instead and the job says so in `notes`.
+        if workflow_can_take_a_reference(backend["image"]["workflow"]) is False:
+            if EDIT_REFS_WORKFLOW not in workflow_names() or not workflow_can_take_a_reference(EDIT_REFS_WORKFLOW):
+                raise ValueError(f"image workflow {backend['image']['workflow']!r} has no LoadImage node, so it "
+                                 f"cannot take a reference image, and {EDIT_REFS_WORKFLOW!r} is not available either")
+            notes.append(f"the configured image workflow {backend['image']['workflow']!r} has no LoadImage node, so "
+                         f"it cannot take a reference image; {EDIT_REFS_WORKFLOW} was used instead")
+            backend["image"]["workflow"] = EDIT_REFS_WORKFLOW
     if req.get("reference_candidates"):
         ref["candidates"] = int(req["reference_candidates"])
     if req.get("variations"):
@@ -306,5 +348,7 @@ def resolve_settings(req: dict, global_settings: dict | None = None) -> dict:
                       ("image_job" if req.get("image_job_id") else "text")),
         # Which server generates what. Snapshotted here (like style_def) so the job stays reproducible.
         "backend": backend,
+        # Empty unless this function substituted or dropped something; see `notes` above.
+        "notes": notes,
     }
     return settings
