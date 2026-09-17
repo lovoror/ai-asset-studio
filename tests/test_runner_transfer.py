@@ -135,6 +135,40 @@ def _make_stage(tmp_path, config, *, fail=False):
     return stage, stage / "log.txt"
 
 
+def test_an_input_inside_the_stage_dir_is_not_uploaded_and_that_is_a_trap(tmp_path):
+    """Where a stage's *input* is allowed to live, pinned because getting it wrong fails three minutes later.
+
+    The stage directory is what a stage produces, so the worker's own run directory starts empty: the runner
+    rewrites a path inside it to `@out/...` and ships nothing, while a path inside the job directory but outside
+    the stage being run becomes `@in/...` and is uploaded first. Anything a stage needs as input therefore has to
+    be the second kind. Measured on a real job: reference images copied into the stage directory reached the
+    worker as the literal `@out/references/ref0.png` and the stage died on
+    `FileNotFoundError: '@out\\references\\ref0.png'` - a placeholder the worker's empty run directory cannot
+    resolve. `pipeline._stage_references` copies them to `<job>/references/` for exactly this reason.
+    """
+    from studio.runner_client import StagePlan
+
+    jobs = tmp_path / "jobs"
+    job = jobs / "20260101-000000-aaaaaaaa"
+    stage = job / "stages" / "reference"
+    stage.mkdir(parents=True)
+    (stage / "already_here.png").write_bytes(b"x")            # inside the stage dir: an output, not shipped
+    elsewhere = job / "references"
+    elsewhere.mkdir()
+    (elsewhere / "ref0.png").write_bytes(b"y")                # inside the job dir: an input, shipped
+
+    plan = StagePlan({"in_stage": str(stage / "already_here.png"),
+                      "in_job": str(elsewhere / "ref0.png"),
+                      "out_dir": str(stage)}, stage, jobs)
+
+    assert plan.request["in_stage"] == "@out/already_here.png"
+    assert plan.request["out_dir"] == "@out"
+    rel = (elsewhere / "ref0.png").relative_to(jobs).as_posix()
+    assert plan.request["in_job"] == f"@in/{rel}"
+    assert list(plan.uploads) == [rel], "only the job-directory input is uploaded"
+    assert plan.total_bytes == 1
+
+
 def test_transfer_roundtrip(tmp_path, monkeypatch):
     """Inputs (a file and a directory) reach the worker; outputs and the log come back."""
     w = _start_worker(tmp_path)

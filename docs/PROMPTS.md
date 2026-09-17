@@ -106,8 +106,11 @@ The stage worker uploads each reference and writes it into a `LoadImage` node of
   reference into a 2-reference graph" and "3 views into a 4-view graph" work.
 - **References are renamed on upload** to `<slot>_<content digest><ext>`, because the upload replaces by name:
   two references that happen to share a basename would otherwise leave every slot reading the same picture.
-- Each reference is copied into *this* job before the stage starts (`ref0.<ext>`, `ref1.<ext>`), because only
-  files under the job directory are shipped to a worker on another machine.
+- Each reference is copied into *this* job before the stage starts (`<job>/references/ref0.<ext>`,
+  `ref1.<ext>`), because only files under the job directory are shipped to a worker on another machine — and
+  specifically *outside the stage directory*, which the runner treats as what the stage produces: a path inside it
+  becomes an `@out/...` placeholder that is never uploaded, while a path inside the job directory becomes
+  `@in/...` and is. (`StagePlan` in `services/studio/studio/runner_client.py`.)
 
 `references` needs an edit workflow and the ComfyUI image lane. The local torch lane generates from a prompt and
 nothing else, so a job that asks for references on it is refused at submission with

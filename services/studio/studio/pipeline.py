@@ -373,18 +373,25 @@ class JobRun:
         self.stage_validate()
         self.stage_package()
 
-    def _stage_references(self, d: Path) -> list[str]:
-        """Copy this job's reference images into its own stage directory and return the paths to use.
+    def _stage_references(self) -> list[str]:
+        """Copy this job's reference images into the job directory and return the paths to use.
 
         A reference is either inline base64 (a picture from the user's desktop) or a file of an existing job (a
         card on the canvas feeding another card, or a variant of an earlier job). Either way it has to land inside
         *this* job's directory: only files under the job directory are shipped to a stage worker, so a path into
         the other job's directory would simply not exist on a worker running on another machine.
+
+        Deliberately `<job>/references/` and **not** the stage directory. `runner_client.StagePlan` rewrites a path
+        inside the stage directory to `@out/...` and does not upload it - the stage directory is what a stage
+        *produces*, so the worker's own run directory starts empty - while a path inside the job directory but
+        outside the stage being run becomes `@in/...` and is uploaded before the stage starts. Measured the hard
+        way: with the copies in the stage directory the stage died on
+        `FileNotFoundError: '@out\\references\\ref0.png'`, having been handed the placeholder itself.
         """
         refs = self.request.get("references") or []
         if not refs:
             return []
-        rdir = d / "references"
+        rdir = self.dir / "references"
         rdir.mkdir(parents=True, exist_ok=True)
         paths: list[str] = []
         for i, r in enumerate(refs):
@@ -402,7 +409,7 @@ class JobRun:
                 shutil.copy2(src, dest)
                 source = f"{r['job_id']}/{r['file']}"
             paths.append(str(dest))
-            self.log(f"reference {i + 1} ({label}) from {source} -> {dest.name}")
+            self.log(f"reference {i + 1} ({label}) from {source} -> references/{dest.name}")
         return paths
 
     def stage_reference(self, variations_only: bool = False):
@@ -441,8 +448,8 @@ class JobRun:
             "backend": self.backend.get("image") or {"kind": "local"},
         }
         # Images this generation conditions on (image-to-image / multi-reference). They have to be copied into
-        # this job's directory before the stage runs - see stage_reference_from_parent for why.
-        references = self._stage_references(d)
+        # this job's directory before the stage runs, and outside the stage directory - see _stage_references.
+        references = self._stage_references()
         if references:
             req["reference_images"] = references
         for k, v in ref.items():  # every registry parameter of the chosen model reaches the worker (distilled, sequential, ...)

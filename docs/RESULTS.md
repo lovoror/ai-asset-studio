@@ -160,6 +160,21 @@ Lightning 4 vs 8 share seeds, so the compositions match and the difference is de
   reported as a two-input one. Uploads are now named `<slot>_<content digest><ext>` and
   `tests/test_comfy_worker.py::test_two_references_with_the_same_basename_do_not_reach_the_same_file` pins it.
 
+  The same job then failed outright when run the whole way through the control plane, on
+  `FileNotFoundError: '@out\references\ref0.png'`. The references were being copied into the *stage* directory,
+  and `runner_client.StagePlan` rewrites a path inside the stage directory to `@out/...` without uploading it —
+  the stage directory is what a stage *produces*, so a worker's run directory starts empty. Inputs have to live
+  inside the job directory but outside the stage being run, where they become `@in/...` and are uploaded. The
+  copies now go to `<job>/references/`, and
+  `tests/test_runner_transfer.py::test_an_input_inside_the_stage_dir_is_not_uploaded_and_that_is_a_trap` pins the
+  difference between the two placeholders.
+
+  With both fixed, a real job through `POST /v1/image-jobs` (two references from two other jobs, both copied into
+  the new job, both uploaded under distinct names, `krea2_edit_refs.json`) completed in **180 s** with one
+  candidate, no warnings, and a render that visibly combines both inputs. Live stage log:
+  `reference 1: uploaded ref0.png as 'reference1_d89bf523bf03.png' -> LoadImage 10` /
+  `reference 2: uploaded ref1.png as 'reference2_348d4548a090.png' -> LoadImage 30`.
+
 ## Known limitations
 
 * The reference-candidate scorer is technical only (framing, margins, clipping, background plainness); an external local

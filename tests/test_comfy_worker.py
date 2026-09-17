@@ -1130,7 +1130,14 @@ def _reference_settings() -> dict:
 def test_references_are_copied_into_the_job_before_the_stage_runs(studio):
     """Only files under the job directory are shipped to a stage worker, so a reference that names another job's
     file has to be copied in first, and an inline picture has to be written out. Either way it is renamed to
-    `ref<i>`, which is also what keeps two references from one job from colliding on the ComfyUI server."""
+    `ref<i>`, which is also what keeps two references from one job from colliding on the ComfyUI server.
+
+    And it has to be the **job** directory, not the stage directory: measured on a real job, a copy under
+    `stages/reference/references/` was rewritten by the runner to `@out/references/ref0.png` - the placeholder
+    itself, which the worker's own (empty) run directory cannot resolve - and the stage died on
+    `FileNotFoundError: '@out\\references\\ref0.png'`. A path inside the job directory but outside the stage
+    being run is uploaded instead, as `@in/...`.
+    """
     import base64
 
     from studio import config
@@ -1149,16 +1156,17 @@ def test_references_are_copied_into_the_job_before_the_stage_runs(studio):
                          "label": "style"}]},
         _reference_settings(), kind="image")
     run = JobRun(store, store.get(job))
-    d = run.stage_dir("reference")
-    d.mkdir(parents=True, exist_ok=True)
+    run.stage_dir("reference").mkdir(parents=True, exist_ok=True)
 
-    paths = run._stage_references(d)
+    paths = run._stage_references()
 
     assert [Path(p).name for p in paths] == ["ref0.png", "ref1.png"]
-    assert all(Path(p).parent == d / "references" for p in paths)
+    # inside the job directory, and NOT inside the stage directory - the difference between being uploaded and
+    # being handed to the worker as an unresolvable placeholder
+    assert all(Path(p).parent == run.dir / "references" for p in paths)
+    assert all(run.stages_dir not in Path(p).parents for p in paths)
     assert Path(paths[0]).read_bytes() == _tiny_png((90, 120, 100)), "the inline bytes survive the round trip"
     assert Path(paths[1]).read_bytes() == (other / "reference.png").read_bytes()
-    assert not run.request.get("workflow")      # the workflow comes from settings, not from the request here
 
 
 def test_no_references_means_no_reference_directory(studio):
@@ -1168,10 +1176,8 @@ def test_no_references_means_no_reference_directory(studio):
     store = JobStore()
     job = store.create({"prompt": "a crate", "style": "mobile_factory"}, _reference_settings(), kind="image")
     run = JobRun(store, store.get(job))
-    d = run.stage_dir("reference")
-    d.mkdir(parents=True, exist_ok=True)
-    assert run._stage_references(d) == []
-    assert not (d / "references").exists(), "a text-to-image job should not grow an empty references/ directory"
+    assert run._stage_references() == []
+    assert not (run.dir / "references").exists(), "a text-to-image job should not grow an empty references/ dir"
 
 
 def test_the_stage_request_carries_the_references_and_a_verbatim_prompt(studio, monkeypatch):
