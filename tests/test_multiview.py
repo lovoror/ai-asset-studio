@@ -248,6 +248,47 @@ def test_patch_multiview_input_refuses_a_workflow_without_the_node(monkeypatch):
         td.patch_multiview_input(wf, "http://server", {"front": "/j/views/front.png"}, None, [])
 
 
+def _upstream(wf: dict, nid: str) -> set[str]:
+    """Every node the given one depends on, itself included."""
+    seen: set[str] = set()
+    stack = [nid]
+    while stack:
+        n = stack.pop()
+        if n in seen or n not in wf:
+            continue
+        seen.add(n)
+        for val in (wf[n].get("inputs") or {}).values():
+            if isinstance(val, list) and len(val) == 2 and isinstance(val[0], str):
+                stack.append(val[0])
+    return seen
+
+
+def test_a_slot_with_no_view_is_disconnected(monkeypatch):
+    """Fewer views than slots is normal - the 2D stage produces it whenever the sheet comes back short.
+
+    A slot left wired would keep the filename the workflow ships with, and that is a hard validation error:
+    measured on a real job with two usable panels, "node 410 (LoadImage): image - Invalid image file:
+    view_410.png", which failed the stage before it rendered anything. The node takes its views as optional
+    inputs and re-bases its rig on the first one it is given, so fewer views reconstruct fine.
+    """
+    wf = json.loads(MULTIVIEW_WORKFLOW.read_text(encoding="utf-8"))
+    monkeypatch.setattr(td, "upload_image", lambda server, path: "remote.png")
+    warnings: list[str] = []
+    td.patch_multiview_input(wf, "http://server",
+                             {"front": "/j/views/front.png", "back": "/j/views/back.png"}, None, warnings)
+
+    mv_id = td.multiview_node(wf)
+    assert mv_id in wf, "the conditioning node still feeds the sampler, so it has to survive"
+    assert sorted(td.view_loaders(wf, mv_id)) == ["back", "front"]
+    assert "left" not in wf[mv_id]["inputs"] and "right" not in wf[mv_id]["inputs"]
+    # the unused views' branches are still in the graph, but nothing the sampler needs can reach them any more
+    # - which is what keeps ComfyUI from validating their missing files at all
+    reachable = set().union(*(_upstream(wf, val[0]) for val in wf[mv_id]["inputs"].values()
+                              if isinstance(val, list)))
+    assert reachable & {nid for nid, n in wf.items() if n.get("class_type") == "LoadImage"} == {"122", "410"}
+    assert warnings == []
+
+
 # --------------------------------------------------------------------------- settings
 
 def test_the_multiview_workflow_defaults_to_the_shipped_one_and_can_be_overridden():

@@ -282,6 +282,15 @@ def patch_multiview_input(wf: dict, server: str, views: dict, fov: float | None,
     because that mapping depends on the caller's camera matrices rather than on the workflow. Node ids are
     deliberately not configured here: each slot is followed back through the graph to the LoadImage that
     feeds it, so editing the workflow does not silently break the wiring.
+
+    A slot with no view is disconnected rather than left alone. The node takes its views as optional inputs and
+    re-bases its rig on the first one it is given, so it reconstructs quite happily from fewer views - which is
+    what the 2D stage produces when the sheet comes back with fewer usable panels. Leaving the slot wired would
+    instead point its LoadImage at the filename the workflow ships, and a name with no file behind it fails the
+    stage before anything renders: measured on a real job, "node 410 (LoadImage): image - Invalid image file:
+    view_410.png". Nothing needs tidying up behind the disconnected slot either - ComfyUI collects the
+    OUTPUT_NODE nodes and then validates only what it can reach back from them (execution.py:1128), so the
+    orphaned view branch is neither validated nor executed.
     """
     phase("preprocess")
     mv_id = multiview_node(wf)
@@ -300,6 +309,12 @@ def patch_multiview_input(wf: dict, server: str, views: dict, fov: float | None,
         name = upload_image(server, Path(path))
         set_node_input(wf, loaders[slot], "image", name)
         log(f"[comfy] {slot} view: uploaded {Path(path).name} as {name!r} -> LoadImage {loaders[slot]}")
+    unused = [s for s in VIEW_SLOTS if s in loaders and not (views or {}).get(s)]
+    for slot in unused:
+        (wf[mv_id].get("inputs") or {}).pop(slot, None)
+    if unused:
+        log(f"[comfy] no view for {', '.join(unused)}: disconnected, so the rig is rebuilt from the "
+            f"{len(views or {})} view(s) there are")
     if fov is not None:
         # A literal here replaces the workflow's MoGeGeometryToFOV link: the caller stated the FOV, so there
         # is nothing to measure.

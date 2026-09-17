@@ -84,9 +84,18 @@ MULTIVIEW_WORKFLOW = "3d_pixal3d_multi_views.json"
 VIEWS_WORKFLOW = "krea2_turnaround.json"
 # The instruction matters as much as the canvas: naming each panel and demanding an uncropped whole object is
 # what turns "some views of a car" into four usable ones.
+#
+# The side panels are described by the direction the object *faces in the frame*, not as "the left side view".
+# That is not pedantry: it is the convention Pixal3DMultiViewConditioning's rig encodes. Its orbit cameras put
+# the "left" slot at +x, where the image's right is +y while the object faces -y, so the object's left side is
+# the profile with its front pointing to the *left* of the frame (and its right side the mirror of that). Asking
+# for "the left side profile" instead got the two sides drawn the wrong way round on a real sheet - front and
+# back came back right, left and right came back swapped - and a swapped pair poses the two halves of the object
+# against each other, which is not what the reconstruction should be resolving.
 VIEWS_PROMPT = ("Convert the object in the image to a Character Sheet of exactly four views arranged in one "
-                "horizontal row of four equal square panels: panel one is the front view, panel two is the full "
-                "left side profile, panel three is the rear view, panel four is the full right side profile. "
+                "horizontal row of four equal square panels. Panel one: the front view. Panel two: the full "
+                "side profile, with the object facing the left edge of the panel. Panel three: the rear view. "
+                "Panel four: the full side profile, with the object facing the right edge of the panel. "
                 "Every panel shows the whole object uncropped and centred, at the same scale and the same camera "
                 "distance, on a plain flat light grey background. No extra views, no close-ups, no text.")
 VIEWS_SIZE = (2560, 512)

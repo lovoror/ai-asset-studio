@@ -163,7 +163,7 @@ views itself: one instruction-editing pass turns the chosen reference into a row
 into the four images above. That is what makes multi-view reconstruction reachable from a single text prompt.
 
 ```
-prompt -> reference image -> turnaround sheet (one editing pass, 2048x512)
+prompt -> reference image -> turnaround sheet (one editing pass, 2560x512)
        -> front/left/back/right (studio/sheet.py) -> Pixal3D multi-view -> master.glb
 ```
 
@@ -194,19 +194,74 @@ Four things are worth knowing, all measured:
 * **`grounding_px` is not a detail.** It caps the longest side handed to Qwen3-VL, and `0` means "native": the
   whole reference then goes through a CPU vision encoder. A 2000×2000 canvas took **two hours** that way and
   **2.9 minutes** in the pipeline at 768 with 8 steps.
-* **The model is not reliable about which side it draws.** Measured across sheets: one produced a proper
-  mirrored pair (0.95 correlated once one view is flipped) and another the same side twice (0.65 correlated
-  unflipped). Handing the rig the same side for both "left" and "right" tells it two contradictory things
-  about one half of the object, which is what a "the car is not a car" result looks like. So `studio/sheet.py`
-  reads the pair - unflipped against flipped - and mirrors the right view when it is a duplicate, which is
-  exact for a symmetric object, approximate for an asymmetric one, and better than a contradiction either way.
+* **The two sides are named by the direction the object faces in the frame, and the pair is checked afterwards.**
+  Asking for "panel two is the left side profile" got the sides drawn the wrong way round on a real sheet:
+  front and rear came back right and the two sides came back swapped, which is what a report of "only the front
+  and back views are correct" looks like. The prompt therefore states the *screen* direction - "the full side
+  profile, with the object facing the left edge of the panel" - because that is what the rig means by `left`:
+  §2's azimuth puts the left camera at +x, where image-right is +y while the object faces −y, so the object's
+  left side is the profile whose front points to the left of the frame. On top of that the pair is read after
+  the fact - unflipped against flipped - and the right view is mirrored when the model drew the same side twice
+  (measured: 0.99 correlated unflipped against 0.76 flipped, where a proper mirrored pair reads 0.95 once
+  flipped). A duplicate pair tells the rig two contradictory things about one half of the object, which is half
+  of what a "the car is not a car" result looks like; a swapped pair is the other half, because it poses the
+  object mirrored.
 
-The other two things `studio/sheet.py` has to get right: it drops the panel the model paints from its own
+Finding the panels at all is the same problem from the other side, and it is where this went wrong once. The
+obvious rule - one sheet-wide background colour, and a panel is a run of columns that differ from it - does not
+survive a real sheet, because the panels do not share a background: the four generated views came back on a grey
+sweep while the painted-in source panel was white. The commonest border colour was therefore white, so every
+grey column of the other four counted as object and the row came back as **two 1022px panels with two cars in
+each** - and one of those was handed to the reconstruction as its "front" view. Panels are found from the
+object's own **edges** instead: an object has a sharp boundary exactly where the sweep and the shadow on it are
+smooth, and that holds whatever colour the backdrop is. Measured on two real sheets, every threshold from 10 to
+30 finds the same five panels; below that, the shadow's own soft edge (6-9) joins neighbours together.
+
+A panel is not always the object, either, and that is the trap the first fix fell into. Measured on the next two
+sheets out of the same workflow: one drew the views straight onto a single sweep, so a panel *is* the object, and
+the next drew each view as a **framed studio photo inset on a plain canvas**, so a panel is the frame and the
+object inside it is a third of its width. That decides where the object's backdrop is read from - the columns
+*outside* the panel, or the frame's own backdrop *inside* it - and no single reading works for both: against the
+canvas outside the frame, the whole grey photo reads as "not backdrop", and the object comes out as a grey
+rectangle in the tile. `studio/sheet.py` tells the two apart by the panel's own top edge, which is a step across
+the whole panel for a frame against the object's silhouette (measured at a quarter of the panel) for an object;
+a panel that looks framed but has no object on it is read the other way, which is what a crate or a wall - an
+object with a genuinely flat top - needs. The object's box is then taken by *unbroken runs* rather than by any set
+pixel, because a framed photo's torn border leaves dashes down the panel's sides that would otherwise stretch the
+box across the whole panel and drag a streak of border into the tile.
+
+The frame the rig wants is **the object on black**, and that is not cosmetic. The node documents its views as
+"with alpha or on a black background", and it means it: the single-view path reaches the model through
+`ImageCropToMask`, whose background default is `#000000`, and the multi-view node hands its images straight to
+DINOv3 - there is no masking anywhere in it - while the same RGB is also the composite that *guides* the NAF
+upsampling that shapes the mesh. A tile that is a grey sweep with a car drawn on it therefore says "the object
+is a grey slab". So each panel is cut to its own object against **that panel's own** backdrop (read row by row
+from the columns beside the object, since the sweep darkens towards the floor), the background the object
+*encloses* is filled back in - the glass is a colour match for the sweep behind it, and punching it out would
+put a hole through the middle of the car - and the result is pasted onto black in one shared window.
+
+Two things that cut cannot do, both measured, both worth knowing before tuning anything: the soft contact
+shadow under the object survives it, because the shadow and the object's own dark underside overlap in contrast
+against the sweep (86-115 against 62-136), so no threshold separates them - a stronger shadow than this sheet's
+needs a real segmentation, not a colour rule - and the object cannot be separated from that shadow by its
+outline either, because where the dark underside meets the dark shadow there is no edge at all (|dy| of 2 across
+a boundary whose two sides are 4 units apart).
+
+The remaining two things `studio/sheet.py` has to get right: it drops the panel the model paints from its own
 source image by *position* (the source is resampled onto the canvas at a centred offset, so that panel lands
 within 2px of the middle while the nearest real view is 360px away - comparing panels by appearance only puts
 the duplicate 1.26x above the runner-up, because it is a re-render and not a copy), and it cuts every view with
 one shared window sized from the widest panel, so the narrow head-on view is not blown up until it matches the
-wide side view. Each tile is pasted from its own panel only, or a neighbouring view leaks a sliver into it.
+wide side view.
+
+When the sheet comes back with fewer usable panels than slots, the spare slots are **disconnected** rather than
+left wired. The node's view inputs are optional and it re-bases its rig on the first one it is given, so two or
+three views reconstruct fine. Leaving a slot wired is not an option: its `LoadImage` would keep the filename the
+workflow ships with, and a name with no file behind it fails the stage before anything renders - measured,
+`node 410 (LoadImage): image - Invalid image file: view_410.png`. Nothing has to be cleaned up behind the
+disconnected slot either, because ComfyUI collects the `OUTPUT_NODE`s and then validates only what it can reach
+back from them (`execution.py:1128`), so the orphaned branch is neither validated nor executed.
+
 
 Needs **Pillow** on the control-plane machine (it is already there for thumbnails), and the ComfyUI image
 backend: the local torch lane only generates from a prompt and cannot edit an image into other views. If the
@@ -217,9 +272,12 @@ image lane is local, the job warns and reconstructs from the single reference in
 * **No portal UI.** A multi-view job has to be submitted through the API/CLI today (`generate_views: true`);
   the dialog still takes a single reference. Choosing several images, or ticking "generate the other angles",
   is the next step.
-* **The generated "right" view is the weakest of the four.** The model reads "the right side view" as a
-  three-quarter from the right more often than it does for the left, which is the view most likely to need
-  prompt tuning (`views_prompt`).
+* **"Right" is still the weakest of the four panels.** The model reads a side request as a three-quarter view
+  more often on the right than on the left, so that is the panel most likely to need `views_prompt` tuning.
+  Nothing verifies that the panel actually shows the side the prompt asked for; the mirror check next to it can
+  only tell that a pair is *not* the same side twice.
+* **The contact shadow can survive the cut-out**, leaving a thin dark skirt under the object (§7). Removing it
+  needs a real segmentation model, not a colour rule.
 * **Framing caveat for rig renders.** `ImageCropToMask` normalises *each* view to its own silhouette, so a
   long object (a car seen from the side vs head-on) is magnified differently per view. That is the shipped
   upstream recipe and it is what makes arbitrary photos usable, but a physically consistent rig would share

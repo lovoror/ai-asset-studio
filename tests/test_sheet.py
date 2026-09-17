@@ -8,6 +8,7 @@ import math
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -58,7 +59,25 @@ def test_finds_one_panel_per_object(tmp_path):
     panels = sh.find_panels(im)
     assert len(panels) == 3
     assert [(p.x0, p.x1) for p in panels] == [(40, 200), (380, 520), (700, 860)]
-    assert all(p.y0 >= 80 and p.y1 <= 260 for p in panels)
+    # the edge strength either side of a boundary is what the row span is read from, so it lands a pixel or so
+    # outside the object; the box only has to cover it, and a pixel of backdrop around an object is harmless
+    assert all(p.y0 <= y0 and p.y1 >= y1 for p, (_, y0, _, y1) in
+               zip(panels, [(40, 80, 200, 260), (380, 90, 520, 250), (700, 85, 860, 255)]))
+    assert all(p.y0 >= 77 and p.y1 <= 263 for p in panels)
+
+
+def test_panels_do_not_share_one_backdrop():
+    """The regression this whole segmentation exists for: the panels do not have to share a background.
+
+    Measured on a real sheet, the four generated views sat on a grey sweep while the panel the model painted
+    from its own source was white. Reading one sheet-wide backdrop off the border therefore picked the white,
+    every grey column of the other four then counted as object, and the row came back as two huge panels with
+    two objects in each - which is what reached the reconstruction as the "front" view. Object edges do not
+    care what colour the backdrop is.
+    """
+    im = sheet_image((900, 300), [(40, 80, 200, 260), (700, 85, 860, 255)])
+    ImageDraw.Draw(im).rectangle((380, 90, 520, 250), fill=(240, 240, 240))  # a second panel's own white
+    assert [(p.x0, p.x1) for p in sh.find_panels(im)] == [(40, 200), (380, 520), (700, 860)]
 
 
 def test_a_one_pixel_background_gap_does_not_split_a_panel():
@@ -72,6 +91,20 @@ def test_speckles_are_not_panels():
     im = sheet_image((600, 200), [(200, 60, 400, 160)])
     ImageDraw.Draw(im).point((10, 10), fill=(0, 0, 0))
     assert len(sh.find_panels(im)) == 1
+
+
+def test_a_soft_shadow_does_not_join_two_panels():
+    """A floor shadow is smooth and an object's boundary is not, which is the whole basis of the split.
+
+    Measured: a shadow's own gradient stays under 9 while a silhouette is over 20, and a threshold of 6 merges
+    the two panels either side of it.
+    """
+    im = sheet_image((600, 200), [(40, 60, 200, 160), (400, 60, 560, 160)])
+    draw = ImageDraw.Draw(im)
+    for x in range(200, 400):  # a wide, soft, dark shadow lying between the two objects
+        shade = BG[0] - int(8 * math.sin(math.pi * (x - 200) / 200))
+        draw.line((x, 150, x, 190), fill=(shade, shade, shade - 2))
+    assert len(sh.find_panels(im)) == 2
 
 
 def test_a_blank_sheet_has_no_panels_and_splitting_says_so(tmp_path):
@@ -146,9 +179,59 @@ def test_the_narrow_view_stays_narrow(tmp_path):
     views, _ = sh.split_sheet(p, tmp_path / "out", slots=("front", "left"))
 
     def ink(path):
-        arr = Image.open(path).convert("L")
-        return sum(1 for px in arr.getdata() if px < 150)
+        # the frame is black now, so "ink" is what is not black rather than what is dark
+        return int((np.asarray(Image.open(path).convert("L")) > 32).sum())
     assert ink(views["left"]) > 4 * ink(views["front"])
+
+
+# --------------------------------------------------------------------------- the object on black
+
+def test_each_panel_gets_its_own_backdrop():
+    """Panels do not share a background, so each panel's backdrop is read from the columns beside it."""
+    im = sheet_image((900, 300), [(40, 80, 200, 260), (700, 85, 860, 255)])
+    draw = ImageDraw.Draw(im)
+    draw.rectangle((300, 0, 620, 300), fill=(240, 240, 240))   # one panel's own pale background
+    draw.rectangle((380, 90, 520, 250), fill=(60, 120, 90))
+    arr = np.asarray(im).astype(np.int16)
+    panels = sh.find_panels(im)
+    assert len(panels) == 3
+    shades = [tuple(int(v) for v in sh.panel_backdrop(arr, p)[p.y0]) for p in panels]
+    assert shades[0] == BG
+    assert shades[1] == (240, 240, 240)
+
+
+def test_the_object_is_composited_onto_black(tmp_path):
+    """The rig wants the object on black, not on the sweep it was drawn on.
+
+    Pixal3D's single-view path reaches the model through ImageCropToMask, whose background default is `#000000`,
+    and the multi-view node feeds the same RGB both to DINOv3 and to the upsampler that shapes the mesh - so a
+    tile that carries its grey sweep into the frame says "the object is a grey slab".
+    """
+    p = save(sheet_image((800, 300), [(40, 100, 240, 220), (400, 90, 700, 230)]), tmp_path / "sheet.png")
+    views, _ = sh.split_sheet(p, tmp_path / "out", slots=("front", "left"))
+    tile = Image.open(views["front"]).convert("RGB")
+    assert tile.getpixel((0, 0)) == (0, 0, 0)
+    assert tile.getpixel((tile.width - 1, tile.height - 1)) == (0, 0, 0)
+    assert ((np.asarray(tile) == (60, 120, 90)).all(axis=2)).any(), "the object has to survive the cut-out"
+
+
+def test_background_the_object_encloses_is_put_back(tmp_path):
+    """A windscreen reflecting the sweep is a colour match for the backdrop behind it.
+
+    Punching it out would put a hole through the middle of the object, so background that the object encloses
+    is the object - while the see-through gap under a car stays a gap, because the flood from the panel's edge
+    reaches it.
+    """
+    im = sheet_image((400, 300), [(60, 60, 340, 240)])
+    ImageDraw.Draw(im).rectangle((140, 90, 260, 150), fill=BG)  # a "window" the colour of the sweep
+    arr = np.asarray(im).astype(np.int16)
+    panels = sh.find_panels(im)
+    assert len(panels) == 1
+    panel = panels[0]
+    mask = sh.object_mask(arr, panel, sh.panel_backdrop(arr, panel))
+    assert not mask[0, 0], "the backdrop the panel's box reaches outside the object is not object"
+    window = mask[100 - panel.y0:145 - panel.y0, 150 - panel.x0:250 - panel.x0]
+    assert window.all(), "the enclosed window has to be filled back in"
 
 
 # --------------------------------------------------------------------------- opposite sides, not the same one twice
