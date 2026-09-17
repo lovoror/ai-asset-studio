@@ -102,6 +102,11 @@ CENTRE_TOLERANCE_FRAC = 0.05
 # How much better one reading of the side pair has to be before it is believed. Measured margins: a proper
 # mirrored pair wins by 0.43, the same side drawn twice by 0.30 - so 0.10 separates them with room to spare.
 SIDE_PAIR_MARGIN = 0.10
+# How alike two views have to be before one of them cannot be the view its slot needs. Measured across real
+# sheets: two cuts of the same view read +0.98 to +1.00 with or without a mirror between them, while genuinely
+# different views of the same object read +0.39 to +0.80 - and the top of that range is front against rear, the
+# closest pair there is. So the gap is wide and 0.90 sits inside it.
+DUP_CORRELATION = 0.90
 
 
 @dataclass
@@ -378,6 +383,64 @@ def mirror_side_views(views: dict[str, Path], warnings: list) -> None:
                         f"({same:+.2f} unflipped against {flipped:+.2f} flipped); they were used as drawn")
 
 
+def _view_signature(path: Path) -> np.ndarray:
+    """A view's signature taken from the *object*, not from its frame.
+
+    Every tile shares one window sized from the widest object, so a narrow view sits in far more black than a
+    wide one: comparing whole frames would mostly be comparing how much black is around each object, and on a
+    real sheet that reads a front and a rear as the same picture. The object is the only non-black thing in a
+    tile - they are composited onto black precisely so that it is - so cropping to it is what makes two views
+    comparable. (`mirror_side_views` compares whole tiles instead, and can: it only ever compares two views of
+    the same size against each other.)
+    """
+    with Image.open(path) as tile:
+        tile = tile.convert("RGB")
+    content = tile.convert("L").point(lambda v: 255 if v > 12 else 0).getbbox()
+    if content:
+        tile = tile.crop(content)
+    return signature(tile, Panel(0, tile.width - 1, 0, tile.height - 1))
+
+
+def drop_duplicate_views(views: dict[str, Path], warnings: list) -> None:
+    """Drop a view that is another view's picture, so the rig is never told a pose that is not so.
+
+    Measured on real sheets: the model drew its "front, left, rear, right" row as a front plus the *same side
+    three times*, so the panel in the rear slot was a side profile. Handed to the rig as the rear pose, that says
+    the object's back looks like its side, and the reconstruction resolves it into a deformed back. Two views
+    that are the same picture - up to a mirror, which for a left-right symmetric object carries the same
+    information - hold one view's worth of information between them, so the second one is dropped and the rig is
+    rebuilt from the rest. The view is deleted rather than left on disk, so the directory keeps matching what the
+    stage actually fed the reconstruction.
+
+    The (left, right) pair is deliberately not checked: it is *expected* to be a mirrored pair, and
+    `mirror_side_views` has already dealt with it by the time this runs.
+    """
+    if len(views) < 2:
+        return
+    signatures = {slot: _view_signature(path) for slot, path in views.items()}
+    kept: list[str] = []
+    for slot in VIEW_SLOTS:
+        if slot not in views:
+            continue
+        twin = None
+        for other in kept:
+            if {slot, other} == {"left", "right"}:
+                continue
+            same = float((signatures[slot] * signatures[other]).sum())
+            flipped = float((signatures[slot] * signatures[other][:, ::-1]).sum())
+            if max(same, flipped) >= DUP_CORRELATION:
+                twin = (other, max(same, flipped))
+                break
+        if twin is None:
+            kept.append(slot)
+            continue
+        other, score = twin
+        views.pop(slot).unlink(missing_ok=True)
+        warnings.append(f"the sheet's {slot} panel is the same picture as its {other} one ({score:+.2f} "
+                        f"correlated), so it cannot be the {slot} view the rig needs; it was left out and the "
+                        f"reconstruction runs on {len(views)} view(s)")
+
+
 def split_sheet(sheet_path: Path, out_dir: Path,
                 slots: tuple[str, ...] = VIEW_SLOTS) -> tuple[dict[str, Path], list[str]]:
     """Cut a turnaround sheet into one square image per slot. Returns ({slot: path}, warnings)."""
@@ -463,6 +526,9 @@ def split_sheet(sheet_path: Path, out_dir: Path,
             views[slot] = path
         # The rig needs the two side views to be opposite sides; the generator does not always oblige.
         mirror_side_views(views, warnings)
+        # And a view that is another view's picture is not the view its slot needs - the model has already been
+        # caught drawing the same side three times and leaving the rear slot holding a side profile.
+        drop_duplicate_views(views, warnings)
     return views, warnings
 
 

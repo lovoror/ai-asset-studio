@@ -163,7 +163,7 @@ views itself: one instruction-editing pass turns the chosen reference into a row
 into the four images above. That is what makes multi-view reconstruction reachable from a single text prompt.
 
 ```
-prompt -> reference image -> turnaround sheet (one editing pass, 2560x512)
+prompt -> reference image -> turnaround sheet (one editing pass, 2048x512)
        -> front/left/back/right (studio/sheet.py) -> Pixal3D multi-view -> master.glb
 ```
 
@@ -177,58 +177,81 @@ downstream is code that already existed.
 |---|---|---|
 | `views_workflow` | `krea2_turnaround.json` | the editing graph; it needs the ComfyUI image lane |
 | `views_prompt` | the shipped turnaround instruction | the dial that decides what the row looks like |
-| canvas (`VIEWS_SIZE`) | 2560×512, i.e. **4:1 in five square panels** | see below - the aspect decides the row, the width decides the panel shape |
+| canvas (`VIEWS_SIZE`) | 2048×512, i.e. **4:1 in four square panels** | see below - the aspect decides the row, the workflow decides how many panels it holds |
 | `VIEWS_STEPS` | 8 at CFG 1 | the turbo path the node pack documents |
 | `VIEWS_GROUNDING_PX` | 768 | the Qwen3-VL grounding resolution the node pack documents (384-768) |
 | `VIEWS_FOV_DEGREES` | 20 | what the node's own default describes for generator output |
 
-Four things are worth knowing, all measured:
+Five things are worth knowing, all measured:
 
 * **The canvas aspect decides whether a row happens at all.** At 1:1 the model re-renders a single view of the
   reference however the instruction is worded, with or without a 4-view LoRA. At 4:1 it lays out a row.
-* **The width has to leave room for the panel the model paints itself.** Because that source panel is always
-  there, a 2048-wide canvas splits into *five* panels of 410px - and 410×512 is a portrait slot, which a side
-  profile of a wide object (a car is about 2:1) does not fit. The model then clips it, and only the narrow
-  front and rear views survive: a reconstruction whose sides are missing or malformed. 2560 wide gives
-  512×512 panels, and the measured side views come out whole (aspect 1.59 and 1.69).
+* **The workflow must not fit its own source to the canvas.** The graph this started as wired Krea 2's
+  `Krea2EditModelPatch` with `fit_mode="fit"`, which resamples the source image to the *output's* grid and - per
+  the node's own source - places it at an integer **centred offset** inside it. The reference block therefore
+  lands in the middle of the row by construction, and the model paints it back. That is where the row's extra
+  panel comes from; it was never the model's idea. Wiring that node in also cost views: measured on one job the
+  row came home as a front view plus **the same side three times with no rear view at all**, so the panel in the
+  rear slot was a side profile and the reconstruction was told the object's back looks like its side - which is
+  what a report of "the back view is wrong" looks like. With that node left out of the graph (see
+  `presets/workflows/krea2_turnaround.json`: the grounded encoders and the 4-view LoRA stay, the sampler takes
+  the LoRA-patched model directly) the row is exactly **four square panels and the rear view is drawn**.
+  Measured over four seeds: panels of w/h 0.80-0.83 (front), 1.58-1.67 (side), 0.73-0.77 (rear), 1.58-1.67
+  (side), each 512² - against 0.80 / 1.56 / 1.16 / 1.55 / 1.56 for front, side, source, rear, side before. The
+  canvas is 2048×512 accordingly, and a centred source panel is no longer expected: the code that drops one
+  stays as a guard rather than as the plan.
 * **`grounding_px` is not a detail.** It caps the longest side handed to Qwen3-VL, and `0` means "native": the
   whole reference then goes through a CPU vision encoder. A 2000×2000 canvas took **two hours** that way and
   **2.9 minutes** in the pipeline at 768 with 8 steps.
 * **The two sides are named by the direction the object faces in the frame, and the pair is checked afterwards.**
-  Asking for "panel two is the left side profile" got the sides drawn the wrong way round on a real sheet:
-  front and rear came back right and the two sides came back swapped, which is what a report of "only the front
-  and back views are correct" looks like. The prompt therefore states the *screen* direction - "the full side
-  profile, with the object facing the left edge of the panel" - because that is what the rig means by `left`:
-  §2's azimuth puts the left camera at +x, where image-right is +y while the object faces −y, so the object's
-  left side is the profile whose front points to the left of the frame. On top of that the pair is read after
-  the fact - unflipped against flipped - and the right view is mirrored when the model drew the same side twice
-  (measured: 0.99 correlated unflipped against 0.76 flipped, where a proper mirrored pair reads 0.95 once
-  flipped). A duplicate pair tells the rig two contradictory things about one half of the object, which is half
-  of what a "the car is not a car" result looks like; a swapped pair is the other half, because it poses the
-  object mirrored.
+  "The left side profile" leaves the model to pick a convention; the prompt therefore states the *screen*
+  direction - "the full side profile, with the object facing the left edge of the panel" - which is exactly what
+  the rig means by `left`: §2's azimuth puts the left camera at +x, where image-right is +y while the object
+  faces −y, so the object's left side is the profile whose front points to the left of the frame. On top of that
+  the pair is read after the fact - unflipped against flipped - and the right view is mirrored when the model
+  drew the same side twice (measured: 0.99 correlated unflipped against 0.76 flipped, where a proper mirrored
+  pair reads 0.95 once flipped). That check still earns its place on the reworked workflow: **2 of the 4 seeds**
+  measured drew the same side for both side panels. A duplicate pair tells the rig two contradictory things
+  about one half of the object, which is half of what a "the car is not a car" result looks like; a swapped pair
+  is the other half, because it poses the object mirrored.
+
+A panel that repeats another panel is caught for **every** slot, not only for the side pair. Measured across real
+sheets: two cuts of the same view read +0.98 to +1.00 with or without a mirror between them, while genuinely
+different views of the same object read −0.53 to +0.80 - and +0.80 is front against rear, the closest pair there
+is. A view whose signature matches an earlier slot's to 0.90 is another view's picture rather than the view its
+slot needs, so it is dropped with a warning instead of being posed as that side: on the job whose rear slot held
+a side profile, the splitter now says "the sheet's back panel is the same picture as its left one (+0.98
+correlated) ... the reconstruction runs on 3 view(s)". The comparison is made on the object cropped out of the
+tile rather than on the tile, because every tile shares one window sized from the widest object - a narrow front
+sits in far more black than a wide side, and comparing frames would mostly compare how much black surrounds each
+object. (`mirror_side_views` does compare whole tiles, and can: it only ever compares two views of the same size
+against each other.)
 
 Finding the panels at all is the same problem from the other side, and it is where this went wrong once. The
 obvious rule - one sheet-wide background colour, and a panel is a run of columns that differ from it - does not
 survive a real sheet, because the panels do not share a background: the four generated views came back on a grey
-sweep while the painted-in source panel was white. The commonest border colour was therefore white, so every
-grey column of the other four counted as object and the row came back as **two 1022px panels with two cars in
-each** - and one of those was handed to the reconstruction as its "front" view. Panels are found from the
-object's own **edges** instead: an object has a sharp boundary exactly where the sweep and the shadow on it are
-smooth, and that holds whatever colour the backdrop is. Measured on two real sheets, every threshold from 10 to
-30 finds the same five panels; below that, the shadow's own soft edge (6-9) joins neighbours together.
+sweep while the reference panel the workflow used to paint in was white. The commonest border colour was
+therefore white, so every grey column of the other four counted as object and the row came back as **two 1022px
+panels with two cars in each** - and one of those was handed to the reconstruction as its "front" view. Panels
+are found from the object's own **edges** instead: an object has a sharp boundary exactly where the sweep and
+the shadow on it are smooth, and that holds whatever colour the backdrop is. Measured on the sheets that still
+had that white reference panel in them, every threshold from 10 to 30 finds the same panels; below that, the
+shadow's own soft edge (6-9) joins neighbours together. The rule stays even though the panel it was written for
+is gone, because the two shapes a sheet still comes in (below) do not share a background either.
 
-A panel is not always the object, either, and that is the trap the first fix fell into. Measured on the next two
-sheets out of the same workflow: one drew the views straight onto a single sweep, so a panel *is* the object, and
-the next drew each view as a **framed studio photo inset on a plain canvas**, so a panel is the frame and the
-object inside it is a third of its width. That decides where the object's backdrop is read from - the columns
-*outside* the panel, or the frame's own backdrop *inside* it - and no single reading works for both: against the
-canvas outside the frame, the whole grey photo reads as "not backdrop", and the object comes out as a grey
-rectangle in the tile. `studio/sheet.py` tells the two apart by the panel's own top edge, which is a step across
-the whole panel for a frame against the object's silhouette (measured at a quarter of the panel) for an object;
-a panel that looks framed but has no object on it is read the other way, which is what a crate or a wall - an
-object with a genuinely flat top - needs. The object's box is then taken by *unbroken runs* rather than by any set
-pixel, because a framed photo's torn border leaves dashes down the panel's sides that would otherwise stretch the
-box across the whole panel and drag a streak of border into the tile.
+A panel is not always the object, either. Measured on the sheets that came off the old graph: one drew the views
+straight onto a single sweep, so a panel *is* the object, and another drew each view as a **framed studio photo
+inset on a plain canvas**, so a panel is the frame and the object inside it is a third of its width. That decides
+where the object's backdrop is read from - the columns *outside* the panel, or the frame's own backdrop *inside*
+it - and no single reading works for both: against the canvas outside the frame, the whole grey photo reads as
+"not backdrop", and the object comes out as a grey rectangle in the tile. `studio/sheet.py` tells the two apart
+by the panel's own top edge, which is a step across the whole panel for a frame against the object's silhouette
+(measured at a quarter of the panel) for an object; a panel that looks framed but has no object on it is read the
+other way, which is what a crate or a wall - an object with a genuinely flat top - needs. The object's box is then
+taken by *unbroken runs* rather than by any set pixel, because a framed photo's torn border leaves dashes down the
+panel's sides that would otherwise stretch the box across the whole panel and drag a streak of border into the
+tile. None of this is exercised by the reworked workflow so far - every sheet it has produced has been the
+first shape - so treat it as a guard rather than as the design.
 
 The frame the rig wants is **the object on black**, and that is not cosmetic. The node documents its views as
 "with alpha or on a black background", and it means it: the single-view path reaches the model through
@@ -274,8 +297,9 @@ image lane is local, the job warns and reconstructs from the single reference in
   is the next step.
 * **"Right" is still the weakest of the four panels.** The model reads a side request as a three-quarter view
   more often on the right than on the left, so that is the panel most likely to need `views_prompt` tuning.
-  Nothing verifies that the panel actually shows the side the prompt asked for; the mirror check next to it can
-  only tell that a pair is *not* the same side twice.
+* **Nothing checks what a panel actually shows, only that it is not a copy of another one.** The repeat check
+  catches a view the model drew twice - which is how the rear slot came to hold a side profile - but a panel that
+  is a *different* wrong view (a three-quarter rear where a rear was asked for) passes it.
 * **The contact shadow can survive the cut-out**, leaving a thin dark skirt under the object (§7). Removing it
   needs a real segmentation model, not a colour rule.
 * **Framing caveat for rig renders.** `ImageCropToMask` normalises *each* view to its own silhouette, so a

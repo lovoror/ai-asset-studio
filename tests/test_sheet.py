@@ -52,6 +52,33 @@ def save(im, path):
     return path
 
 
+# Distinct silhouettes, so a test can tell "the same view drawn twice" from "two different views". The
+# signature is taken from the object's own box (see sheet._view_signature), which is what makes the fixtures
+# delicate: cropped to its box and resized, a *uniform* shape is a featureless block whose contrast-normalised
+# signature is all zeros, so every fixture needs an outline worth comparing - which is also true of a real
+# render, where shading, windows and wheels are the structure. Measured with var/pick_shapes.py, cropped the
+# same way: every non-pair combination below reads -0.53 to +0.53 against `DUP_CORRELATION` 0.90, while a wedge
+# against its own mirror reads +1.00 (which is what a proper left/right pair *is*) and against itself +1.00.
+NOTCHED = [(-22, -32), (22, -32), (22, 0), (2, 0), (2, 32), (-22, 32)]      # a head-on view
+WEDGE = [(-34, 30), (-34, -30), (34, 30)]                                   # a side view
+CROSS = [(-10, -32), (10, -32), (10, -10), (32, -10), (32, 10), (10, 10),
+         (10, 32), (-10, 32), (-10, 10), (-32, 10), (-32, -10), (-10, -10)]  # a rear
+CIRCLE = [(int(30 * math.cos(a)), int(32 * math.sin(a))) for a in [i * math.pi / 12 for i in range(24)]]
+
+
+def mirror(points):
+    return [(-x, y) for x, y in points]
+
+
+def mixed_sheet(size, shapes):
+    """A sheet with one polygon per cell: (centre x, centre y, points)."""
+    im = Image.new("RGB", size, BG)
+    draw = ImageDraw.Draw(im)
+    for cx, cy, points in shapes:
+        draw.polygon([(cx + x, cy + y) for x, y in points], fill=(60, 120, 90))
+    return im
+
+
 # --------------------------------------------------------------------------- segmentation
 
 def test_finds_one_panel_per_object(tmp_path):
@@ -123,8 +150,11 @@ def test_drops_the_panel_the_model_paints_from_its_own_source(tmp_path):
     view is 360px away, so the position is the tell - comparing panels by appearance only puts the duplicate
     1.26x above the runner-up, because it is a re-render rather than a copy.
     """
-    boxes = [(20, 80, 140, 260), (200, 80, 320, 260), (460, 90, 540, 250), (700, 80, 820, 260)]
-    p = save(sheet_image((1000, 300), boxes), tmp_path / "sheet.png")  # panel 3 is centred at x=500
+    shapes = [(80, 170, NOTCHED),                    # a view
+              (200, 170, WEDGE),                   # a view
+              (500, 165, CIRCLE),                  # the painted-in source, centred at x=500
+              (820, 170, CROSS)]                 # a view
+    p = save(mixed_sheet((1000, 340), shapes), tmp_path / "sheet.png")
 
     views, warnings = sh.split_sheet(p, tmp_path / "out", slots=("front", "left", "back", "right"))
     assert len(views) == 3
@@ -134,11 +164,11 @@ def test_drops_the_panel_the_model_paints_from_its_own_source(tmp_path):
 def test_keeps_every_view_when_no_panel_sits_at_the_centre(tmp_path):
     """Four evenly spread panels are all views: the nearest is 256px off centre, well outside the tolerance.
 
-    The last panel is drawn mirrored so the side pair really is a pair - otherwise the mirror check below would
-    (correctly) flag it and this test would be measuring the wrong thing.
+    The panels are four *different* silhouettes, because a sheet whose panels are all the same picture is not a
+    turnaround - and the check below would (correctly) call that a repeat rather than a set of views.
     """
-    centres = [(256, 170), (768, 170), (1280, 170), (1792, 170)]
-    p = save(shaped_sheet((2048, 340), centres, mirror=(3,)), tmp_path / "sheet.png")
+    shapes = [(256, 170, NOTCHED), (768, 170, WEDGE), (1280, 170, CROSS), (1792, 170, mirror(WEDGE))]
+    p = save(mixed_sheet((2048, 340), shapes), tmp_path / "sheet.png")
     views, warnings = sh.split_sheet(p, tmp_path / "out")
     assert len(views) == 4
     assert warnings == []
@@ -146,9 +176,8 @@ def test_keeps_every_view_when_no_panel_sits_at_the_centre(tmp_path):
 
 def test_keeps_every_panel_when_the_count_already_matches(tmp_path):
     # every centre at least 45px off the middle of the 900px sheet, so none looks like the painted-in source
-    centres = [(80, 170), (240, 170), (580, 170), (780, 170)]
-    sheet = shaped_sheet((900, 340), centres, mirror=(3,))
-    p = save(sheet, tmp_path / "sheet.png")
+    shapes = [(80, 170, NOTCHED), (240, 170, WEDGE), (580, 170, CROSS), (780, 170, mirror(WEDGE))]
+    p = save(mixed_sheet((900, 340), shapes), tmp_path / "sheet.png")
     views, warnings = sh.split_sheet(p, tmp_path / "out", slots=("front", "left", "back", "right"))
     assert len(views) == 4
     assert warnings == []
@@ -288,12 +317,64 @@ def test_a_missing_side_view_is_not_invented(tmp_path):
 
 def test_split_sheet_makes_the_side_pair_opposite(tmp_path):
     """End to end through the splitter: a sheet whose two side panels are the same side comes out mirrored."""
-    p = save(shaped_sheet((530, 300), [(70, 150), (200, 150), (330, 150), (460, 150)]), tmp_path / "sheet.png")
+    shapes = [(80, 170, NOTCHED),                    # front
+              (260, 170, WEDGE),                   # left
+              (440, 170, CROSS),                    # back - a real rear, not a side
+              (620, 170, WEDGE)]                   # right - the same side as left again
+    p = save(mixed_sheet((720, 340), shapes), tmp_path / "sheet.png")
 
     views, warnings = sh.split_sheet(p, tmp_path / "out", slots=("front", "left", "back", "right"))
     assert len(views) == 4
     assert any("same side twice" in w for w in warnings)
     assert Image.open(views["left"]).tobytes() != Image.open(views["right"]).tobytes()
+
+
+# --------------------------------------------------------------------------- a view that is another view
+
+def test_a_view_that_repeats_another_one_is_dropped(tmp_path):
+    """Measured on a real sheet: the model drew its four views as a front plus *the same side three times*.
+
+    The panel in the rear slot was a side profile, and posing a side as the object's back is what a malformed
+    rear looks like from the outside. A panel that is another panel's picture cannot be the view its own slot
+    needs, so it is dropped and the rig is rebuilt from the views that are really there.
+    """
+    shapes = [(80, 170, NOTCHED),                    # front
+              (260, 170, WEDGE),                   # left
+              (440, 170, WEDGE),                   # back - the same picture as left
+              (620, 170, mirror(WEDGE))]           # right
+    p = save(mixed_sheet((720, 340), shapes), tmp_path / "sheet.png")
+
+    views, warnings = sh.split_sheet(p, tmp_path / "out")
+    assert sorted(views) == ["front", "left", "right"]
+    assert any("back" in w and "same picture" in w and "left" in w for w in warnings)
+
+
+def test_a_genuine_rear_view_is_not_mistaken_for_a_repeat(tmp_path):
+    """The guard has to leave a real rear alone: it is not a side, and it is not the front mirrored either.
+
+    Measured margin: genuinely different views of the same object read +0.39 to +0.80, and the top of that range
+    is front against rear - the closest pair there is - against +0.98 for a repeat.
+    """
+    shapes = [(80, 170, NOTCHED),                    # front
+              (260, 170, WEDGE),                   # left
+              (440, 170, CROSS),                    # back
+              (620, 170, mirror(WEDGE))]           # right, a proper mirror of left
+    p = save(mixed_sheet((720, 340), shapes), tmp_path / "sheet.png")
+
+    views, warnings = sh.split_sheet(p, tmp_path / "out")
+    assert sorted(views) == ["back", "front", "left", "right"]
+    assert warnings == []
+
+
+def test_the_side_pair_is_not_treated_as_a_repeat(tmp_path):
+    """The (left, right) pair is *expected* to be one picture mirrored, so the guard must skip it."""
+    left = _blob(tmp_path / "left.png")
+    right = _blob(tmp_path / "right.png", mirror=True)
+    views = {"left": left, "right": right}
+    warnings: list = []
+
+    sh.drop_duplicate_views(views, warnings)
+    assert sorted(views) == ["left", "right"] and warnings == []
 
 
 # --------------------------------------------------------------------------- rig frames

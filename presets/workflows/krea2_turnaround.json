@@ -34,7 +34,7 @@
     "11",
     0
    ],
-   "prompt": "Convert the object in the image to a Character Sheet of exactly four views arranged in one horizontal row of four equal square panels: panel one is the front view, panel two is the full left side profile, panel three is the rear view, panel four is the full right side profile. Every panel shows the whole object uncropped and centred, at the same scale and the same camera distance, on a plain flat light grey background. No extra views, no close-ups, no text.",
+   "prompt": "Convert the object in the image to a Character Sheet of exactly four views arranged in one horizontal row of four equal square panels. Panel one: the front view. Panel two: the full side profile, with the object facing the left edge of the panel. Panel three: the rear view. Panel four: the full side profile, with the object facing the right edge of the panel. Every panel shows the whole object uncropped and centred, at the same scale and the same camera distance, on a plain flat light grey background. No extra views, no close-ups, no text.",
    "system_prompt": ""
   }
  },
@@ -54,49 +54,12 @@
    "system_prompt": ""
   }
  },
- "14": {
-  "class_type": "VAEEncode",
-  "inputs": {
-   "pixels": [
-    "11",
-    0
-   ],
-   "vae": [
-    "5",
-    0
-   ]
-  }
- },
- "15": {
-  "class_type": "Krea2EditModelPatch",
-  "inputs": {
-   "fit_mode": "fit",
-   "model": [
-    "20",
-    0
-   ],
-   "ref_boost": 1.0,
-   "ref_boost_a": 1.0,
-   "source_image": [
-    "11",
-    0
-   ],
-   "source_latent": [
-    "14",
-    0
-   ],
-   "vae": [
-    "5",
-    0
-   ]
-  }
- },
  "16": {
   "class_type": "EmptySD3LatentImage",
   "inputs": {
    "batch_size": 1,
    "height": 512,
-   "width": 2560
+   "width": 2048
   }
  },
  "17": {
@@ -109,7 +72,7 @@
     0
    ],
    "model": [
-    "15",
+    "20",
     0
    ],
    "negative": [

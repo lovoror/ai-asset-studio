@@ -71,13 +71,18 @@ MULTIVIEW_WORKFLOW = "3d_pixal3d_multi_views.json"
 # Generating the multi-view input itself: one editing pass turns the chosen reference into a row of orbit
 # views, which studio.sheet then cuts into the front/left/back/right images the 3D lane consumes.
 #
-# These numbers are not guesses. Three of them decide whether it works at all:
+# These numbers are not guesses. Two of them decide whether it works at all:
 #   * the canvas is 4:1, and that is what makes the model lay out a *row*. At 1:1 it re-renders one view of
 #     the reference however the instruction is worded, with or without the 4-view LoRA.
-#   * the width is 5 panels of 512, not 4. The model also paints its own source image into the row, so a
-#     2048-wide canvas squeezes every view into a portrait slot - and a side profile of a wide object (a car
-#     is about 2:1) does not fit one, so the model clips it and the front/back views are the only usable ones.
-#     2560 gives 512x512 panels, and the measured side views come out whole (aspect 1.59/1.69).
+#   * the width is four 512px panels. It was 2560 (five panels) for a while, because the model also paints its
+#     own source image into the row - but that panel is not the model's idea, it is the workflow's: Krea 2's
+#     model patch takes the source as a *reference latent* fitted to the output grid and places it at a centred
+#     offset, so the reference block lands in the middle of the canvas by construction. Wiring it in also cost
+#     views: measured on one job the row came back as a front plus the *same side three times*, no rear view at
+#     all, and the panel in the rear slot then posed a side profile as the object's back. With that node left
+#     out of the graph (see presets/workflows/krea2_turnaround.json) the row is exactly four square panels and
+#     the rear view is drawn - measured 512x512 panels at w/h 0.81 / 1.62 / 0.77 / 1.62 for front, side, rear,
+#     side, against 0.80 / 1.56 / 1.16 / 1.55 / 1.56 when the source panel was being painted in.
 #   * grounding_px caps the longest side handed to Qwen3-VL, and the node pack documents 384-768. Leaving it
 #     at 0 ("native") pushes the whole reference through a CPU vision encoder: a 2000x2000 canvas took two
 #     hours that way and nine minutes at 768. The turbo path is 8 steps at CFG 1.
@@ -85,20 +90,19 @@ VIEWS_WORKFLOW = "krea2_turnaround.json"
 # The instruction matters as much as the canvas: naming each panel and demanding an uncropped whole object is
 # what turns "some views of a car" into four usable ones.
 #
-# The side panels are described by the direction the object *faces in the frame*, not as "the left side view".
-# That is not pedantry: it is the convention Pixal3DMultiViewConditioning's rig encodes. Its orbit cameras put
-# the "left" slot at +x, where the image's right is +y while the object faces -y, so the object's left side is
-# the profile with its front pointing to the *left* of the frame (and its right side the mirror of that). Asking
-# for "the left side profile" instead got the two sides drawn the wrong way round on a real sheet - front and
-# back came back right, left and right came back swapped - and a swapped pair poses the two halves of the object
-# against each other, which is not what the reconstruction should be resolving.
+# The side panels are described by the direction the object *faces in the frame*, which is the convention
+# Pixal3DMultiViewConditioning's rig encodes: its orbit cameras put the "left" slot at +x, where the image's
+# right is +y while the object faces -y, so the object's left side is the profile with its front pointing to
+# the *left* of the frame. "The left side profile" instead leaves the model to pick a convention, and a sheet
+# that came back with the two sides swapped is what prompted this wording - though that sheet also came off the
+# workflow that was painting its own source into the row, so the wording is not proven to be what fixed it.
 VIEWS_PROMPT = ("Convert the object in the image to a Character Sheet of exactly four views arranged in one "
                 "horizontal row of four equal square panels. Panel one: the front view. Panel two: the full "
                 "side profile, with the object facing the left edge of the panel. Panel three: the rear view. "
                 "Panel four: the full side profile, with the object facing the right edge of the panel. "
                 "Every panel shows the whole object uncropped and centred, at the same scale and the same camera "
                 "distance, on a plain flat light grey background. No extra views, no close-ups, no text.")
-VIEWS_SIZE = (2560, 512)
+VIEWS_SIZE = (2048, 512)
 VIEWS_STEPS = 8
 VIEWS_GROUNDING_PX = 768
 # What the generated views are declared to be: a synthetic orbit at the fov the node's own default describes

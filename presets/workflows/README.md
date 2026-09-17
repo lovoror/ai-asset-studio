@@ -29,6 +29,18 @@ KSampler-based txt2img workflow works as-is. Requirements:
 Written per candidate: prompt, negative prompt, seed, steps, cfg, sampler_name, scheduler, width, height.
 `batch_size` is forced to 1 — variations need different seeds, so the worker submits one prompt each.
 
+## The turnaround workflow is not a plain export
+
+`krea2_turnaround.json` is the one file here that is deliberately *not* what ComfyUI exports: it is a Krea 2
+identity-edit graph with `Krea2EditModelPatch` **left out**, and the sampler taking the LoRA-patched model
+directly. Do not re-add that node, and do not overwrite this file with a fresh export of it.
+
+The node fits its source image to the *output's* grid and, as its own source says, places it at an integer
+centred offset - so the reference is painted into the middle of the row by construction, the row comes back
+with five panels instead of four, and (measured on a real job) with a view missing altogether: a front view
+plus the same side three times and no rear view, which then posed a side profile as the object's back. Without
+it the row is exactly four square panels with the rear view drawn. `docs/MULTIVIEW.md` §7 has the numbers.
+
 ## What the 3D backend needs
 
 The TRELLIS.2 / Pixal3D graph has no sampler to follow, so its knobs are configured explicitly in

@@ -167,18 +167,27 @@ Lightning 4 vs 8 share seeds, so the compositions match and the difference is de
   same object from the same angles (the front view stays the front view). At the 1536 cascade the same job exhausts an
   8 GB card in `VaeDecodeTextureTrellis`; it completes at 1024, which is what the numbers above are for. Still missing: a
   portal UI: a multi-view job is still submitted through the API. The views can also be **generated** rather than
-  supplied (`generate_views`): one Krea-2 editing pass draws a 2560x512 turnaround row, `studio/sheet.py` cuts the
-  object out of each panel and composites it onto black - which is what the rig's own conditioning asks for - and the
+  supplied (`generate_views`): one Krea-2 pass draws a 2048x512 turnaround row, `studio/sheet.py` cuts the object
+  out of each panel and composites it onto black - which is what the rig's own conditioning asks for - and the
   multi-view lane reconstructs from the four. Verified on 2026-09-17 as an ordinary job, prompt to finished asset:
-  reference 1.4 min, turnaround 1.7 min, Pixal3D multi-view 6.5 min on the 4090, **10.8 min end to end**, master
-  73.9 MB, validation clean, LOD1 and LOD2 both written (LOD2 over its budget, with the documented warning).
-  Re-rendering the result on the node's own rig gives the car back the same way round it went in - the left render is
-  the left view - and the two sides are opposite rather than the same side twice. Reaching that needed two fixes the
-  first cut of this did not have, both now held by `tests/test_sheet.py` and described in `docs/MULTIVIEW.md` §7: a
-  sheet's panels do **not** share one background (reading a single sheet-wide colour merged two views into one tile,
-  which then reached the reconstruction as its "front" view), and a panel is **not** always the object (the next
-  sheet out of the same workflow drew each view as a framed studio photo, so the object has to be found inside the
-  frame and cut onto black rather than framed on the photo).
+  reference 1.5 min, turnaround 1.4 min, Pixal3D multi-view 6.6 min on the 4090, **11.2 min end to end**, master
+  72.5 MB, validation clean, LOD1 written (LOD2 skipped as a near-duplicate of it, which is `lod_policy`'s call).
+  Re-rendering the result on the node's own rig gives the car back the same way round it went in - the left render
+  is the left view - and the two sides are opposite rather than the same side twice.
+
+  Getting there took three rounds, and the last one was the *workflow* rather than the code (all three are in
+  `docs/MULTIVIEW.md` §7, with the numbers): a sheet's panels do **not** share one background, so a single
+  sheet-wide colour merged two views into one tile that then reached the reconstruction as its "front" view; a
+  panel is **not** always the object, so the object has to be found inside it and cut onto black rather than
+  framed on the panel; and the turnaround graph was wiring Krea 2's `Krea2EditModelPatch`, which fits its source
+  image to the *output's* grid and places it at a **centred offset** - so the reference was painted into the
+  middle of the row, the row came back with five panels, and on one job with a view missing entirely: a front
+  plus the same side three times and no rear, which then posed a side profile as the object's back. That is what
+  "the back view is wrong" looks like from the outside. The node is left out of the shipped graph now (see
+  `presets/workflows/README.md`): the row is exactly four square panels with the rear view drawn, on all four
+  seeds measured. As a guard for the same class of failure, a view whose signature matches an earlier slot's to
+  0.90 is now dropped rather than posed as the view its slot needs - measured, that fires on the broken sheet
+  (the rear slot's side profile, +0.98 against the left) and stays quiet on the fixed one.
 * LOD budgets: LODs reuse LOD0's texture set, so they have to keep its UV layout, and meshoptimizer never collapses an edge
   on a UV border - after an atlas bake every UV seam is one. That puts a floor under how far an LOD can be reduced, and the
   floor is a property of the mesh's seams, not of the requested fraction. Measured with `var/lod_fractions_sweep.py` on a
