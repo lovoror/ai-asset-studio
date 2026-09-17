@@ -26,6 +26,34 @@ Open **http://127.0.0.1:8090** after `scripts\start.ps1`. The portal is a React 
    without regenerating), delete.
 5. **Settings** – auto-process, default variations/quality/style/budget/texture, theme, API token, service health.
 
+## Canvas
+
+`/canvas` is the *other* way to make images: instead of one form and one session per idea, it is an infinite
+board of **cards**, each card its own generation request. It exists because "type a prompt, get four pictures"
+hides the instruction the pipeline actually sends and cannot express "make this look like that".
+
+* **Pan and zoom** by hand: wheel zooms about the pointer, dragging the background (or the middle button, or
+  space-drag) pans, cards are dragged by their header. No pan/zoom library — the transform is two numbers and a
+  scale, and `web/src/canvas.ts` is the whole model (view math, card/reference shapes, localStorage).
+* **Each card shows the prompt it will send.** The composed instruction is fetched from `POST /v1/prompt/preview`
+  and displayed with the parts it was built from (`组成(n)` expands them); *Composed* / *My text* switches between
+  sending that composed text and sending your own verbatim (`final_prompt`). Switching to *My text* seeds the box
+  with the composed text, so "change the default" starts from the default.
+* **0–6 reference images per card**, in order — *order is meaning*: in a two-image edit the first is the subject
+  and the second is what it should look like. A slot is filled by uploading a file (base64, straight from disk) or
+  by picking an existing image from another card or from a session. Each result offers *use as reference*, which
+  drops it into a new card beside the one it came from.
+* **Results stay on the card**: click to enlarge (the same lightbox as Session, arrow keys browse), or *make 3D*
+  to send that variation to the asset pipeline.
+* Everything (cards, positions, view, and uploads up to the browser's storage quota) is kept in
+  `localStorage["as-canvas"]`; if the quota is hit, the uploaded *bytes* are dropped and the card says so rather
+  than generating from a picture that is gone.
+* A card with its composed prompt shown is taller than a 900 px viewport, so after typing you may need to pan or
+  press **适应 / Fit** to bring its *Generate* button fully into view. Adding a card already brings it into view.
+* The image lane must be able to take a reference: references need a *LoadImage* graph, and if the configured
+  workflow is a text-to-image one the pipeline substitutes the shipped `krea2_edit_refs.json` and records that in
+  the job's warnings (see [`PROMPTS.md`](PROMPTS.md) §4).
+
 ## Manual checklist (used for acceptance)
 
 - [ ] Create page renders in light and dark; examples load; Ctrl+Enter submits.
@@ -37,6 +65,9 @@ Open **http://127.0.0.1:8090** after `scripts\start.ps1`. The portal is a React 
 - [ ] Zip download contains GLBs, previews, textures, manifest (master excluded unless `?include_master=true`).
 - [ ] Re-optimise re-runs only the Blender stage.
 - [ ] The asset inspector switches between all eight display modes without console errors.
+- [ ] Canvas: *New card* lands fully in view; typing a prompt fills the composed-prompt block from the server;
+      **Fit** frames every card; a reference picked from an earlier session generates through the edit graph;
+      *use as reference* and *make 3D* both work; reloading the page puts the board back.
 - [ ] `python -m pytest tests/test_portal_mock.py` passes.
 
 ## Dev

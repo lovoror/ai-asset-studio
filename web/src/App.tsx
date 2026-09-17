@@ -1,10 +1,11 @@
 import { useEffect } from "react";
 import { Link, NavLink, Route, Routes, useLocation } from "react-router-dom";
-import { Box, Images, Library, ListOrdered, Settings as SettingsIcon, Sparkles, Sun, Moon, Monitor } from "lucide-react";
+import { Box, Frame, Images, Library, ListOrdered, Settings as SettingsIcon, Sparkles, Sun, Moon, Monitor } from "lucide-react";
 import { useStore } from "./store";
 import { useT } from "./i18n";
 import { Toasts } from "./components/ui";
 import Create from "./pages/Create";
+import Canvas from "./pages/Canvas";
 import Session from "./pages/Session";
 import Queue from "./pages/Queue";
 import LibraryPage from "./pages/Library";
@@ -41,6 +42,7 @@ export default function App() {
         </div>
         <nav className="nav">
           <NavLink to="/" end><Sparkles size={16} /> <span>{t("app.create")}</span></NavLink>
+          <NavLink to="/canvas"><Frame size={16} /> <span>{t("canvas.nav")}</span></NavLink>
           <NavLink to="/queue">
             <ListOrdered size={16} /> <span>{t("app.queue")}</span>
             {active > 0 && <span className="count">{active}</span>}
@@ -69,6 +71,7 @@ export default function App() {
       <main className="main">
         <Routes>
           <Route path="/" element={<Create />} />
+          <Route path="/canvas" element={<Canvas />} />
           <Route path="/sessions/:id" element={<Session />} />
           <Route path="/queue" element={<Queue />} />
           <Route path="/library" element={<LibraryPage />} />

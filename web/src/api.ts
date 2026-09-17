@@ -135,6 +135,76 @@ export interface Example {
   target_triangles?: number;
 }
 
+/** One conditioning image for an image job: exactly one of `image_b64` or `job_id` + `file` (the API refuses both
+    or neither). `job_id` names a file the control plane already has, which is how one canvas card feeds another
+    without pushing megabytes through the browser. */
+export interface ImageReferenceBody {
+  label?: string;
+  image_b64?: string;
+  job_id?: string;
+  file?: string;
+}
+
+/** POST /v1/image-jobs. Only `prompt` is required; an omitted field keeps the pipeline's own value, which is why
+    the canvas leaves width/height/steps/cfg out until the user pins one.
+    A `type` and not an `interface` on purpose: TypeScript gives a type alias an implicit index signature, so the
+    canvas can annotate its body with this (and get the excess-property check) while `createImageJob` still takes
+    the loose Record the older call sites pass. */
+export type ImageJobBody = {
+  prompt: string;
+  style?: string;
+  custom_style?: Record<string, unknown>;
+  model?: string;
+  variations?: number;
+  seed?: number;
+  materials?: string;
+  palette?: string[];
+  negative_extra?: string;
+  height_m?: number;
+  title?: string;
+  references?: ImageReferenceBody[];
+  workflow?: string;
+  width?: number;
+  height?: number;
+  steps?: number;
+  cfg?: number;
+  final_prompt?: string;
+  final_negative_prompt?: string;
+};
+
+/** POST /v1/prompt/preview: the instruction the pipeline would actually send, plus the parts it came from. */
+export interface PromptPreview {
+  prompt: string;
+  negative_prompt: string;
+  template: {
+    subject?: string;
+    style?: string;
+    style_clause?: string;
+    materials?: string | null;
+    palette?: string[] | null;
+    dimensions?: string[] | null;
+    background?: string;
+    view?: string;
+    lighting?: string;
+    constraints?: string;
+  };
+  style_label?: string | null;
+}
+
+export interface PromptPreviewBody {
+  prompt: string;
+  style: string;
+  custom_style?: Record<string, unknown>;
+  materials?: string;
+  palette?: string[];
+  negative_extra?: string;
+  height_m?: number;
+  width_m?: number;
+  depth_m?: number;
+}
+
+export interface JobCreated { job_id: string; status: string }
+
 export const TOKEN_KEY = "as-token";
 export type Lang = "en" | "zh";
 /** Where the UI language is remembered. Owned here because api.ts is the shared leaf module (it imports
@@ -188,8 +258,9 @@ export const api = {
     "GET", "/v1/readiness"),
   testBackend: (body: { target: "worker" | "comfyui"; role: string; url?: string; workflow?: string }) =>
     req<ProbeResult>("POST", "/v1/backends/test", body),
-  createImageJob: (body: Record<string, unknown>) => req<{ job_id: string; status: string }>("POST", "/v1/image-jobs", body),
-  createAssetJob: (body: Record<string, unknown>) => req<{ job_id: string; status: string }>("POST", "/v1/asset-jobs", body),
+  promptPreview: (body: PromptPreviewBody) => req<PromptPreview>("POST", "/v1/prompt/preview", body),
+  createImageJob: (body: Record<string, unknown>) => req<JobCreated>("POST", "/v1/image-jobs", body),
+  createAssetJob: (body: Record<string, unknown>) => req<JobCreated>("POST", "/v1/asset-jobs", body),
   job: (id: string, events = 30) => req<Job>("GET", `/v1/jobs/${id}?events=${events}`),
   library: (p: { kind?: string; status?: string; q?: string; favorite?: boolean; archived?: boolean; limit?: number; offset?: number }) => {
     const qs = new URLSearchParams();
