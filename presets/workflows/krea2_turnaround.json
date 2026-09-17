@@ -34,7 +34,7 @@
     "11",
     0
    ],
-   "prompt": "Convert the object in the image to a Character Sheet showing the front view, the left side view, the back view and the right side view of the same object, arranged in one horizontal row of four equal square panels, the whole object visible in every panel at the same scale and the same distance, plain flat light grey background, no text, no labels",
+   "prompt": "Convert the object in the image to a Character Sheet of exactly four views arranged in one horizontal row of four equal square panels: panel one is the front view, panel two is the full left side profile, panel three is the rear view, panel four is the full right side profile. Every panel shows the whole object uncropped and centred, at the same scale and the same camera distance, on a plain flat light grey background. No extra views, no close-ups, no text.",
    "system_prompt": ""
   }
  },
@@ -96,7 +96,7 @@
   "inputs": {
    "batch_size": 1,
    "height": 512,
-   "width": 2048
+   "width": 2560
   }
  },
  "17": {

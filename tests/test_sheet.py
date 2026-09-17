@@ -30,6 +30,22 @@ def sheet_image(size, boxes, colour=(60, 120, 90)):
     return im
 
 
+# An asymmetric outline, so that mirroring it actually changes pixels - a rectangle would not, and the side-pair
+# logic would then look like a no-op. A wedge (measured in var/pick_shape.py) separates the two readings by 0.51,
+# where a hexagon only separates them by 0.07 and would land inside SIDE_PAIR_MARGIN as "ambiguous".
+SHAPE = [(-24, 16), (-24, -16), (24, 16)]
+
+
+def shaped_sheet(size, centres, mirror=()):
+    """A sheet with the asymmetric shape at each centre; `mirror` holds the indices drawn mirrored."""
+    im = Image.new("RGB", size, BG)
+    draw = ImageDraw.Draw(im)
+    for i, (cx, cy) in enumerate(centres):
+        pts = [(-x, y) if i in mirror else (x, y) for x, y in SHAPE]
+        draw.polygon([(cx + x, cy + y) for x, y in pts], fill=(60, 120, 90))
+    return im
+
+
 def save(im, path):
     im.save(path)
     return path
@@ -83,9 +99,13 @@ def test_drops_the_panel_the_model_paints_from_its_own_source(tmp_path):
 
 
 def test_keeps_every_view_when_no_panel_sits_at_the_centre(tmp_path):
-    """Four evenly spread panels are all views: the nearest is 256px off centre, well outside the tolerance."""
-    boxes = [(156, 80, 356, 260), (668, 80, 868, 260), (1180, 80, 1380, 260), (1692, 80, 1892, 260)]
-    p = save(sheet_image((2048, 340), boxes), tmp_path / "sheet.png")
+    """Four evenly spread panels are all views: the nearest is 256px off centre, well outside the tolerance.
+
+    The last panel is drawn mirrored so the side pair really is a pair - otherwise the mirror check below would
+    (correctly) flag it and this test would be measuring the wrong thing.
+    """
+    centres = [(256, 170), (768, 170), (1280, 170), (1792, 170)]
+    p = save(shaped_sheet((2048, 340), centres, mirror=(3,)), tmp_path / "sheet.png")
     views, warnings = sh.split_sheet(p, tmp_path / "out")
     assert len(views) == 4
     assert warnings == []
@@ -93,8 +113,8 @@ def test_keeps_every_view_when_no_panel_sits_at_the_centre(tmp_path):
 
 def test_keeps_every_panel_when_the_count_already_matches(tmp_path):
     # every centre at least 45px off the middle of the 900px sheet, so none looks like the painted-in source
-    sheet = sheet_image((900, 300), [(20, 80, 140, 260), (180, 80, 300, 260), (520, 80, 640, 260),
-                                     (720, 80, 840, 260)])
+    centres = [(80, 170), (240, 170), (580, 170), (780, 170)]
+    sheet = shaped_sheet((900, 340), centres, mirror=(3,))
     p = save(sheet, tmp_path / "sheet.png")
     views, warnings = sh.split_sheet(p, tmp_path / "out", slots=("front", "left", "back", "right"))
     assert len(views) == 4
@@ -129,6 +149,68 @@ def test_the_narrow_view_stays_narrow(tmp_path):
         arr = Image.open(path).convert("L")
         return sum(1 for px in arr.getdata() if px < 150)
     assert ink(views["left"]) > 4 * ink(views["front"])
+
+
+# --------------------------------------------------------------------------- opposite sides, not the same one twice
+
+def _blob(path, mirror=False, colour=(60, 120, 90)):
+    """An deliberately asymmetric car-like shape, optionally mirrored, on a plain background."""
+    im = Image.new("RGB", (64, 64), BG)
+    pts = [(6, 40), (14, 24), (44, 24), (52, 34), (46, 46), (10, 46)]
+    if mirror:
+        pts = [(64 - x, y) for x, y in pts]
+    ImageDraw.Draw(im).polygon(pts, fill=colour)
+    im.save(path)
+    return path
+
+
+def _pair_reading(left: Path, right: Path) -> tuple[float, float]:
+    a = sh.signature(Image.open(left).convert("RGB"), sh.Panel(0, 63, 0, 63))
+    b = sh.signature(Image.open(right).convert("RGB"), sh.Panel(0, 63, 0, 63))
+    return float((a * b).sum()), float((a * b[:, ::-1]).sum())
+
+
+def test_mirrors_the_right_view_when_the_model_drew_the_same_side_twice(tmp_path):
+    """Measured on a real sheet: the same side twice reads +0.99 correlated unflipped against +0.76 flipped,
+    and handing that pair to the rig reconstructs a malformed half of the object."""
+    left = _blob(tmp_path / "left.png")
+    right = _blob(tmp_path / "right.png")
+    warnings: list = []
+
+    sh.mirror_side_views({"left": left, "right": right}, warnings)
+    assert any("same side twice" in w for w in warnings)
+    same, flipped = _pair_reading(left, right)
+    assert flipped > same, "after the fix the pair has to read as two opposite sides"
+
+
+def test_leaves_a_proper_mirrored_pair_alone(tmp_path):
+    left = _blob(tmp_path / "left.png")
+    right = _blob(tmp_path / "right.png", mirror=True)
+    before = Image.open(right).tobytes()
+    warnings: list = []
+
+    sh.mirror_side_views({"left": left, "right": right}, warnings)
+    assert warnings == []
+    assert Image.open(right).tobytes() == before
+
+
+def test_a_missing_side_view_is_not_invented(tmp_path):
+    """With only one of the two sides cut there is nothing to compare, so nothing is changed."""
+    left = _blob(tmp_path / "left.png")
+    warnings: list = []
+
+    sh.mirror_side_views({"left": left}, warnings)
+    assert warnings == []
+
+
+def test_split_sheet_makes_the_side_pair_opposite(tmp_path):
+    """End to end through the splitter: a sheet whose two side panels are the same side comes out mirrored."""
+    p = save(shaped_sheet((530, 300), [(70, 150), (200, 150), (330, 150), (460, 150)]), tmp_path / "sheet.png")
+
+    views, warnings = sh.split_sheet(p, tmp_path / "out", slots=("front", "left", "back", "right"))
+    assert len(views) == 4
+    assert any("same side twice" in w for w in warnings)
+    assert Image.open(views["left"]).tobytes() != Image.open(views["right"]).tobytes()
 
 
 # --------------------------------------------------------------------------- rig frames

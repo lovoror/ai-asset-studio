@@ -177,24 +177,36 @@ downstream is code that already existed.
 |---|---|---|
 | `views_workflow` | `krea2_turnaround.json` | the editing graph; it needs the ComfyUI image lane |
 | `views_prompt` | the shipped turnaround instruction | the dial that decides what the row looks like |
-| canvas (`VIEWS_SIZE`) | 2048×512, i.e. **4:1** | see below - this is what makes the model lay out a row |
+| canvas (`VIEWS_SIZE`) | 2560×512, i.e. **4:1 in five square panels** | see below - the aspect decides the row, the width decides the panel shape |
 | `VIEWS_STEPS` | 8 at CFG 1 | the turbo path the node pack documents |
 | `VIEWS_GROUNDING_PX` | 768 | the Qwen3-VL grounding resolution the node pack documents (384-768) |
 | `VIEWS_FOV_DEGREES` | 20 | what the node's own default describes for generator output |
 
-Three things are worth knowing, all measured:
+Four things are worth knowing, all measured:
 
 * **The canvas aspect decides whether a row happens at all.** At 1:1 the model re-renders a single view of the
   reference however the instruction is worded, with or without a 4-view LoRA. At 4:1 it lays out a row.
+* **The width has to leave room for the panel the model paints itself.** Because that source panel is always
+  there, a 2048-wide canvas splits into *five* panels of 410px - and 410×512 is a portrait slot, which a side
+  profile of a wide object (a car is about 2:1) does not fit. The model then clips it, and only the narrow
+  front and rear views survive: a reconstruction whose sides are missing or malformed. 2560 wide gives
+  512×512 panels, and the measured side views come out whole (aspect 1.59 and 1.69).
 * **`grounding_px` is not a detail.** It caps the longest side handed to Qwen3-VL, and `0` means "native": the
   whole reference then goes through a CPU vision encoder. A 2000×2000 canvas took **two hours** that way and
   **2.9 minutes** in the pipeline at 768 with 8 steps.
-* **The model also paints its own source image into the row.** The node pack resamples that source onto the
-  canvas at a centred offset, so the extra panel lands in the middle - 2px off centre on a real job, while the
-  nearest real view was 360px away. `studio/sheet.py` drops it by position, refuses to re-normalise each
-  panel (one shared window sized from the widest view, or the narrow head-on view would be blown up until it
-  matched the wide side view), and pastes each tile from its own panel only, so a neighbouring view cannot
-  leak a sliver into it.
+* **The model is not reliable about which side it draws.** Measured across sheets: one produced a proper
+  mirrored pair (0.95 correlated once one view is flipped) and another the same side twice (0.65 correlated
+  unflipped). Handing the rig the same side for both "left" and "right" tells it two contradictory things
+  about one half of the object, which is what a "the car is not a car" result looks like. So `studio/sheet.py`
+  reads the pair - unflipped against flipped - and mirrors the right view when it is a duplicate, which is
+  exact for a symmetric object, approximate for an asymmetric one, and better than a contradiction either way.
+
+The other two things `studio/sheet.py` has to get right: it drops the panel the model paints from its own
+source image by *position* (the source is resampled onto the canvas at a centred offset, so that panel lands
+within 2px of the middle while the nearest real view is 360px away - comparing panels by appearance only puts
+the duplicate 1.26x above the runner-up, because it is a re-render and not a copy), and it cuts every view with
+one shared window sized from the widest panel, so the narrow head-on view is not blown up until it matches the
+wide side view. Each tile is pasted from its own panel only, or a neighbouring view leaks a sliver into it.
 
 Needs **Pillow** on the control-plane machine (it is already there for thumbnails), and the ComfyUI image
 backend: the local torch lane only generates from a prompt and cannot edit an image into other views. If the

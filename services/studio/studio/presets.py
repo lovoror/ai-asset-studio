@@ -71,18 +71,25 @@ MULTIVIEW_WORKFLOW = "3d_pixal3d_multi_views.json"
 # Generating the multi-view input itself: one editing pass turns the chosen reference into a row of orbit
 # views, which studio.sheet then cuts into the front/left/back/right images the 3D lane consumes.
 #
-# These numbers are not guesses. Two of them decide whether it works at all:
+# These numbers are not guesses. Three of them decide whether it works at all:
 #   * the canvas is 4:1, and that is what makes the model lay out a *row*. At 1:1 it re-renders one view of
 #     the reference however the instruction is worded, with or without the 4-view LoRA.
+#   * the width is 5 panels of 512, not 4. The model also paints its own source image into the row, so a
+#     2048-wide canvas squeezes every view into a portrait slot - and a side profile of a wide object (a car
+#     is about 2:1) does not fit one, so the model clips it and the front/back views are the only usable ones.
+#     2560 gives 512x512 panels, and the measured side views come out whole (aspect 1.59/1.69).
 #   * grounding_px caps the longest side handed to Qwen3-VL, and the node pack documents 384-768. Leaving it
 #     at 0 ("native") pushes the whole reference through a CPU vision encoder: a 2000x2000 canvas took two
 #     hours that way and nine minutes at 768. The turbo path is 8 steps at CFG 1.
 VIEWS_WORKFLOW = "krea2_turnaround.json"
-VIEWS_PROMPT = ("Convert the object in the image to a Character Sheet showing the front view, the left side "
-                "view, the back view and the right side view of the same object, arranged in one horizontal "
-                "row of four equal square panels, the whole object visible in every panel at the same scale "
-                "and the same distance, plain flat light grey background, no text, no labels")
-VIEWS_SIZE = (2048, 512)
+# The instruction matters as much as the canvas: naming each panel and demanding an uncropped whole object is
+# what turns "some views of a car" into four usable ones.
+VIEWS_PROMPT = ("Convert the object in the image to a Character Sheet of exactly four views arranged in one "
+                "horizontal row of four equal square panels: panel one is the front view, panel two is the full "
+                "left side profile, panel three is the rear view, panel four is the full right side profile. "
+                "Every panel shows the whole object uncropped and centred, at the same scale and the same camera "
+                "distance, on a plain flat light grey background. No extra views, no close-ups, no text.")
+VIEWS_SIZE = (2560, 512)
 VIEWS_STEPS = 8
 VIEWS_GROUNDING_PX = 768
 # What the generated views are declared to be: a synthetic orbit at the fov the node's own default describes

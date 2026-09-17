@@ -42,6 +42,9 @@ MIN_PANEL_FRAC = 0.02
 # How close to the middle of the sheet a panel has to sit to count as the painted-in source image. Measured:
 # the duplicate is ~0.2% off centre, the nearest real view 17% off, so anything in between separates cleanly.
 CENTRE_TOLERANCE_FRAC = 0.05
+# How much better one reading of the side pair has to be before it is believed. Measured margins: a proper
+# mirrored pair wins by 0.43, the same side drawn twice by 0.30 - so 0.10 separates them with room to spare.
+SIDE_PAIR_MARGIN = 0.10
 
 
 @dataclass
@@ -106,6 +109,45 @@ def find_panels(image, tolerance: int = BG_TOLERANCE, min_frac: float = MIN_PANE
     return out
 
 
+def signature(image, box: Panel, size: int = 48) -> np.ndarray:
+    """A small grey, contrast-normalised fingerprint of one view, for comparing two of them."""
+    crop = image.convert("L").crop((box.x0, box.y0, box.x1 + 1, box.y1 + 1)).resize((size, size))
+    arr = np.asarray(crop, dtype=np.float32) / 255.0
+    arr -= arr.mean()
+    norm = float(np.linalg.norm(arr))
+    return arr / norm if norm > 1e-6 else arr
+
+
+def mirror_side_views(views: dict[str, Path], warnings: list) -> None:
+    """Make sure `left` and `right` show opposite sides, mirroring one when the model drew the same side twice.
+
+    The generator is not reliable about which side it draws. Measured on real sheets: one run produced a proper
+    mirrored pair (0.95 correlated once one is flipped) and another the same side twice (0.65 correlated
+    unflipped). Handing the rig the same side as both "left" and "right" tells it two contradictory things about
+    one half of the object, and that reconstructs as a malformed side - which is what a "the car is not a car"
+    result looks like. So a duplicate pair is turned into a mirrored pair by flipping the right view: exact for a
+    symmetric object, approximate for an asymmetric one, and better than a contradiction either way.
+    """
+    if not {"left", "right"} <= set(views):
+        return
+    with Image.open(views["left"]) as a, Image.open(views["right"]) as b:
+        a = a.convert("RGB")
+        b = b.convert("RGB")
+        left_sig = signature(a, Panel(0, a.width - 1, 0, a.height - 1))
+        right_sig = signature(b, Panel(0, b.width - 1, 0, b.height - 1))
+        same = float((left_sig * right_sig).sum())
+        flipped = float((left_sig * right_sig[:, ::-1]).sum())
+    if same > flipped + SIDE_PAIR_MARGIN:
+        with Image.open(views["right"]) as b:
+            b.transpose(Image.FLIP_LEFT_RIGHT).save(views["right"])
+        warnings.append(f"the sheet drew the same side twice ({same:+.2f} correlated unflipped against "
+                        f"{flipped:+.2f} flipped); the right view was mirrored from the left, which is exact for a "
+                        f"symmetric object and approximate for an asymmetric one")
+    elif abs(same - flipped) <= SIDE_PAIR_MARGIN:
+        warnings.append(f"the two side views are neither a clean mirrored pair nor an obvious duplicate "
+                        f"({same:+.2f} unflipped against {flipped:+.2f} flipped); they were used as drawn")
+
+
 def split_sheet(sheet_path: Path, out_dir: Path,
                 slots: tuple[str, ...] = VIEW_SLOTS) -> tuple[dict[str, Path], list[str]]:
     """Cut a turnaround sheet into one square image per slot. Returns ({slot: path}, warnings)."""
@@ -160,6 +202,8 @@ def split_sheet(sheet_path: Path, out_dir: Path,
             path = out_dir / f"{slot}.png"
             tile.save(path)
             views[slot] = path
+        # The rig needs the two side views to be opposite sides; the generator does not always oblige.
+        mirror_side_views(views, warnings)
     return views, warnings
 
 
